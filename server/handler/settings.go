@@ -562,7 +562,7 @@ func TestSMTP(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "请输入测试邮箱"})
 		return
 	}
-	if err := service.SendEmail(strings.TrimSpace(req.Email), "SMTP 测试邮件", "这是一封来自小朱EA弹性云的 SMTP 测试邮件。"); err != nil {
+	if err := service.SendEmail(strings.TrimSpace(req.Email), "SMTP 测试邮件", "这是一封来自QVMConsole的 SMTP 测试邮件。"); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "测试邮件发送失败: " + err.Error()})
 		return
 	}

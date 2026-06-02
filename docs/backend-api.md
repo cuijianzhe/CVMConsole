@@ -1,8 +1,8 @@
-# 小朱EA弹性云 后端 API 文档
+# QVMConsole 后端 API 文档
 
 ## 概述
 
-小朱EA弹性云 后端使用 Go + Gin 开发，提供虚拟机、用户配额与账户安全相关 API。
+QVMConsole 后端使用 Go + Gin 开发，提供虚拟机、用户配额与账户安全相关 API。
 
 - 默认监听端口：`8080`
 - 认证方式：`Authorization: Bearer <token>`；外部程序也可使用 API Key 请求头
@@ -55,13 +55,13 @@
 | `KVM_AUTO_PORT_START` | `10000` | 自动端口起始 |
 | `KVM_AUTO_PORT_END` | `20000` | 自动端口终止 |
 | `KVM_PUBLIC_BASE_URL` | 空 | 邮件中使用的面板访问地址 |
-| `KVM_SITE_TITLE` | `小朱EA弹性云` | 网站标题 |
+| `KVM_SITE_TITLE` | `QVMConsole` | 网站标题 |
 | `KVM_DEVELOPMENT_MODE` | `false` | 开发环境模式，启用后绕过安全验证 |
 | `KVM_SMTP_HOST` | 空 | SMTP 主机 |
 | `KVM_SMTP_PORT` | `587` | SMTP 端口 |
 | `KVM_SMTP_USERNAME` | 空 | SMTP 用户名 |
 | `KVM_SMTP_PASSWORD_ENC` | 空 | 已加密的 SMTP 密码 |
-| `KVM_SMTP_FROM_NAME` | `小朱EA弹性云` | 发件人名称 |
+| `KVM_SMTP_FROM_NAME` | `QVMConsole` | 发件人名称 |
 | `KVM_SMTP_FROM_ADDRESS` | 空 | 发件邮箱 |
 | `KVM_SMTP_SECURITY` | `starttls` | `none / starttls / ssl` |
 | `KVM_SMTP_TIMEOUT_SECONDS` | `15` | SMTP 超时秒数 |
@@ -660,13 +660,13 @@ X-High-Risk-Token: <verification_token>
 {
   "iso_dir": "/var/lib/libvirt/images/ISO",
   "public_base_url": "https://panel.example.com",
-  "site_title": "小朱EA弹性云",
+  "site_title": "QVMConsole",
   "development_mode": true,
   "smtp_host": "smtp.example.com",
   "smtp_port": 587,
   "smtp_username": "no-reply@example.com",
   "smtp_password": "smtp-password-or-app-code",
-  "smtp_from_name": "小朱EA弹性云",
+  "smtp_from_name": "QVMConsole",
   "smtp_from_address": "no-reply@example.com",
   "smtp_security": "starttls",
   "smtp_timeout_seconds": 15,

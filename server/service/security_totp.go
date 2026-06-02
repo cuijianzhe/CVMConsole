@@ -10,14 +10,14 @@ import (
 
 // TOTPSetupInfo 2FA 绑定信息
 type TOTPSetupInfo struct {
-	Secret    string `json:"secret"`
+	Secret     string `json:"secret"`
 	OtpauthURL string `json:"otpauth_url"`
 }
 
 // GenerateTOTPSetup 生成 2FA 配置
 func GenerateTOTPSetup(username string) (*TOTPSetupInfo, error) {
 	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      "小朱EA弹性云",
+		Issuer:      "QVMConsole",
 		AccountName: strings.TrimSpace(username),
 		Algorithm:   otp.AlgorithmSHA1,
 		Digits:      otp.DigitsSix,
@@ -28,7 +28,7 @@ func GenerateTOTPSetup(username string) (*TOTPSetupInfo, error) {
 		return nil, err
 	}
 	return &TOTPSetupInfo{
-		Secret:    key.Secret(),
+		Secret:     key.Secret(),
 		OtpauthURL: key.URL(),
 	}, nil
 }

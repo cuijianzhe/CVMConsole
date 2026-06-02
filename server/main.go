@@ -76,7 +76,7 @@ func main() {
 
 	// 启动服务
 	addr := fmt.Sprintf(":%d", config.GlobalConfig.Port)
-	log.Printf("小朱EA弹性云 服务启动在 %s", addr)
+	log.Printf("QVMConsole 服务启动在 %s", addr)
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("服务启动失败: %v", err)
 	}

@@ -1,4 +1,4 @@
-# 小朱EA弹性云 部署指南
+# QVMConsole 部署指南
 
 ## 一、快速安装
 
@@ -124,7 +124,7 @@ sudo bash install.sh
 | `KVM_MAX_BURST_OUTBOUND` | `0` | 外网最大上行速率（Mbps），用于限速突发量计算 |
 | `KVM_RESCUE_ISO` | 空 | 救援系统 ISO 路径 |
 | `KVM_PUBLIC_BASE_URL` | 空 | 邮件中的面板访问地址 |
-| `KVM_SITE_TITLE` | `小朱EA弹性云` | 网站标题 |
+| `KVM_SITE_TITLE` | `QVMConsole` | 网站标题 |
 | `KVM_DEVELOPMENT_MODE` | `false` | 开发环境模式 |
 | `KVM_SERVICE_UNIT_NAME` | `kvm-console.service` | 当前面板 systemd unit 名称 |
 | `KVM_MAINTENANCE_MODE` | `false` | 维护模式开关 |
@@ -134,7 +134,7 @@ sudo bash install.sh
 | `KVM_SMTP_PORT` | `587` | SMTP 端口 |
 | `KVM_SMTP_USERNAME` | 空 | SMTP 用户名 |
 | `KVM_SMTP_PASSWORD_ENC` | 空 | 加密后的 SMTP 密码 |
-| `KVM_SMTP_FROM_NAME` | `小朱EA弹性云` | 邮件发件人名称 |
+| `KVM_SMTP_FROM_NAME` | `QVMConsole` | 邮件发件人名称 |
 | `KVM_SMTP_FROM_ADDRESS` | 空 | 邮件发件地址 |
 | `KVM_SMTP_SECURITY` | `starttls` | SMTP 安全模式：`none/starttls/ssl` |
 | `KVM_SMTP_TIMEOUT_SECONDS` | `15` | SMTP 超时秒数 |

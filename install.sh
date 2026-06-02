@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# 小朱EA弹性云 安装 / 更新 / 卸载脚本
+# QVMConsole 安装 / 更新 / 卸载脚本
 # ============================================================
 
 set -Eeuo pipefail
@@ -16,7 +16,7 @@ warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
 success() { echo -e "${GREEN}[✓]${NC} $1"; }
 
-APP_NAME="小朱EA弹性云"
+APP_NAME="QVMConsole"
 INSTALL_DIR="/opt/kvm-console"
 SERVICE_NAME="kvm-console"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
@@ -488,7 +488,7 @@ write_env() {
         env_default "KVM_MAX_BURST_OUTBOUND" "0"
         env_default "KVM_RESCUE_ISO" ""
         env_default "KVM_PUBLIC_BASE_URL" ""
-        env_default "KVM_SITE_TITLE" "小朱EA弹性云"
+        env_default "KVM_SITE_TITLE" "QVMConsole"
         env_default "KVM_DEVELOPMENT_MODE" "false"
         env_default "KVM_MAINTENANCE_MODE" "false"
         env_default "KVM_MAINTENANCE_SERVICE_UNITS" "kvm-console.service,libvirtd.service,libvirtd.socket,libvirtd-ro.socket,libvirtd-admin.socket"
@@ -496,7 +496,7 @@ write_env() {
         env_default "KVM_SMTP_HOST" ""
         env_default "KVM_SMTP_PORT" "587"
         env_default "KVM_SMTP_USERNAME" ""
-        env_default "KVM_SMTP_FROM_NAME" "小朱EA弹性云"
+        env_default "KVM_SMTP_FROM_NAME" "QVMConsole"
         env_default "KVM_SMTP_FROM_ADDRESS" ""
         env_default "KVM_SMTP_SECURITY" "starttls"
         env_default "KVM_SMTP_TIMEOUT_SECONDS" "15"

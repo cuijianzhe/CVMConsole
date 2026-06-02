@@ -309,7 +309,7 @@ const smtpForm = reactive({
   smtp_port: 587,
   smtp_username: '',
   smtp_password: '',
-  smtp_from_name: '小朱EA弹性云',
+  smtp_from_name: 'QVMConsole',
   smtp_from_address: '',
   smtp_security: 'starttls',
   smtp_timeout_seconds: 15
@@ -410,7 +410,7 @@ const loadSMTPSettings = async () => {
     smtp_port: res.data.smtp_port || 587,
     smtp_username: res.data.smtp_username || '',
     smtp_password: '',
-    smtp_from_name: res.data.smtp_from_name || '小朱EA弹性云',
+    smtp_from_name: res.data.smtp_from_name || 'QVMConsole',
     smtp_from_address: res.data.smtp_from_address || '',
     smtp_security: res.data.smtp_security || 'starttls',
     smtp_timeout_seconds: res.data.smtp_timeout_seconds || 15
