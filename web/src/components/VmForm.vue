@@ -1,5 +1,5 @@
 <template>
-  <el-dialog :title="dialogTitle" v-model="visible" width="1100px" @closed="onClosed" top="3vh"
+  <el-dialog :title="dialogTitle" v-model="visible" width="1100px" @closed="onClosed" align-center
     :close-on-click-modal="false" class="vm-dialog-new">
     <!-- ==================== 双栏布局 ==================== -->
     <div class="vm-form-layout">
@@ -6368,4 +6368,66 @@ defineExpose({
     padding: 10px 16px;
   }
 }
+
+html.dark .form-submit-bar { border-top-color: var(--app-border-light); }
+html.dark .form-submit-hint { color: var(--el-text-color-placeholder); }
+
+html.dark .edit-tabs-bar { background: var(--app-bg-elevated); }
+html.dark .edit-tab-item { color: var(--el-text-color-secondary); }
+html.dark .edit-tab-item:hover { color: var(--el-text-color-primary); background: rgba(255,255,255,0.06); }
+html.dark .edit-tab-item.active { background: var(--el-color-primary); color: #fff; box-shadow: 0 1px 8px rgba(64,158,255,0.25); }
+html.dark .edit-tab-desc { color: var(--el-text-color-placeholder); }
+
+html.dark .step-indicator-bar { background: var(--app-bg-elevated); }
+html.dark .step-dot-item { color: var(--el-text-color-secondary); }
+html.dark .step-dot-item:hover { color: var(--el-text-color-primary); background: rgba(64,158,255,0.08); }
+html.dark .step-dot-item.active { color: var(--el-color-primary); background: rgba(64,158,255,0.12); }
+html.dark .step-dot-item.done { color: #95de64; }
+html.dark .step-dot-badge { background: rgba(255,255,255,0.08); color: var(--el-text-color-secondary); }
+
+html.dark .mode-card-new { border-color: var(--app-border-light); background: var(--app-bg-card); }
+html.dark .mode-card-new.selected { border-color: var(--el-color-primary); background: rgba(64,158,255,0.08); }
+html.dark .mode-card-title { color: var(--el-text-color-primary); }
+html.dark .mode-card-desc { color: var(--el-text-color-secondary); }
+
+html.dark .smart-recommend-banner { background: rgba(64,158,255,0.06); border-color: rgba(64,158,255,0.18); }
+html.dark .rec-title { color: var(--el-color-primary-light-3); }
+html.dark .rec-desc { color: var(--el-text-color-regular); }
+
+html.dark .section-header { border-bottom-color: var(--app-border-light); }
+html.dark .section-icon-box.basic { background: rgba(64,158,255,0.12); }
+html.dark .section-icon-box.hardware { background: rgba(82,196,26,0.12); }
+html.dark .section-icon-box.storage { background: rgba(250,140,22,0.12); }
+html.dark .section-icon-box.network { background: rgba(64,158,255,0.12); }
+html.dark .section-icon-box.system { background: rgba(255,77,79,0.12); }
+html.dark .section-icon-box.advanced { background: rgba(124,77,255,0.12); }
+html.dark .section-title { color: var(--el-text-color-primary); }
+html.dark .section-desc { color: var(--el-text-color-secondary); }
+
+html.dark .step-pane-header { border-bottom-color: var(--app-border-light); }
+html.dark .step-pane-icon.basic { background: rgba(64,158,255,0.12); }
+html.dark .step-pane-icon.hardware { background: rgba(82,196,26,0.12); }
+html.dark .step-pane-icon.storage { background: rgba(250,140,22,0.12); }
+html.dark .step-pane-icon.network { background: rgba(64,158,255,0.12); }
+html.dark .step-pane-icon.system { background: rgba(255,77,79,0.12); }
+html.dark .step-pane-icon.advanced { background: rgba(124,77,255,0.12); }
+html.dark .step-pane-title { color: var(--el-text-color-primary); }
+html.dark .step-pane-desc { color: var(--el-text-color-secondary); }
+
+html.dark .form-section-card { background: var(--app-bg-card); border-color: var(--app-border-light); }
+html.dark .form-section-card:hover { border-color: var(--el-text-color-placeholder); }
+html.dark .form-section-card-header { background: var(--app-bg-elevated); border-bottom-color: var(--app-border-light); color: var(--el-text-color-primary); }
+
+html.dark .os-quick-card { border-color: var(--app-border-light); background: var(--app-bg-card); }
+html.dark .os-quick-card.selected { border-color: var(--el-color-primary); background: rgba(64,158,255,0.08); }
+html.dark .os-qc-name { color: var(--el-text-color-primary); }
+html.dark .os-qc-examples { color: var(--el-text-color-secondary); }
+
+html.dark .preview-panel { background: var(--app-bg-card); border-color: var(--app-border-light); box-shadow: var(--app-shadow-md); }
+html.dark .preview-section-title { color: var(--el-text-color-secondary); border-bottom-color: var(--app-border-extralight); }
+html.dark .pr-label { color: var(--el-text-color-secondary); }
+html.dark .pr-value.highlight { color: var(--el-color-primary-light-3); }
+html.dark .preview-total { border-top-color: var(--app-border-light); }
+html.dark .total-label { color: var(--el-text-color-primary); }
+html.dark .total-value { color: var(--el-color-primary-light-3); }
 </style>
