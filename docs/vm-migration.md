@@ -44,6 +44,8 @@ root 密码和 API Key 会加密保存，接口不会回显明文。节点探测
 - 端口转发优先迁移相同 host port；目标端口占用时自动分配可用端口。
 - VM 凭据会读取源面板明文解密结果，再通过目标面板重新加密保存。
 - 定时任务、历史统计、流量配额不迁移。
+- UEFI 虚拟机迁移到目标节点后，接管流程会自动检测引导方式，若为 UEFI 模式则自动创建 qcow2 格式的 NVRAM 变量文件（从 `/usr/share/OVMF/OVMF_VARS_4M.fd` 模板转换）。这是因为部分 QEMU/libvirt 版本不支持在启动时自动将 raw 模板转换为 qcow2 格式的 NVRAM。
+- 热迁移时会在执行 `virsh migrate` 前，通过 SSH 在目标节点预创建 qcow2 格式的 NVRAM 文件，并将迁移 XML 中的 `template`/`templateFormat` 属性移除，避免 libvirt 在目标端再次尝试转换。热迁移失败时 NVRAM 文件会同磁盘文件一起被清理。
 
 ## 用户和网络接管
 

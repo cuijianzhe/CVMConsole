@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -496,6 +497,19 @@ func ExecuteVMMigration(ctx context.Context, params VMMigrationTaskParams, progr
 	return &adoptResult, nil
 }
 
+// ensureMigratedVMNVRAM 确保迁移后的虚拟机 NVRAM 文件存在。
+func ensureMigratedVMNVRAM(vmName string) error {
+	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName, "--inactive")
+	if xmlResult.Error != nil {
+		return fmt.Errorf("获取虚拟机 XML 失败: %s", xmlResult.Stderr)
+	}
+	bootType := ParseVMBootTypeFromDomainXML(xmlResult.Stdout)
+	if err := ensureVMUEFINVRAMFile(vmName, xmlResult.Stdout, bootType); err != nil {
+		return fmt.Errorf("创建 UEFI NVRAM 文件失败: %w", err)
+	}
+	return nil
+}
+
 func AdoptMigratedVM(req MigrationAdoptRequest) (*MigrationAdoptResult, error) {
 	req.VMName = strings.TrimSpace(req.VMName)
 	req.Owner = strings.TrimSpace(req.Owner)
@@ -505,6 +519,11 @@ func AdoptMigratedVM(req MigrationAdoptRequest) (*MigrationAdoptResult, error) {
 	if !domainExists(req.VMName) {
 		return nil, fmt.Errorf("目标节点尚未定义虚拟机 %s", req.VMName)
 	}
+
+	if err := ensureMigratedVMNVRAM(req.VMName); err != nil {
+		return nil, fmt.Errorf("确保虚拟机 NVRAM 文件失败: %w", err)
+	}
+
 	createdUser, err := ensureMigrationTargetUser(req)
 	if err != nil {
 		return nil, err
@@ -661,12 +680,22 @@ func executeLiveMigration(ctx context.Context, node model.HostNode, preview *VMM
 			cleanupLiveMigrationTargets(context.Background(), node, createdTargets)
 		}
 	}()
+
+	progress(43, "正在准备热迁移目标 NVRAM...")
+	vmXML := utils.ExecCommand("virsh", "dumpxml", preview.VMName).Stdout
+	vmXML = applyMigrationDiskPathsToXML(vmXML, preview.Disks)
+	nvramPath, vmXML, err := prepareMigrationNVRAMOnTarget(ctx, node, vmXML)
+	if err != nil {
+		return err
+	}
+	if nvramPath != "" {
+		createdTargets = append(createdTargets, nvramPath)
+	}
+
 	progress(46, "正在执行热迁移...")
 	sshURI := fmt.Sprintf("qemu+ssh://%s@%s/system", node.SSHUser, node.SSHHost)
-	xmlText := utils.ExecCommand("virsh", "dumpxml", preview.VMName).Stdout
-	xmlText = applyMigrationDiskPathsToXML(xmlText, preview.Disks)
 	localXML := filepath.Join("/tmp", "kvm-migrate-"+preview.VMName+"-live.xml")
-	if err := writeLocalFile(localXML, xmlText); err != nil {
+	if err := writeLocalFile(localXML, vmXML); err != nil {
 		return fmt.Errorf("写入热迁移目标 XML 失败: %w", err)
 	}
 	migrateHost := migrationURIHost(node.SSHHost)
@@ -1074,6 +1103,51 @@ func cleanupLiveMigrationTargets(ctx context.Context, node model.HostNode, paths
 		}
 		_, _ = remoteSSHCommand(ctx, node, "rm -f "+shellSingleQuote(path), 30*time.Second)
 	}
+}
+
+var (
+	vmMigrationNVRAMTemplateAttr = regexp.MustCompile(`\s+template=['"][^'"]+['"]`)
+	vmMigrationNVRAMTemplateFmt  = regexp.MustCompile(`\s+templateFormat=['"][^'"]+['"]`)
+	vmMigrationNVRAMTag          = regexp.MustCompile(`(?s)<nvram\b[^>]*(?:/>|>.*?</nvram>)`)
+)
+
+// stripNVRAMTemplateFromXML 从 XML 中移除 <nvram> 标签的 template 和 templateFormat 属性
+// 用于热迁移场景：目标节点已预先创建好 qcow2 NVRAM 文件，不需要 libvirt 再从模板转换
+func stripNVRAMTemplateFromXML(xmlContent string) string {
+	return vmMigrationNVRAMTag.ReplaceAllStringFunc(xmlContent, func(tag string) string {
+		tag = vmMigrationNVRAMTemplateAttr.ReplaceAllString(tag, "")
+		tag = vmMigrationNVRAMTemplateFmt.ReplaceAllString(tag, "")
+		return tag
+	})
+}
+
+// prepareMigrationNVRAMOnTarget 在目标节点预创建 UEFI NVRAM qcow2 文件
+// 返回 NVRAM 文件路径（用于失败清理）和修改后的 XML（已移除 template 属性）
+func prepareMigrationNVRAMOnTarget(ctx context.Context, node model.HostNode, xmlText string) (nvramPath string, modifiedXML string, err error) {
+	bootType := ParseVMBootTypeFromDomainXML(xmlText)
+	if bootType != VMBootTypeUEFI && bootType != VMBootTypeUEFISecure {
+		return "", xmlText, nil
+	}
+	nvramPath = extractDomainNVRAMPath(xmlText)
+	if nvramPath == "" {
+		return "", xmlText, nil
+	}
+	secure := bootType == VMBootTypeUEFISecure
+	templatePath := resolveOVMFVarsTemplatePath(secure)
+	nvramDir := filepath.Dir(nvramPath)
+	mkdirCmd := "mkdir -p " + shellSingleQuote(nvramDir)
+	convertCmd := fmt.Sprintf("qemu-img convert -f raw -O qcow2 %s %s && chmod 600 %s && (chown libvirt-qemu:kvm %s 2>/dev/null || chown qemu:qemu %s 2>/dev/null || true)",
+		shellSingleQuote(templatePath),
+		shellSingleQuote(nvramPath),
+		shellSingleQuote(nvramPath),
+		shellSingleQuote(nvramPath),
+		shellSingleQuote(nvramPath))
+	fullCmd := mkdirCmd + " && " + convertCmd
+	if _, err := remoteSSHCommand(ctx, node, fullCmd, 60*time.Second); err != nil {
+		return nvramPath, xmlText, fmt.Errorf("目标节点创建 NVRAM 文件失败: %w", err)
+	}
+	modifiedXML = stripNVRAMTemplateFromXML(xmlText)
+	return nvramPath, modifiedXML, nil
 }
 
 func buildAdoptRequest(preview *VMMigrationPreview) MigrationAdoptRequest {
