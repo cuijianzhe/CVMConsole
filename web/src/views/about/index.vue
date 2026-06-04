@@ -57,7 +57,9 @@
           </div>
           <div class="info-item">
             <span class="info-label">项目文档</span>
-            <span class="info-value text-muted">建设中...</span>
+            <a class="info-link" href="https://qvmcdocs.xiaozhuhouses.asia" target="_blank" rel="noopener">
+              https://qvmcdocs.xiaozhuhouses.asia
+            </a>
           </div>
         </div>
       </el-collapse-item>
