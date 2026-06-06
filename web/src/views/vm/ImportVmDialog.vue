@@ -3,6 +3,7 @@
     v-model="dialogVisible"
     title="导入虚拟机"
     width="600px"
+    append-to-body
     :close-on-click-modal="false"
     @close="handleClose"
   >

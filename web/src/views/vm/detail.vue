@@ -556,6 +556,7 @@
       :title="resetPasswordDialogTitle"
       width="520px"
       :close-on-click-modal="false"
+      append-to-body
     >
       <el-alert type="warning" :closable="false" style="margin-bottom: 16px;">
         <template #title>{{ resetPasswordAlertText }}</template>

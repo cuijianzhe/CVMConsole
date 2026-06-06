@@ -1,6 +1,6 @@
 <template>
   <el-dialog :title="dialogTitle" v-model="visible" width="1100px" @closed="onClosed" align-center
-    :close-on-click-modal="false" class="vm-dialog-new">
+    :close-on-click-modal="false" class="vm-dialog-new" append-to-body>
     <!-- ==================== 双栏布局 ==================== -->
     <div class="vm-form-layout">
       <div class="vm-form-left">
@@ -2161,7 +2161,7 @@
   </el-dialog>
 
   <!-- 磁盘 IOPS 设置对话框 -->
-  <el-dialog v-model="diskIOPSDialogVisible" title="设置磁盘 IOPS 限制" width="480px" :close-on-click-modal="false" :destroy-on-close="false">
+  <el-dialog v-model="diskIOPSDialogVisible" title="设置磁盘 IOPS 限制" width="480px" :close-on-click-modal="false" :destroy-on-close="false" append-to-body>
     <el-alert type="warning" :closable="false" style="margin-bottom: 12px;">
       <template #title>总 IOPS 与 读/写 IOPS 互斥，请只设置其中一组</template>
     </el-alert>
@@ -2191,7 +2191,7 @@
   </el-dialog>
 
   <!-- 创建模式额外磁盘 IOPS 设置对话框 -->
-  <el-dialog v-model="createDiskIOPSDialogVisible" title="设置额外磁盘 IOPS 限制" width="480px" :close-on-click-modal="false" :destroy-on-close="false">
+  <el-dialog v-model="createDiskIOPSDialogVisible" title="设置额外磁盘 IOPS 限制" width="480px" :close-on-click-modal="false" :destroy-on-close="false" append-to-body>
     <el-alert type="warning" :closable="false" style="margin-bottom: 12px;">
       <template #title>总 IOPS 与 读/写 IOPS 互斥，请只设置其中一组</template>
     </el-alert>
@@ -2220,7 +2220,7 @@
   </el-dialog>
 
   <!-- 硬件直通设备选择对话框 -->
-  <el-dialog v-model="passthroughDialogVisible" title="选择直通设备" width="700px" :close-on-click-modal="false" :destroy-on-close="false">
+  <el-dialog v-model="passthroughDialogVisible" title="选择直通设备" width="700px" :close-on-click-modal="false" :destroy-on-close="false" append-to-body>
     <el-alert type="warning" :closable="false" style="margin-bottom: 12px;">
       <template #title>请确认设备未被其他虚拟机使用，且 IOMMU 组已正确隔离。直通操作需要虚拟机在关机状态下进行。</template>
     </el-alert>

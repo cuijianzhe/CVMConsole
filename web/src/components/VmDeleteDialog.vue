@@ -3,6 +3,7 @@
     v-model="visible"
     :title="isBatch ? '批量删除虚拟机' : `删除虚拟机 - ${vmName}`"
     width="600px"
+    append-to-body
     :close-on-click-modal="false"
     @close="handleClose"
   >

@@ -1000,7 +1000,7 @@
     <VmMigrationDialog ref="migrationRef" @success="fetchData" />
     <VmReinstallDialog ref="reinstallRef" @success="fetchData" />
 
-    <el-dialog title="确认开通服务器" v-model="registrationConfirmVisible" width="560px">
+    <el-dialog title="确认开通服务器" v-model="registrationConfirmVisible" width="560px" append-to-body>
       <template v-if="selectedRegistration">
         <el-alert type="info" :closable="false" style="margin-bottom: 16px;">
           <template #title>

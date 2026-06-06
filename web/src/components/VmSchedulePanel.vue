@@ -73,6 +73,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '编辑定时任务' : '新增定时任务'"
+      append-to-body
       width="620px"
       :close-on-click-modal="false"
       @closed="resetForm"

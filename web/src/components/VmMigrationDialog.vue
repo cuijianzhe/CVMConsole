@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="dialogTitle" width="900px" destroy-on-close>
+  <el-dialog v-model="visible" :title="dialogTitle" width="900px" destroy-on-close append-to-body>
     <template v-if="vm">
       <el-form label-width="130px">
         <el-form-item label="虚拟机">

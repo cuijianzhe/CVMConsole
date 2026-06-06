@@ -124,7 +124,7 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑节点' : '添加节点'" width="640px" destroy-on-close>
+    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑节点' : '添加节点'" width="640px" destroy-on-close append-to-body>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="130px">
         <el-form-item label="节点名称" prop="name">
           <el-input v-model="form.name" placeholder="例如 kvm-test2" />

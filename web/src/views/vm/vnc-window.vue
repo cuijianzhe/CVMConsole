@@ -78,7 +78,7 @@
       </div>
     </div>
 
-    <el-dialog v-model="showSendTextDialog" title="发送文本到 VNC" width="520px" :close-on-click-modal="false">
+    <el-dialog v-model="showSendTextDialog" title="发送文本到 VNC" width="520px" :close-on-click-modal="false" append-to-body>
       <el-form label-width="100px">
         <el-form-item label="文本内容">
           <el-input

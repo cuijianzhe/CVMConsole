@@ -174,7 +174,7 @@
       </el-card>
     </div>
 
-    <el-dialog v-model="ipDialogVisible" :title="ipForm.id ? '编辑公网 IP' : '新增公网 IP'" width="620px">
+    <el-dialog v-model="ipDialogVisible" :title="ipForm.id ? '编辑公网 IP' : '新增公网 IP'" width="620px" append-to-body>
       <el-form :model="ipForm" label-width="110px">
         <el-form-item label="公网 IP">
           <el-input v-model="ipForm.ip" placeholder="例如 203.0.113.10" />
@@ -211,7 +211,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="bindDialogVisible" :title="bindAction === 'migrate' ? '迁移公网 IP' : '绑定公网 IP'" width="720px">
+    <el-dialog v-model="bindDialogVisible" :title="bindAction === 'migrate' ? '迁移公网 IP' : '绑定公网 IP'" width="720px" append-to-body>
       <el-form :model="bindForm" label-width="110px">
         <el-alert :title="selectedIP ? `公网 IP：${selectedIP.ip}` : ''" type="info" :closable="false" style="margin-bottom: 16px;" />
         <el-form-item label="用户">
@@ -253,7 +253,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="previewDialogVisible" title="规则预览" width="820px">
+    <el-dialog v-model="previewDialogVisible" title="规则预览" width="820px" append-to-body>
       <template v-if="preview">
         <pre class="rule-pre">{{ preview.commands.join('\n') }}</pre>
         <el-alert :title="preview.config_hint" type="info" :closable="false" />

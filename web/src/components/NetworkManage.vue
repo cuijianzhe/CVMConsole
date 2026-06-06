@@ -1,5 +1,5 @@
 <template>
-  <el-dialog :title="'网络管理 - ' + currentVmName" v-model="visible" width="900px">
+  <el-dialog :title="'网络管理 - ' + currentVmName" v-model="visible" width="900px" append-to-body>
     <NetworkList v-if="visible" :vm-name="currentVmName" />
   </el-dialog>
 </template>

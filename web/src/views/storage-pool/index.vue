@@ -179,7 +179,7 @@
       <el-empty v-if="!loading && tableData.length === 0" description="未发现存储设备" />
     </div>
 
-    <el-dialog title="配置存储池" v-model="configVisible" width="520px" :close-on-click-modal="false">
+    <el-dialog title="配置存储池" v-model="configVisible" width="520px" :close-on-click-modal="false" append-to-body>
       <el-form :model="configForm" label-width="100px">
         <el-form-item label="设备">
           <el-input :model-value="currentRow?.device_path" disabled />
@@ -201,7 +201,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog title="格式化并挂载硬盘" v-model="formatVisible" width="560px" :close-on-click-modal="false">
+    <el-dialog title="格式化并挂载硬盘" v-model="formatVisible" width="560px" :close-on-click-modal="false" append-to-body>
       <el-alert type="error" :closable="false" show-icon class="danger-alert">
         <template #title>
           此操作会清空目标硬盘或分区上的全部数据，并写入开机自动挂载配置。

@@ -3,6 +3,7 @@
     v-model="visible"
     :title="dialogTitle"
     width="520px"
+    append-to-body
     :close-on-click-modal="false"
     @closed="handleClosed"
   >

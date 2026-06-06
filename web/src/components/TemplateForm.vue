@@ -1,5 +1,5 @@
 <template>
-  <el-dialog title="制作模板" v-model="visible" width="500px" :close-on-click-modal="false">
+  <el-dialog title="制作模板" v-model="visible" width="500px" :close-on-click-modal="false" append-to-body>
     <el-form :model="form" label-width="120px">
       <el-form-item label="源虚拟机">
         <el-input :model-value="vmName" disabled />

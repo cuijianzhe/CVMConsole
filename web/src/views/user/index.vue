@@ -365,7 +365,7 @@
     </el-card>
 
     <!-- 新增用户对话框 -->
-    <el-dialog title="新增用户" v-model="createVisible" width="800px">
+    <el-dialog title="新增用户" v-model="createVisible" width="800px" append-to-body>
       <el-form :model="form" :rules="createRules" ref="formRef" label-width="100px">
         <el-form-item label="用户名" prop="username">
           <el-input v-model="form.username" />
@@ -482,7 +482,7 @@
     </el-dialog>
 
     <!-- 编辑配额对话框 -->
-    <el-dialog title="编辑用户配置" v-model="quotaVisible" width="900px">
+    <el-dialog title="编辑用户配置" v-model="quotaVisible" width="900px" append-to-body>
       <div style="margin-bottom: 16px;">
         <el-alert type="info" :closable="false">
           <template #title>
@@ -512,7 +512,7 @@
     </el-dialog>
 
     <!-- 分配VM对话框 -->
-    <el-dialog title="分配虚拟机" v-model="assignVisible" width="900px">
+    <el-dialog title="分配虚拟机" v-model="assignVisible" width="900px" append-to-body>
       <el-alert type="info" :closable="false" style="margin-bottom: 16px;">
         <template #title>用户：<strong>{{ assignForm.username }}</strong></template>
       </el-alert>
@@ -554,7 +554,7 @@
     </el-dialog>
 
     <!-- 注册VM对话框 -->
-    <el-dialog title="注册轻量云 VM" v-model="registrationVisible" width="960px">
+    <el-dialog title="注册轻量云 VM" v-model="registrationVisible" width="960px" append-to-body>
       <el-alert type="info" :closable="false" style="margin-bottom: 16px;">
         <template #title>
           用户：<strong>{{ registrationForm.username }}</strong>
@@ -667,7 +667,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog title="编辑轻量云 VM 配额" v-model="registrationQuotaVisible" width="620px">
+    <el-dialog title="编辑轻量云 VM 配额" v-model="registrationQuotaVisible" width="620px" append-to-body>
       <el-alert type="info" :closable="false" style="margin-bottom: 16px;">
         <template #title>
           VM：<strong>{{ registrationQuotaForm.vm_name }}</strong>

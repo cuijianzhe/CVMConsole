@@ -422,6 +422,16 @@ const toggleExpand = () => {
   setTimeout(() => { useTransition.value = false }, 350)
 }
 
+const collapse = () => {
+  if (!expanded.value) return
+  useTransition.value = true
+  expanded.value = false
+  panelHeight.value = COLLAPSED_HEIGHT
+  localStorage.setItem(STORAGE_KEY_EXPANDED, 'false')
+  localStorage.setItem(STORAGE_KEY_HEIGHT, String(COLLAPSED_HEIGHT))
+  setTimeout(() => { useTransition.value = false }, 350)
+}
+
 const openFullTaskCenter = () => {
   emit('open-full')
 }
@@ -469,7 +479,7 @@ const handleResize = () => {
   }
 }
 
-defineExpose({ toggleExpand })
+defineExpose({ toggleExpand, collapse })
 
 onMounted(() => {
   if (panelHeight.value <= COLLAPSED_HEIGHT) {

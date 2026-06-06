@@ -133,7 +133,7 @@
       </div>
     </div>
 
-    <el-dialog v-model="importDialogVisible" title="导入模板包" width="860px" :close-on-click-modal="false">
+    <el-dialog v-model="importDialogVisible" title="导入模板包" width="860px" :close-on-click-modal="false" append-to-body>
       <el-form :model="importForm" label-width="110px">
         <el-form-item label="导入来源" required>
           <el-radio-group v-model="importForm.import_mode">
@@ -204,7 +204,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="publishDialogVisible" title="发布设置" width="520px" :close-on-click-modal="false">
+    <el-dialog v-model="publishDialogVisible" title="发布设置" width="520px" :close-on-click-modal="false" append-to-body>
       <el-form :model="publishForm" label-width="120px">
         <el-form-item label="模板文件">
           <el-input :model-value="publishForm.name" disabled />
@@ -305,7 +305,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="deleteDialogVisible" title="删除模板链路" width="820px" :close-on-click-modal="false">
+    <el-dialog v-model="deleteDialogVisible" title="删除模板链路" width="820px" :close-on-click-modal="false" append-to-body>
       <div v-loading="deleteLoading">
         <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 16px;">
           {{ deleteModeTip }}

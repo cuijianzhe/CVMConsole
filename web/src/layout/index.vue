@@ -181,6 +181,7 @@
       width="620px"
       :close-on-click-modal="false"
       destroy-on-close
+      append-to-body
     >
       <el-tabs v-model="securityTab" class="security-tabs">
         <el-tab-pane label="邮箱" name="email">
@@ -479,10 +480,33 @@ onMounted(() => {
     document.documentElement.classList.add('dark')
   }
   refreshSecurityInfo()
+
+  // 监听弹窗打开，自动收起异步任务面板
+  dialogObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType === 1 && (
+          node.classList?.contains('el-overlay') ||
+          node.classList?.contains('el-message-box__wrapper') ||
+          node.classList?.contains('el-overlay-message-box')
+        )) {
+          recentTaskPanelRef.value?.collapse()
+          return
+        }
+      }
+    }
+  })
+  dialogObserver.observe(document.body, { childList: true, subtree: false })
 })
+
+let dialogObserver = null
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
+  if (dialogObserver) {
+    dialogObserver.disconnect()
+    dialogObserver = null
+  }
 })
 
 const toggleCollapse = () => {

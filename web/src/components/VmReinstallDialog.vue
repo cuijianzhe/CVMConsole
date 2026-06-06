@@ -3,6 +3,7 @@
     v-model="visible"
     title="重装系统"
     width="640px"
+    append-to-body
     :close-on-click-modal="false"
     destroy-on-close
   >

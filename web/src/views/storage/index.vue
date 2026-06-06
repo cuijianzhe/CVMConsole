@@ -168,7 +168,7 @@
     </template>
 
     <!-- 上传进度对话框 -->
-    <el-dialog v-model="uploadDialogVisible" title="上传文件" width="450px" :close-on-click-modal="false">
+    <el-dialog v-model="uploadDialogVisible" title="上传文件" width="450px" :close-on-click-modal="false" append-to-body>
       <div v-if="uploadingFile" style="text-align: center;">
         <p style="margin-bottom: 12px;">{{ uploadingFile.name }}</p>
         <el-progress :percentage="uploadProgress" :status="uploadProgress >= 100 ? 'success' : ''" />
@@ -176,7 +176,7 @@
     </el-dialog>
 
     <!-- 挂载对话框 -->
-    <el-dialog v-model="mountDialogVisible" title="挂载存储池到虚拟机" width="500px">
+    <el-dialog v-model="mountDialogVisible" title="挂载存储池到虚拟机" width="500px" append-to-body>
       <el-form :model="mountForm" label-width="100px">
         <el-form-item label="虚拟机">
           <el-select v-model="mountForm.vm_name" placeholder="选择虚拟机" style="width: 100%;" v-loading="vmListLoading">
@@ -210,7 +210,7 @@
     </el-dialog>
 
     <!-- 挂载命令说明对话框 -->
-    <el-dialog v-model="mountHelpVisible" title="虚拟机内挂载说明" width="600px">
+    <el-dialog v-model="mountHelpVisible" title="虚拟机内挂载说明" width="600px" append-to-body>
       <el-alert type="warning" :closable="false" style="margin-bottom: 16px;">
         <template #title>仅支持 Linux 虚拟机，Windows 不支持 9p VirtFS 协议</template>
       </el-alert>

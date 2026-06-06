@@ -113,7 +113,7 @@
     </div>
 
     <!-- 开启 VNC 对话框 -->
-    <el-dialog v-model="showEnableDialog" title="开启 VNC" width="420px" :close-on-click-modal="false">
+    <el-dialog v-model="showEnableDialog" title="开启 VNC" width="420px" :close-on-click-modal="false" append-to-body>
       <el-form label-width="100px">
         <el-form-item label="VNC 密码">
           <el-input v-model="enablePassword" type="password" show-password placeholder="留空则无密码（最长8位）" maxlength="8" />
@@ -131,7 +131,7 @@
     </el-dialog>
 
     <!-- 修改密码对话框 -->
-    <el-dialog v-model="showPasswordDialog" title="修改 VNC 密码" width="420px" :close-on-click-modal="false">
+    <el-dialog v-model="showPasswordDialog" title="修改 VNC 密码" width="420px" :close-on-click-modal="false" append-to-body>
       <el-form label-width="100px">
         <el-form-item label="新密码">
           <el-input v-model="newPassword" type="password" show-password placeholder="请输入新密码（最长8位）" maxlength="8" />
@@ -148,7 +148,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showSendTextDialog" title="发送文本到 VNC" width="520px" :close-on-click-modal="false">
+    <el-dialog v-model="showSendTextDialog" title="发送文本到 VNC" width="520px" :close-on-click-modal="false" append-to-body>
       <el-form label-width="100px">
         <el-form-item label="文本内容">
           <el-input

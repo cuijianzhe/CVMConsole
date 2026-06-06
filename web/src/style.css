@@ -631,6 +631,11 @@ html.dark {
   transition: box-shadow var(--app-transition-fast), border-color var(--app-transition-fast);
 }
 
+/* 修复 el-select 选中后多出额外边框的问题，保留默认边框 */
+.el-select .el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 1px var(--el-border-color) inset !important;
+}
+
 /* 分页器圆角增强 */
 .el-pagination .el-pager li {
   border-radius: var(--app-radius-sm, 6px);
