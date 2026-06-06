@@ -53,7 +53,9 @@
           </div>
           <div class="info-item">
             <span class="info-label">项目官网</span>
-            <span class="info-value text-muted">建设中...</span>
+            <a class="info-link" href="https://www.qvmconsole.cn/" target="_blank" rel="noopener">
+              https://www.qvmconsole.cn/
+            </a>
           </div>
           <div class="info-item">
             <span class="info-label">项目文档</span>
