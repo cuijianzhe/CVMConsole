@@ -13,8 +13,16 @@
           <el-form-item prop="password">
             <el-input v-model="form.password" size="large" type="password" placeholder="密码" prefix-icon="Lock" show-password @keyup.enter="handleLogin" />
           </el-form-item>
+          <el-form-item class="agreement-item">
+            <el-checkbox v-model="agreementChecked" class="agreement-checkbox">
+              <span>我已阅读并同意</span>
+              <a href="https://qvmcdocs.xiaozhuhouses.asia/agreement?return=%2Fdocs%2Finstall%2F" target="_blank" rel="noopener noreferrer" class="agreement-link" @click.stop>《用户协议》</a>
+              <span>和</span>
+              <a href="https://qvmcdocs.xiaozhuhouses.asia/agreement?return=%2Fdocs%2Finstall%2F" target="_blank" rel="noopener noreferrer" class="agreement-link" @click.stop>《内测协议》</a>
+            </el-checkbox>
+          </el-form-item>
           <el-form-item class="submit-item">
-            <el-button type="primary" size="large" class="login-btn" :loading="loading" @click="handleLogin">登 录</el-button>
+            <el-button type="primary" size="large" class="login-btn" :loading="loading" :disabled="!agreementChecked" @click="handleLogin">登 录</el-button>
           </el-form-item>
         </el-form>
       </template>
@@ -299,7 +307,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import QRCode from 'qrcode'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -325,6 +333,24 @@ const router = useRouter()
 const userStore = useUserStore()
 const loginFormRef = ref(null)
 const displaySiteTitle = computed(() => siteTitle.value)
+
+// 用户协议勾选状态，勾选后通过 localStorage 记住
+const agreementChecked = ref(false)
+const AGREEMENT_STORAGE_KEY = 'qvm_agreement_accepted'
+
+onMounted(() => {
+  if (localStorage.getItem(AGREEMENT_STORAGE_KEY) === 'true') {
+    agreementChecked.value = true
+  }
+})
+
+watch(agreementChecked, (val) => {
+  if (val) {
+    localStorage.setItem(AGREEMENT_STORAGE_KEY, 'true')
+  } else {
+    localStorage.removeItem(AGREEMENT_STORAGE_KEY)
+  }
+})
 
 const loading = ref(false)
 const dialogVisible = ref(false)
@@ -479,6 +505,10 @@ const applyStage = async (data) => {
 
 const handleLogin = async () => {
   if (!loginFormRef.value) return
+  if (!agreementChecked.value) {
+    ElMessage.warning('请先阅读并同意用户协议和内测协议')
+    return
+  }
   const valid = await loginFormRef.value.validate().catch(() => false)
   if (!valid) return
 
@@ -980,6 +1010,24 @@ const handleForgotCancel = () => {
   text-decoration: none;
   font-weight: 500;
   border-bottom: 1px dotted rgba(255, 255, 255, 0.5);
+}
+
+.agreement-item {
+  margin-bottom: 8px;
+}
+
+.agreement-checkbox {
+  white-space: normal;
+  line-height: 1.6;
+}
+
+.agreement-link {
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+.agreement-link:hover {
+  text-decoration: underline;
 }
 
 :deep(.el-input__wrapper) {
