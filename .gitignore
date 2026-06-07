@@ -28,3 +28,5 @@ scripts/
 *.sw?
 *.exe
 kvm-console-linux-amd64
+kvm-console
+kvm-console.exe
