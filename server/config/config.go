@@ -213,7 +213,7 @@ func Init() {
 		PortForwardHTTPProbeTimeoutSeconds:    getEnvInt("KVM_PORT_FORWARD_HTTP_PROBE_TIMEOUT_SECONDS", 3),
 		BatchCloneMaxConcurrency:              getEnvInt("KVM_BATCH_CLONE_MAX_CONCURRENCY", 10),
 		RateLimitPublicPerMin:                getEnvInt("KVM_RATE_LIMIT_PUBLIC", 20),
-		RateLimitAuthPerMin:                  getEnvInt("KVM_RATE_LIMIT_AUTH", 60),
+		RateLimitAuthPerMin:                  getEnvInt("KVM_RATE_LIMIT_AUTH", 0),
 	}
 	if GlobalConfig.VMCredentialSecret == "" {
 		GlobalConfig.VMCredentialSecret = GlobalConfig.JWTSecret

@@ -22,7 +22,7 @@ type RateLimitConfig struct {
 func DefaultRateLimitConfig() RateLimitConfig {
 	return RateLimitConfig{
 		PublicPerMinute: 20,
-		AuthPerMinute:   60,
+		AuthPerMinute:   0, // 0 表示不限制
 		CleanupInterval: 5 * time.Minute,
 	}
 }
@@ -62,6 +62,11 @@ func (rl *RateLimiter) Allow(ip string, isPublic bool) (bool, int, int) {
 	limit := rl.config.AuthPerMinute
 	if isPublic {
 		limit = rl.config.PublicPerMinute
+	}
+
+	// limit 为 0 表示不限制，直接放行
+	if limit == 0 {
+		return true, -1, 0
 	}
 
 	now := time.Now()

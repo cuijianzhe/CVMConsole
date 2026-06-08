@@ -48,6 +48,7 @@ type LinkedCloneParams struct {
 	NicModel            string                  `json:"nic_model,omitempty"`
 	SystemDiskIOPS      *DiskIOPSTune           `json:"system_disk_iops,omitempty"` // 系统盘 IOPS 限制
 	IsAdmin             bool                    `json:"is_admin,omitempty"`
+	PCIERootPorts       int                     `json:"pcie_root_ports,omitempty"` // q35 预留 pcie-root-port 数量
 }
 
 // LinkedCloneResult 原生链式克隆结果
@@ -214,6 +215,16 @@ func LinkedCloneVM(ctx context.Context, params *LinkedCloneParams, progressFn fu
 	case "uefi-secure":
 		cmdParts = append(cmdParts, "--boot uefi,firmware.feature0.name=secure-boot,firmware.feature0.enabled=yes")
 	}
+
+	// q35 机型预留额外的 pcie-root-port 热插槽
+	portCount := params.PCIERootPorts
+	if portCount <= 0 {
+		portCount = 4
+	}
+	for i := 0; i < portCount; i++ {
+		cmdParts = append(cmdParts, "--controller type=pci,model=pcie-root-port")
+	}
+
 	cmdParts = append(cmdParts, "--print-xml")
 
 	installCmd := strings.Join(cmdParts, " ")

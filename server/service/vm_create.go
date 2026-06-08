@@ -53,6 +53,7 @@ type CreateVMParams struct {
 	StoragePoolID   string                  `json:"storage_pool_id,omitempty"`
 	HostDevices     []HostDeviceParam       `json:"host_devices,omitempty"` // 硬件直通设备
 	IsAdmin         bool                    `json:"is_admin,omitempty"`
+	PCIERootPorts   int                     `json:"pcie_root_ports,omitempty"` // q35 机型预留 pcie-root-port 数量，0 表示使用默认 4
 }
 
 // ExtraDiskParam 额外磁盘参数
@@ -242,6 +243,17 @@ func CreateVM(params *CreateVMParams, progressFn func(int, string)) (string, err
 
 	// 机器类型
 	cmdParts = append(cmdParts, fmt.Sprintf("--machine %s", params.MachineType))
+
+	// q35 机型预留额外的 pcie-root-port 热插槽，避免后续无法热添加磁盘
+	if params.MachineType == "q35" {
+		portCount := params.PCIERootPorts
+		if portCount <= 0 {
+			portCount = 4 // 默认预留 4 个
+		}
+		for i := 0; i < portCount; i++ {
+			cmdParts = append(cmdParts, "--controller type=pci,model=pcie-root-port")
+		}
+	}
 
 	// 磁盘总线类型：优先用户指定，否则根据系统类型决定
 	diskBus := params.DiskBus

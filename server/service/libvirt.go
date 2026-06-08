@@ -102,6 +102,7 @@ type VmDetail struct {
 	SMBIOS1                *VMSMBIOS1Config          `json:"smbios1"`       // SMBIOS 类型 1 信息
 	MemoryObservationUntil int64                     `json:"memory_observation_until"`
 	MemoryManualPauseUntil int64                     `json:"memory_manual_pause_until"`
+	PCIERootPorts          int                       `json:"pcie_root_ports"` // pcie-root-port 数量（仅 q35/virt 机型）
 }
 
 // VmStats 虚拟机资源使用统计
@@ -421,6 +422,9 @@ func GetVM(name string) (*VmDetail, error) {
 		vm.BootType = ParseVMBootTypeFromDomainXML(xmlStr)
 		vm.Arch = ParseVMArchFromDomainXML(xmlStr)
 		vm.MachineType = ParseVMMachineTypeFromDomainXML(xmlStr)
+		if count, err := GetVMPCIERootPorts(name); err == nil {
+			vm.PCIERootPorts = count
+		}
 		vm.VideoModel = ParseVMVideoModelFromDomainXML(xmlStr)
 		vm.CPUTopologyMode = ParseVMCPUTopologyModeFromDomainXML(xmlStr)
 		vm.CPULimitPercent = ParseVMCPULimitPercentFromDomainXML(xmlStr, vm.VCPU)

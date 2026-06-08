@@ -56,6 +56,8 @@ type VmEditRequest struct {
 	// 带宽速率限制（Mbps，指针类型区分是否传递）
 	BandwidthInboundAvg  *int `json:"bandwidth_inbound_avg"`  // 下行平峰速率 Mbps
 	BandwidthOutboundAvg *int `json:"bandwidth_outbound_avg"` // 上行平峰速率 Mbps
+	// PCIe 热插槽数量（仅关机时可修改，0 表示不修改）
+	PCIERootPorts *int `json:"pcie_root_ports,omitempty"`
 }
 
 type VmXMLUpdateRequest struct {
@@ -702,6 +704,17 @@ func EditVm(c *gin.Context) {
 			if msg != "" {
 				fmt.Printf("[动态内存] %s: %s\n", name, msg)
 			}
+		}
+	}
+
+	// 修改 PCIe 热插槽数量（仅关机时可修改）
+	if req.PCIERootPorts != nil {
+		if err := service.SetVMPCIERootPorts(name, *req.PCIERootPorts); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"code":    500,
+				"message": "修改 PCIe 端口数量失败: " + err.Error(),
+			})
+			return
 		}
 	}
 

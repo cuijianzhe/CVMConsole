@@ -304,6 +304,22 @@ func AttachExistingDisk(vmName, diskPath, bus string) (string, error) {
 			"</disk>",
 		format, diskPath, nextDev, bus)
 
+	// 运行中热添加时，q35/PCIe 机型需要补全 PCI 地址以使用空闲的 pcie-root-port
+	if vmState == "running" {
+		hotplugXML, err := buildDiskHotplugXML(vmName, diskXML)
+		if err != nil {
+			// PCIe 插槽不足，尝试降级为 scsi 总线（需已有 virtio-scsi 控制器）
+			if bus == "virtio" && strings.Contains(err.Error(), ErrNoPCIESlots.Error()) {
+				scsiDev, scsiErr := tryFallbackDiskToSCSI(vmName, diskPath, format, existingDisks, vmState)
+				if scsiErr == nil {
+					return scsiDev, nil
+				}
+			}
+			return "", err
+		}
+		diskXML = hotplugXML
+	}
+
 	xmlPath := fmt.Sprintf("/tmp/_attach-disk-%s-%s.xml", vmName, nextDev)
 	utils.ExecShell(fmt.Sprintf("cat > %s << 'XMLEOF'\n%s\nXMLEOF", utils.ShellSingleQuote(xmlPath), diskXML))
 
@@ -391,6 +407,23 @@ func AddDiskWithBusInDir(vmName string, sizeGB int, format, bus, diskDir string)
 			"</disk>",
 		format, diskPath, nextDev, bus)
 
+	// 运行中热添加时，q35/PCIe 机型需要补全 PCI 地址以使用空闲的 pcie-root-port
+	if vmState == "running" {
+		hotplugXML, err := buildDiskHotplugXML(vmName, diskXML)
+		if err != nil {
+			// PCIe 插槽不足，尝试降级为 scsi 总线（需已有 virtio-scsi 控制器）
+			if bus == "virtio" && strings.Contains(err.Error(), ErrNoPCIESlots.Error()) {
+				scsiDev, scsiErr := tryFallbackDiskToSCSI(vmName, diskPath, format, existingDisks, vmState)
+				if scsiErr == nil {
+					return scsiDev, nil
+				}
+			}
+			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(diskPath)))
+			return "", err
+		}
+		diskXML = hotplugXML
+	}
+
 	xmlPath := fmt.Sprintf("/tmp/_attach-disk-%s-%s.xml", vmName, nextDev)
 	utils.ExecShell(fmt.Sprintf("cat > %s << 'XMLEOF'\n%s\nXMLEOF", utils.ShellSingleQuote(xmlPath), diskXML))
 
@@ -450,6 +483,93 @@ func AddExtraDisksForVM(vmName string, disks []ExtraDiskParam, defaultDir, defau
 		}
 	}
 	return nil
+}
+
+// buildDiskHotplugXML 根据虚拟机机型为热添加磁盘补全 PCI 地址。
+// 当 VM 为 q35/PCIe 机型时，磁盘必须挂载到空闲的 pcie-root-port 下游总线上，
+// 否则 libvirt 会报 "No more available PCI slots"。
+// 当 PCIe 插槽已满时，返回 ErrNoPCIESlots 错误供上层降级处理。
+func buildDiskHotplugXML(vmName string, diskXML string) (string, error) {
+	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName)
+	if xmlResult.Error != nil {
+		// 无法获取 XML 时直接返回原始 XML，让 libvirt 自行分配
+		return diskXML, nil
+	}
+	if !hasPCIERootController(xmlResult.Stdout) {
+		// 非 PCIe 机型（i440fx 等），不需要手动分配 PCI 地址
+		return diskXML, nil
+	}
+
+	freeBus, err := findFreePCIERootPortBus(vmName)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrNoPCIESlots, err)
+	}
+
+	// 在 </disk> 前插入 PCI 地址
+	addrLine := fmt.Sprintf("  <address type='pci' domain='0x0000' bus='0x%02x' slot='0x00' function='0x0'/>", freeBus)
+	diskXML = strings.Replace(diskXML, "</disk>", addrLine+"\n</disk>", 1)
+	return diskXML, nil
+}
+
+// ErrNoPCIESlots PCIe 插槽已满时的错误标记，用于触发 scsi 降级逻辑。
+var ErrNoPCIESlots = fmt.Errorf("no_pcie_slots")
+
+// tryFallbackDiskToSCSI 当 virtio 磁盘热添加因 PCIe 插槽不足失败时，
+// 尝试降级为 scsi 总线以使用已有的 virtio-scsi 控制器。
+// 返回降级后的设备名，或错误。
+func tryFallbackDiskToSCSI(vmName, diskPath, format string, existingDisks []DiskInfo, vmState string) (string, error) {
+	// 1. 确认 VM 有 virtio-scsi 控制器
+	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName)
+	if xmlResult.Error != nil || !hasSCSIController(xmlResult.Stdout) {
+		// 尝试创建 virtio-scsi 控制器（需要 PCIe 插槽，通常也会失败）
+		if err := ensureHotplugCDROMController(vmName); err != nil {
+			return "", fmt.Errorf("PCIe 插槽已满且无可用的 virtio-scsi 控制器（尝试创建也失败: %v）。请先关机后再添加磁盘", err)
+		}
+	}
+
+	// 2. 计算 scsi 设备名
+	usedDevs := make(map[string]bool)
+	for _, d := range existingDisks {
+		usedDevs[d.Device] = true
+	}
+	nextDev := ""
+	for _, letter := range "abcdefghijklmnop" {
+		dev := "sd" + string(letter)
+		if !usedDevs[dev] {
+			nextDev = dev
+			break
+		}
+	}
+	if nextDev == "" {
+		return "", fmt.Errorf("没有可用的 scsi 设备名")
+	}
+
+	// 3. 构建 scsi 总线 XML（无需 PCIe 地址）
+	diskXML := fmt.Sprintf(
+		"<disk type='file' device='disk'>\n"+
+			"  <driver name='qemu' type='%s' discard='unmap' detect_zeroes='unmap'/>\n"+
+			"  <source file='%s'/>\n"+
+			"  <target dev='%s' bus='scsi'/>\n"+
+			"</disk>",
+		format, diskPath, nextDev)
+
+	// 4. 写入 XML 并挂载
+	xmlPath := fmt.Sprintf("/tmp/_attach-disk-%s-%s.xml", vmName, nextDev)
+	utils.ExecShell(fmt.Sprintf("cat > %s << 'XMLEOF'\n%s\nXMLEOF", utils.ShellSingleQuote(xmlPath), diskXML))
+
+	var attachArgs []string
+	if vmState == "running" {
+		attachArgs = []string{"attach-device", vmName, xmlPath, "--persistent"}
+	} else {
+		attachArgs = []string{"attach-device", vmName, xmlPath, "--config"}
+	}
+	attachResult := utils.ExecCommand("virsh", attachArgs...)
+	utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(xmlPath)))
+	if attachResult.Error != nil {
+		return "", fmt.Errorf("scsi 降级挂载失败: %s", attachResult.Stderr)
+	}
+
+	return nextDev, nil
 }
 
 // getDevPrefix 根据总线类型返回设备前缀
@@ -982,6 +1102,200 @@ func attachNewCDROM(vmName, isoPath, vmState string) error {
 }
 
 // ensureHotplugCDROMController 确保运行中的虚拟机具备可热添加光驱的控制器。
+// SetVMPCIERootPorts 修改已有虚拟机预留的 pcie-root-port 数量（需要关机）。
+// targetCount 为期望的 pcie-root-port 总数（不含 pcie-root 本身）。
+// 当 targetCount 为 0 时，从 XML 中移除所有已存在的额外 pcie-root-port。
+func SetVMPCIERootPorts(vmName string, targetCount int) error {
+	if err := EnsureVMNotMigrating(vmName, "修改 PCIe 端口数"); err != nil {
+		return err
+	}
+	state := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
+	if state == "running" {
+		return fmt.Errorf("修改 PCIe 端口数量需要先关机")
+	}
+
+	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName, "--inactive")
+	if xmlResult.Error != nil {
+		return fmt.Errorf("获取虚拟机 XML 失败: %s", xmlResult.Stderr)
+	}
+	if !hasPCIERootController(xmlResult.Stdout) {
+		return fmt.Errorf("当前虚拟机不是 PCIe (q35/virt) 机型，不需要手动管理 pcie-root-port")
+	}
+
+	// 解析 XML，识别 system 端口（libvirt 自动生成的）和 extra 端口（我们预留的）
+	// system 端口：虚拟机启动时必须的端口（由 libvirt 按设备数量自动生成）
+	// extra 端口：我们在 virt-install 时通过 --controller 额外预留的空端口
+
+	lines := strings.Split(xmlResult.Stdout, "\n")
+
+	// 先找到所有 pcie-root-port 控制器块
+	type portBlock struct {
+		index     int
+		startLine int
+		endLine   int
+		isExtra   bool // true 表示是额外预留的空端口（无下游设备）
+	}
+	var portBlocks []portBlock
+
+	inPort := false
+	currentPort := portBlock{}
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		if strings.Contains(trimmed, `<controller type='pci'`) && strings.Contains(trimmed, `model='pcie-root-port'`) {
+			inPort = true
+			currentPort = portBlock{startLine: i}
+			// 提取 index 属性
+			if idxMatch := regexp.MustCompile(`index='(\d+)'`).FindStringSubmatch(trimmed); len(idxMatch) > 1 {
+				currentPort.index, _ = strconv.Atoi(idxMatch[1])
+			}
+			continue
+		}
+
+		if inPort {
+			if strings.Contains(trimmed, "</controller>") {
+				currentPort.endLine = i
+				// 判断是否为额外预留的端口：target chassis 值大于系统端口常见范围
+				// 系统自动生成的端口 chassis 在 1-7 左右，额外预留的在较高值
+				portBlocks = append(portBlocks, currentPort)
+				inPort = false
+				currentPort = portBlock{}
+			}
+		}
+	}
+
+	if len(portBlocks) == 0 {
+		return fmt.Errorf("未找到 pcie-root-port 控制器")
+	}
+
+	currentCount := len(portBlocks)
+	if currentCount == targetCount {
+		return nil // 无需修改
+	}
+
+	if targetCount > currentCount {
+		// 需要增加端口：在最后一个 pcie-root-port 之后追加新端口
+		lastPortBlock := portBlocks[len(portBlocks)-1]
+		insertPos := lastPortBlock.endLine + 1
+
+		nextIndex := lastPortBlock.index + 1
+		nextChassis := lastPortBlock.index + 1
+		// 从最后的 <address> 推算下一个 slot 和 function
+		lastAddrLines := lines[lastPortBlock.startLine:lastPortBlock.endLine]
+		nextSlot := 2   // pcie-root 上的默认 slot
+		nextFn := 0      // function 编号
+
+		for _, l := range lastAddrLines {
+			if strings.Contains(l, "slot=") {
+				if slotMatch := regexp.MustCompile(`slot='0x([0-9a-f]+)'`).FindStringSubmatch(l); len(slotMatch) > 1 {
+					s, _ := strconv.ParseInt(slotMatch[1], 16, 64)
+					nextSlot = int(s)
+				}
+			}
+			if strings.Contains(l, "function=") {
+				if fnMatch := regexp.MustCompile(`function='0x([0-9a-f]+)'`).FindStringSubmatch(l); len(fnMatch) > 1 {
+					f, _ := strconv.ParseInt(fnMatch[1], 16, 64)
+					nextFn = int(f) + 1
+				}
+			}
+		}
+		// function 超过 7 时换到下一个 slot，function 归零
+		if nextFn > 7 {
+			nextSlot++
+			nextFn = 0
+		}
+
+		// 生成新的空端口 XML
+		var newPorts []string
+		currentSlot := nextSlot
+		currentFn := nextFn
+		for i := 0; i < targetCount-currentCount; i++ {
+			idx := nextIndex + i
+			chs := nextChassis + i
+
+			newPort := fmt.Sprintf(
+				`    <controller type='pci' index='%d' model='pcie-root-port'>
+      <model name='pcie-root-port'/>
+      <target chassis='%d' port='0x%x'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x%02x' function='0x%x'/>
+    </controller>`,
+				idx, chs, 0x10+idx, currentSlot, currentFn)
+
+			newPorts = append(newPorts, newPort)
+
+			// 下一个 function，超过 7 换 slot
+			currentFn++
+			if currentFn > 7 {
+				currentSlot++
+				currentFn = 0
+			}
+		}
+
+		newLines := make([]string, 0, len(lines)+len(newPorts))
+		newLines = append(newLines, lines[:insertPos]...)
+		newLines = append(newLines, newPorts...)
+		newLines = append(newLines, lines[insertPos:]...)
+		lines = newLines
+
+	} else {
+		// 需要减少端口：从后往前删除多余的空端口
+		// 只删除 index 较大的端口（这些是我们预留的）
+		removeCount := currentCount - targetCount
+		removed := 0
+		for i := len(portBlocks) - 1; i >= 0 && removed < removeCount; i-- {
+			block := portBlocks[i]
+			// 跳过系统关键端口（index 0-6 通常是系统自动生成的）
+			if block.index <= 6 && removed >= removeCount {
+				break
+			}
+			// 标记要删除的行
+			for j := block.startLine; j <= block.endLine; j++ {
+				lines[j] = "" // 占位删除
+			}
+			removed++
+		}
+		if removed < removeCount {
+			return fmt.Errorf("无法删除足够的端口：请求减少 %d 个，但只能安全删除 %d 个（index>6 的空端口）。请先关机后通过 virsh edit 手动调整", removeCount, removed)
+		}
+	}
+
+	newXML := strings.Join(lines, "\n")
+	// 压缩连续空行
+	emptyLineRe := regexp.MustCompile(`\n\s*\n\s*\n`)
+	newXML = emptyLineRe.ReplaceAllString(newXML, "\n\n")
+
+	xmlPath := fmt.Sprintf("/tmp/_pcie-ports-%s.xml", vmName)
+	if err := os.WriteFile(xmlPath, []byte(newXML), 0644); err != nil {
+		return fmt.Errorf("写入 XML 文件失败: %v", err)
+	}
+	defineResult := utils.ExecCommand("virsh", "define", xmlPath)
+	os.Remove(xmlPath)
+	if defineResult.Error != nil {
+		return fmt.Errorf("修改 PCIe 端口数量失败: %s", defineResult.Stderr)
+	}
+
+	return nil
+}
+
+// GetVMPCIERootPorts 获取虚拟机当前的 pcie-root-port 数量
+func GetVMPCIERootPorts(vmName string) (int, error) {
+	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName, "--inactive")
+	if xmlResult.Error != nil {
+		return 0, fmt.Errorf("获取虚拟机 XML 失败: %s", xmlResult.Stderr)
+	}
+	if !hasPCIERootController(xmlResult.Stdout) {
+		return 0, nil // 非 PCIe 机型，返回 0
+	}
+
+	count := 0
+	for _, line := range strings.Split(xmlResult.Stdout, "\n") {
+		if strings.Contains(line, `<controller type='pci'`) && strings.Contains(line, `model='pcie-root-port'`) {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func ensureHotplugCDROMController(vmName string) error {
 	liveXMLResult := utils.ExecCommand("virsh", "dumpxml", vmName)
 	if liveXMLResult.Error != nil {

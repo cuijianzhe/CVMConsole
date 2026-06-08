@@ -341,6 +341,22 @@
                   将虚拟机的 vCPU 绑定到指定的物理 CPU 核心上，多个核心用逗号或空格分隔，支持范围格式（如 0-3）。留空表示不限制亲和性
                 </div>
               </el-form-item>
+              <el-form-item label="PCIe 热插槽">
+                <el-input-number v-model="form.pcie_root_ports" :min="0" :max="32" :step="1" style="width: 160px;"
+                  :disabled="form.machine_type !== 'q35' || editVmStatus === 'running' || editVmStatus === 'paused'" />
+                <div v-if="form.machine_type !== 'q35'" class="form-tip">
+                  <el-icon><InfoFilled /></el-icon>
+                  仅 Q35 机型需要预留 PCIe 插槽，i440FX 无需关注此设置
+                </div>
+                <div v-else-if="editVmStatus === 'running' || editVmStatus === 'paused'" class="form-tip">
+                  <el-icon><WarningFilled /></el-icon>
+                  修改 PCIe 插槽数量需要先关机
+                </div>
+                <div v-else class="form-tip">
+                  <el-icon><InfoFilled /></el-icon>
+                  预留的 pcie-root-port 数量（当前: {{ currentPCIERootPorts }}）。设为 0 表示恢复默认（新建时默认 4 个）
+                </div>
+              </el-form-item>
               <el-form-item label="显示设备">
                 <el-select v-model="form.video_model" style="width: 280px;" :disabled="editVmStatus === 'running' || editVmStatus === 'paused'">
                   <el-option v-for="item in videoModelOptions" :key="item.value" :label="item.label" :value="item.value">
@@ -1638,6 +1654,13 @@
                   将虚拟机的 vCPU 绑定到指定的物理 CPU 核心上，多个核心用逗号或空格分隔，支持范围格式（如 0-3）。留空表示不限制亲和性
                 </div>
               </el-form-item>
+              <el-form-item label="PCIe 热插槽" v-if="form.machine_type === 'q35'">
+                <el-input-number v-model="form.pcie_root_ports" :min="0" :max="32" :step="1" style="width: 160px;" />
+                <div class="form-tip">
+                  <el-icon><InfoFilled /></el-icon>
+                  预留的 pcie-root-port 数量，设为 0 使用默认值（4）。足够的插槽可避免后续热添加磁盘时提示"无可用 PCI 插槽"
+                </div>
+              </el-form-item>
               <el-form-item v-if="isTemplateSourceMode && isWindowsTemplate" label="首次重启">
                 <el-select v-model="form.first_boot_reboot_mode" style="width: 280px;">
                   <el-option v-for="item in firstBootRebootModeOptions" :key="item.value" :label="item.label" :value="item.value" />
@@ -2618,6 +2641,12 @@ const createEmptySMBIOS1Config = () => ({
 const freezeHelpText = '虚拟机启动时自动冻结CPU（使用监视器命令c可继续启动过程）。宿主机原生自启不会附带该行为。'
 const apicHelpText = '控制虚拟机是否向来宾系统暴露 APIC（高级可编程中断控制器）。绝大多数系统都应保持启用。'
 const paeHelpText = '控制虚拟机是否暴露 PAE（Physical Address Extension，物理地址扩展）。常见于 x86 老系统、32 位大内存兼容场景。'
+
+// 当前 PCIe 端口数（编辑模式从 VM 详情中读取）
+const currentPCIERootPorts = computed(() => {
+  if (!isEdit.value || !currentEditRow.value) return '未知'
+  return currentEditRow.value?.pcie_root_ports ?? '未知'
+})
 const cpuTopologyModeOptions = [
   { label: '自动（Windows 使用单插槽多核心）', value: 'auto' },
   { label: '单插槽多核心', value: 'single_socket' },
@@ -3306,6 +3335,7 @@ const editCdroms = ref([])  // [{device, path}]
 const cdromIsoPath = ref('')
 const editOrigNicModel = ref('')  // 编辑模式下原始网卡类型，用于判断是否已修改
 const editOrigBootType = ref('')  // 编辑模式下原始引导方式，用于判断是否已修改
+const editOrigPCIERootPorts = ref(0)  // 编辑模式下原始 PCIe 端口数，用于判断是否已修改
 const editBootDevices = ref([])   // 编辑模式下的可引导设备列表（Cockpit 风格）
 const bootTypeTouched = ref(false) // 仅在用户手动切换引导类型后置为 true
 
@@ -3385,6 +3415,8 @@ const form = reactive({
   boot_type: 'bios',
   watchdog: 'none',
   boot_order: ['hd'],
+  // PCIe 热插槽数量（q35 机型预留的 pcie-root-port 数量，0 使用默认 4）
+  pcie_root_ports: 4,
   // 虚拟化方案
   virt_type: 'kvm',
   arch: 'x86_64',
@@ -4082,6 +4114,8 @@ const applyEditVmDetail = (detail, row = {}) => {
   }
   form.arch = detail.arch || form.arch || 'x86_64'
   form.machine_type = detail.machine_type || form.machine_type || 'q35'
+  form.pcie_root_ports = detail.pcie_root_ports || 4
+  editOrigPCIERootPorts.value = form.pcie_root_ports
   form.boot_type = detail.boot_type || form.boot_type || 'bios'
   editOrigBootType.value = form.boot_type
   form.video_model = detail.video_model || getRecommendedVideoModel(detail.os_type || 'linux')
@@ -4262,6 +4296,7 @@ const open = async (row, mode, options = {}) => {
       cpu_affinity: '',
       memory_dynamic_touched: false, memory_pending_apply: false, memory_compat_mode: 'legacy_static', memory_balloon_supported: false, memory_balloon_status: 'not_running',
       machine_type: 'q35', boot_type: 'bios', watchdog: 'none',
+      pcie_root_ports: 4,
       boot_order: ['hd'], virt_type: 'kvm', arch: 'x86_64',
       add_disks: [], extra_disks: [],
       host_devices: [], host_devices_touched: false,
@@ -4594,6 +4629,7 @@ const onClosed = () => {
   currentVmUUID.value = ''
   currentEditRow.value = null
   editOrigBootType.value = ''
+  editOrigPCIERootPorts.value = 0
   registrationMode.value = false
   registrationContext.dedicated_vpc_switch_id = 0
   registrationContext.dedicated_vpc_label = ''
@@ -4630,6 +4666,10 @@ const submitForm = async () => {
             smbios1: buildSMBIOS1Payload(),
             boot_order: computedBootOrder,
             add_disks: form.add_disks.filter(d => d.size > 0),
+          }
+          // PCIe 热插槽数量（仅当用户修改后发送）
+          if (form.machine_type === 'q35' && form.pcie_root_ports !== editOrigPCIERootPorts.value) {
+            editPayload.pcie_root_ports = form.pcie_root_ports
           }
           // 硬件直通设备：仅在管理员修改后发送
           if (isAdmin.value && form.host_devices_touched) {
@@ -4816,6 +4856,7 @@ const submitForm = async () => {
               iops_write: d.iops_write || 0,
             })),
             host_devices: form.host_devices,
+            pcie_root_ports: form.pcie_root_ports,
           }
           const cpuLimitPercent = buildCPULimitPercentPayload()
           if (cpuLimitPercent !== undefined) {
@@ -4928,6 +4969,7 @@ const submitForm = async () => {
               iops_write: d.iops_write || 0,
             })),
             host_devices: form.host_devices,
+            pcie_root_ports: form.pcie_root_ports,
           }
           const cpuLimitPercent = buildCPULimitPercentPayload()
           if (cpuLimitPercent !== undefined) {
@@ -5024,6 +5066,7 @@ const submitForm = async () => {
             cpu_topology_mode: form.cpu_topology_mode,
             virt_type: form.virt_type,
             arch: form.virt_type === 'qemu' ? form.arch : undefined,
+            pcie_root_ports: form.machine_type === 'q35' ? form.pcie_root_ports : undefined,
             extra_disks: form.extra_disks.filter(d => d.size > 0).map(d => ({
               size: d.size,
               format: d.format,

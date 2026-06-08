@@ -85,6 +85,7 @@ type CloneParams struct {
 	SystemDiskIOPS        *DiskIOPSTune           `json:"system_disk_iops,omitempty"` // 系统盘 IOPS 限制
 	IsAdmin               bool                    `json:"is_admin,omitempty"`
 	LinuxIdentityPrepared bool                    `json:"-"` // Linux 首次启动前是否已离线重置 machine-id/DHCP 身份
+	PCIERootPorts         int                     `json:"pcie_root_ports,omitempty"` // q35 预留 pcie-root-port 数量
 }
 
 // BatchCloneParams 批量克隆参数
@@ -382,6 +383,16 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 				"--import --cpu host-passthrough --print-xml",
 			utils.ShellSingleQuote(params.Name), ramMB, params.VCPU, utils.ShellSingleQuote(cloneDisk), params.DiskBus,
 		)
+		// 拼接额外的 pcie-root-port 预留
+		portCount := params.PCIERootPorts
+		if portCount <= 0 {
+			portCount = 4
+		}
+		extraPorts := ""
+		for i := 0; i < portCount; i++ {
+			extraPorts += " --controller type=pci,model=pcie-root-port"
+		}
+		installCmd += extraPorts
 		result := utils.ExecCommandLongRunning("bash", "-c", installCmd)
 		if result.Error != nil {
 			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(cloneDisk)))
