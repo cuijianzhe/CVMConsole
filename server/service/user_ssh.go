@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -119,7 +120,7 @@ func regenerateSSHDenyConfig() error {
 func syncAllUserShells() {
 	var users []model.User
 	if err := model.DB.Where("role = ?", "user").Find(&users).Error; err != nil {
-		fmt.Printf("[警告] 查询用户列表失败: %v\n", err)
+		logger.App.Warn("查询用户列表失败", "error", err)
 		return
 	}
 
@@ -146,6 +147,6 @@ func ensureSSHDInclude() {
 // SyncSSHDenyConfig 启动时同步 SSH 拒绝配置（供初始化时调用）
 func SyncSSHDenyConfig() {
 	if err := regenerateSSHDenyConfig(); err != nil {
-		fmt.Printf("[警告] 同步 SSH 拒绝配置失败: %v\n", err)
+		logger.App.Warn("同步 SSH 拒绝配置失败", "error", err)
 	}
 }

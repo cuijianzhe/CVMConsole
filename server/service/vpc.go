@@ -3,7 +3,6 @@ package service
 import (
 	"fmt"
 	"hash/fnv"
-	"log"
 	"net"
 	"net/netip"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -189,7 +189,7 @@ func EnsureDefaultVPCSwitch(username string) (*model.VPCSwitch, error) {
 	req := defaultVPCSwitchRequestForUser(user)
 	created, err := CreateVPCSwitch("system", "admin", req)
 	if err != nil && created != nil {
-		fmt.Printf("[警告] 默认交换机 %s 已创建，但运行态应用失败: %v\n", created.Name, err)
+		logger.App.Warn("默认交换机已创建但运行态应用失败", "switch", created.Name, "error", err)
 		return created, nil
 	}
 	return created, err
@@ -229,7 +229,7 @@ func EnsureAllActiveUsersDefaultSecurityGroup() {
 	model.DB.Where("role = ? AND status = ?", "user", UserStatusActive).Find(&users)
 	for _, user := range users {
 		if _, err := EnsureDefaultSecurityGroup(user.Username); err != nil {
-			fmt.Printf("[警告] 为用户 %s 创建默认安全组失败: %v\n", user.Username, err)
+			logger.App.Warn("创建默认安全组失败", "user", user.Username, "error", err)
 		}
 	}
 }
@@ -472,7 +472,7 @@ func ResetVPCSwitchTraffic(operator, role string, id uint) error {
 	if err := applyVPCSwitchBandwidth(sw); err != nil {
 		return fmt.Errorf("解除交换机限速失败: %w", err)
 	}
-	log.Printf("[VPC 流量配额] 管理员 %s 已重置交换机 %s(%d) 流量计数器", operator, sw.Name, sw.ID)
+	logger.App.Info("管理员已重置交换机流量计数器", "operator", operator, "switch", sw.Name, "id", sw.ID)
 	return nil
 }
 
@@ -510,7 +510,7 @@ func CleanupUserNetworkResources(username string, vmNames []string) error {
 	for _, sw := range switches {
 		removePortForwardsForCIDR(sw.CIDR)
 		if err := removeVPCSwitchRuntime(sw); err != nil {
-			fmt.Printf("[警告] 清理用户 %s 的 VPC 交换机 %s(%d) 运行态失败: %v\n", username, sw.Name, sw.ID, err)
+			logger.App.Warn("清理用户 VPC 交换机运行态失败", "user", username, "switch", sw.Name, "id", sw.ID, "error", err)
 		}
 	}
 
@@ -542,10 +542,10 @@ func CleanupUserNetworkResources(username string, vmNames []string) error {
 
 	if len(switches) > 0 || len(groups) > 0 {
 		if err := ApplyVPCACLRules(); err != nil {
-			fmt.Printf("[警告] 清理用户 %s 后重建 VPC ACL 失败: %v\n", username, err)
+			logger.App.Warn("清理用户后重建 VPC ACL 失败", "user", username, "error", err)
 		}
 		if err := SavePortForwardRules(); err != nil {
-			fmt.Printf("[警告] 清理用户 %s 后保存端口转发规则失败: %v\n", username, err)
+			logger.App.Warn("清理用户后保存端口转发规则失败", "user", username, "error", err)
 		}
 	}
 	return nil
@@ -562,17 +562,17 @@ func CleanupVMVPCBinding(vmName string) {
 	}
 	switchID := binding.SwitchID
 	if err := model.DB.Delete(&binding).Error; err != nil {
-		fmt.Printf("[警告] 清理 VM %s 的 VPC 绑定失败: %v\n", vmName, err)
+		logger.App.Warn("清理 VM VPC 绑定失败", "vm", vmName, "error", err)
 		return
 	}
 	var sw model.VPCSwitch
 	if err := model.DB.First(&sw, switchID).Error; err == nil {
 		if err := applyVPCSwitchBandwidth(sw); err != nil {
-			fmt.Printf("[警告] 清理 VM %s 后刷新交换机 %s(%d) 带宽失败: %v\n", vmName, sw.Name, sw.ID, err)
+			logger.App.Warn("清理 VM 后刷新交换机带宽失败", "vm", vmName, "switch", sw.Name, "id", sw.ID, "error", err)
 		}
 	}
 	if err := ApplyVPCACLRules(); err != nil {
-		fmt.Printf("[警告] 清理 VM %s 后重建 VPC ACL 失败: %v\n", vmName, err)
+		logger.App.Warn("清理 VM 后重建 VPC ACL 失败", "vm", vmName, "error", err)
 	}
 }
 
@@ -757,17 +757,17 @@ func EnsureAllVPCSwitchRuntime() error {
 	for _, sw := range switches {
 		if err := EnsureVPCSwitchRuntime(sw); err != nil {
 			lastErr = err
-			fmt.Printf("[警告] 恢复 VPC 交换机 %s(%d) 运行态失败: %v\n", sw.Name, sw.ID, err)
+			logger.App.Warn("恢复 VPC 交换机运行态失败", "switch", sw.Name, "id", sw.ID, "error", err)
 		}
 	}
 	if err := applyAllVPCBindingsRuntime(false); err != nil {
 		lastErr = err
-		fmt.Printf("[警告] 恢复 VPC VM 绑定运行态失败: %v\n", err)
+		logger.App.Warn("恢复 VPC VM 绑定运行态失败", "error", err)
 	}
 	if len(switches) > 0 {
 		if err := ApplyVPCACLRules(); err != nil {
 			lastErr = err
-			fmt.Printf("[警告] 恢复 VPC ACL 失败: %v\n", err)
+			logger.App.Warn("恢复 VPC ACL 失败", "error", err)
 		}
 	}
 	return lastErr
@@ -1173,12 +1173,12 @@ func startVPCDNSMasq(id uint) {
 	stopVPCDNSMasq(id)
 	configPath := vpcDNSMasqConfigPath(id)
 	if _, err := os.Stat(configPath); err != nil {
-		log.Printf("[警告] dnsmasq 配置文件不存在: %s", configPath)
+		logger.App.Warn("dnsmasq 配置文件不存在", "path", configPath)
 		return
 	}
 	result := utils.ExecCommand("dnsmasq", "--conf-file="+configPath)
 	if result.Error != nil {
-		log.Printf("[警告] 启动 dnsmasq 失败: %s", result.Stderr)
+		logger.App.Warn("启动 dnsmasq 失败", "stderr", result.Stderr)
 	}
 }
 
@@ -1279,7 +1279,7 @@ func cleanupInvalidVPCSecurityGroupRules(operator, role, requestedUsername strin
 	for _, rule := range rules {
 		username := groupUsernames[rule.SecurityGroupID]
 		if err := validateSecurityGroupRuleTarget(username, rule.TargetType, rule.TargetValue); err != nil {
-			fmt.Printf("[VPC ACL] 清理异常安全组规则 %d: %v\n", rule.ID, err)
+			logger.App.Warn("清理异常安全组规则", "id", rule.ID, "error", err)
 			_ = model.DB.Delete(&rule).Error
 		}
 	}
@@ -1582,7 +1582,7 @@ func BindVMToVPC(username, vmName string, switchID, securityGroupID uint) error 
 	rebaseVPCSwitchTrafficMonthly(switchID, newTrafficDown, newTrafficUp)
 	// VM 绑定 VPC 后默认由交换机控制聚合带宽，清理旧的 VM 级 OVS 限速流表。
 	if err := ClearVMBandwidth(vmName); err != nil {
-		fmt.Printf("[警告] 清理 VM %s 单机速率限制失败: %v\n", vmName, err)
+		logger.App.Warn("清理 VM 单机速率限制失败", "vm", vmName, "error", err)
 	}
 	if err := ApplyVPCSwitchRuntime(vmName, sw); err != nil {
 		return err
@@ -1794,12 +1794,12 @@ func applyVPCSwitchRuntime(vmName string, sw model.VPCSwitch, ensureSwitch bool)
 	}
 	vnetIF := getVMVnetIF(vmName)
 	if vnetIF == "" {
-		log.Printf("[警告] 无法获取 VM %s 的 vnet 接口，跳过 VLAN tag 设置", vmName)
+		logger.App.Warn("无法获取 VM vnet 接口，跳过 VLAN tag 设置", "vm", vmName)
 		return nil
 	}
 	// 检查端口是否实际存在于 OVS
 	if !ovsPortExists(vnetIF) {
-		log.Printf("[警告] OVS 端口 %s 不存在，跳过 VLAN tag 设置", vnetIF)
+		logger.App.Warn("OVS 端口不存在，跳过 VLAN tag 设置", "port", vnetIF)
 		return nil
 	}
 	targetTag := strconv.Itoa(sw.VLANID)
@@ -2057,7 +2057,7 @@ func repairMissingVPCBindingFromRuntime(vmName string, sw *model.VPCSwitch) (*mo
 	migrateOVSStaticHostToVPCIfNeeded(vmName, *sw)
 	group, err := EnsureDefaultSecurityGroup(sw.Username)
 	if err != nil {
-		fmt.Printf("[警告] VM %s 运行态属于 VPC 交换机 %s，但补默认安全组失败: %v\n", vmName, sw.Name, err)
+		logger.App.Warn("VM 运行态属于 VPC 交换机但补默认安全组失败", "vm", vmName, "switch", sw.Name, "error", err)
 		return sw, true
 	}
 	var existing model.VPCVMBinding
@@ -2069,7 +2069,7 @@ func repairMissingVPCBindingFromRuntime(vmName string, sw *model.VPCSwitch) (*mo
 		existing.SwitchID = sw.ID
 		existing.SecurityGroupID = group.ID
 		if saveErr := model.DB.Save(&existing).Error; saveErr != nil {
-			fmt.Printf("[警告] VM %s VPC 绑定记录修复失败: %v\n", vmName, saveErr)
+			logger.App.Warn("VM VPC 绑定记录修复失败", "vm", vmName, "error", saveErr)
 			return sw, true
 		}
 		logNetworkRuntimeChange(fmt.Sprintf("已根据运行态修复 VM %s 的 VPC 绑定记录", vmName))
@@ -2082,7 +2082,7 @@ func repairMissingVPCBindingFromRuntime(vmName string, sw *model.VPCSwitch) (*mo
 		SecurityGroupID: group.ID,
 	}
 	if createErr := model.DB.Create(&binding).Error; createErr != nil {
-		fmt.Printf("[警告] VM %s VPC 绑定记录补建失败: %v\n", vmName, createErr)
+		logger.App.Warn("VM VPC 绑定记录补建失败", "vm", vmName, "error", createErr)
 		return sw, true
 	}
 	logNetworkRuntimeChange(fmt.Sprintf("已根据运行态补建 VM %s 的 VPC 绑定记录", vmName))
@@ -2114,7 +2114,7 @@ func migrateOVSStaticHostToVPCIfNeeded(vmName string, sw model.VPCSwitch) {
 		return
 	}
 	if err := UpsertVPCStaticHost(sw, host.VMName, host.MAC, host.IP); err != nil {
-		fmt.Printf("[警告] 迁移 VM %s 的 VPC 静态 IP 绑定失败: %v\n", vmName, err)
+		logger.App.Warn("迁移 VM VPC 静态 IP 绑定失败", "vm", vmName, "error", err)
 		return
 	}
 	_, _ = RemoveOVSStaticHost(host.VMName, host.MAC)
@@ -2139,7 +2139,7 @@ func applyAllVPCBindingsRuntime(ensureSwitch bool) error {
 	ensuredSwitches := map[uint]bool{}
 	for _, binding := range bindings {
 		if vmLibvirtDomainMissing(binding.VMName) {
-			fmt.Printf("[提示] VM %s 已不存在，清理残留 VPC 绑定并跳过运行态恢复\n", binding.VMName)
+			logger.App.Info("VM 已不存在，清理残留 VPC 绑定", "vm", binding.VMName)
 			CleanupVMVPCBinding(binding.VMName)
 			continue
 		}
@@ -2147,7 +2147,7 @@ func applyAllVPCBindingsRuntime(ensureSwitch bool) error {
 		if !ok {
 			if err := model.DB.First(&sw, binding.SwitchID).Error; err != nil {
 				lastErr = err
-				fmt.Printf("[警告] VM %s 绑定的 VPC 交换机 %d 不存在: %v\n", binding.VMName, binding.SwitchID, err)
+				logger.App.Warn("VM 绑定的 VPC 交换机不存在", "vm", binding.VMName, "switchID", binding.SwitchID, "error", err)
 				continue
 			}
 			switches[binding.SwitchID] = sw
@@ -2155,14 +2155,14 @@ func applyAllVPCBindingsRuntime(ensureSwitch bool) error {
 		if ensureSwitch && !ensuredSwitches[sw.ID] {
 			if err := EnsureVPCSwitchRuntime(sw); err != nil {
 				lastErr = err
-				fmt.Printf("[警告] 恢复 VPC 交换机 %s(%d) 运行态失败: %v\n", sw.Name, sw.ID, err)
+				logger.App.Warn("恢复 VPC 交换机运行态失败", "switch", sw.Name, "id", sw.ID, "error", err)
 				continue
 			}
 			ensuredSwitches[sw.ID] = true
 		}
 		if err := applyVPCSwitchRuntime(binding.VMName, sw, false); err != nil {
 			lastErr = err
-			fmt.Printf("[警告] 恢复 VM %s 的 VPC 运行态失败: %v\n", binding.VMName, err)
+			logger.App.Warn("恢复 VM VPC 运行态失败", "vm", binding.VMName, "error", err)
 			continue
 		}
 		touchedSwitches[sw.ID] = sw
@@ -2170,7 +2170,7 @@ func applyAllVPCBindingsRuntime(ensureSwitch bool) error {
 	for _, sw := range touchedSwitches {
 		if err := applyVPCSwitchBandwidth(sw); err != nil {
 			lastErr = err
-			fmt.Printf("[警告] 恢复 VPC 交换机 %s(%d) 带宽策略失败: %v\n", sw.Name, sw.ID, err)
+			logger.App.Warn("恢复 VPC 交换机带宽策略失败", "switch", sw.Name, "id", sw.ID, "error", err)
 		}
 	}
 	return lastErr
@@ -2322,12 +2322,12 @@ func ensureVMBridgeInterfaceConfig(vmName, bridge string, vlanID int) error {
 func ensureVMDirectBridgeRuntimeVLAN(vmName string, vlanID int) error {
 	vnetIF := getVMVnetIF(vmName)
 	if vnetIF == "" {
-		log.Printf("[警告] 无法获取桥接 VM %s 的 vnet 接口，跳过 VLAN tag 设置", vmName)
+		logger.App.Warn("无法获取桥接 VM vnet 接口，跳过 VLAN tag 设置", "vm", vmName)
 		return nil
 	}
 	// 检查端口是否实际存在于 OVS
 	if !ovsPortExists(vnetIF) {
-		log.Printf("[警告] OVS 端口 %s 不存在，跳过桥接 VLAN tag 设置", vnetIF)
+		logger.App.Warn("OVS 端口不存在，跳过桥接 VLAN tag 设置", "port", vnetIF)
 		return nil
 	}
 	if vlanID > 0 {
@@ -3170,7 +3170,7 @@ func rebaseVPCSwitchTrafficMonthly(switchID uint, keepDown, keepUp int64) {
 	record.IsLimitedDown = sw.TrafficDownGB > 0 && float64(record.TrafficDown) >= trafficQuotaBytes(sw.TrafficDownGB)
 	record.IsLimitedUp = sw.TrafficUpGB > 0 && float64(record.TrafficUp) >= trafficQuotaBytes(sw.TrafficUpGB)
 	if err := saveVPCSwitchTrafficMonthly(record); err != nil {
-		log.Printf("[VPC 流量配额] 重算交换机 %s(%d) 月流量偏移失败: %v", sw.Name, sw.ID, err)
+		logger.App.Warn("重算交换机月流量偏移失败", "switch", sw.Name, "id", sw.ID, "error", err)
 	}
 }
 
@@ -3229,17 +3229,16 @@ func CheckAndApplyVPCSwitchTrafficLimit(sw model.VPCSwitch) {
 	record.IsLimitedUp = upLimited
 
 	if err := saveVPCSwitchTrafficMonthly(record); err != nil {
-		log.Printf("[VPC 流量配额] 保存交换机 %s(%d) 月流量失败: %v", sw.Name, sw.ID, err)
+		logger.App.Warn("保存交换机月流量失败", "switch", sw.Name, "id", sw.ID, "error", err)
 		return
 	}
 	if changed || wasLimited != (downLimited || upLimited) {
 		if err := applyVPCSwitchBandwidth(sw); err != nil {
-			log.Printf("[VPC 流量配额] 应用交换机 %s(%d) 限速状态失败: %v", sw.Name, sw.ID, err)
+			logger.App.Warn("应用交换机限速状态失败", "switch", sw.Name, "id", sw.ID, "error", err)
 		}
 	}
 	if (downLimited || upLimited) && changed {
-		log.Printf("[VPC 流量配额] 交换机 %s(%d) 本月流量超限，已按超限方向强制限速 %dMbps（下行 %s / %.2fGB，上行 %s / %.2fGB）",
-			sw.Name, sw.ID, vpcSwitchTrafficPenaltyMbps, formatTrafficBytes(effectiveDown), sw.TrafficDownGB, formatTrafficBytes(effectiveUp), sw.TrafficUpGB)
+		logger.App.Warn("交换机流量超限，已强制限速", "switch", sw.Name, "id", sw.ID, "penaltyMbps", vpcSwitchTrafficPenaltyMbps, "down", formatTrafficBytes(effectiveDown), "quotaDownGB", sw.TrafficDownGB, "up", formatTrafficBytes(effectiveUp), "quotaUpGB", sw.TrafficUpGB)
 	}
 }
 
@@ -3281,14 +3280,14 @@ func CheckVPCSwitchTrafficAfterQuotaUpdate(switchID uint) {
 	record.IsLimitedDown = downLimited
 	record.IsLimitedUp = upLimited
 	if err := saveVPCSwitchTrafficMonthly(record); err != nil {
-		log.Printf("[VPC 流量配额] 保存交换机 %s(%d) 解限状态失败: %v", sw.Name, sw.ID, err)
+		logger.App.Warn("保存交换机解限状态失败", "switch", sw.Name, "id", sw.ID, "error", err)
 		return
 	}
 	if !downLimited && !upLimited {
-		log.Printf("[VPC 流量配额] 交换机 %s(%d) 配额调整后已低于用量，解除强制限速", sw.Name, sw.ID)
+		logger.App.Info("配额调整后已低于用量，解除强制限速", "switch", sw.Name, "id", sw.ID)
 	}
 	if err := applyVPCSwitchBandwidth(sw); err != nil {
-		log.Printf("[VPC 流量配额] 配额调整后应用交换机 %s(%d) 带宽失败: %v", sw.Name, sw.ID, err)
+		logger.App.Warn("配额调整后应用交换机带宽失败", "switch", sw.Name, "id", sw.ID, "error", err)
 	}
 }
 
@@ -3305,7 +3304,7 @@ func ResetAllVPCSwitchMonthlyTraffic() {
 			continue
 		}
 		if err := applyVPCSwitchBandwidth(sw); err != nil {
-			log.Printf("[VPC 流量配额] 月重置后恢复交换机 %s(%d) 带宽失败: %v", sw.Name, sw.ID, err)
+			logger.App.Warn("月重置后恢复交换机带宽失败", "switch", sw.Name, "id", sw.ID, "error", err)
 		}
 	}
 	cleanupMonth := time.Now().AddDate(0, -12, 0).Format("2006-01")
@@ -3420,11 +3419,11 @@ func AddVMInterface(vmName string, req AddVMInterfaceRequest) (*VMInterfaceInfo,
 
 	// 应用新网口的 VPC 运行态（只处理新接口，不影响已有接口）
 	if err := applyNewInterfaceRuntime(vmName, sw, nextOrder); err != nil {
-		fmt.Printf("[警告] 为新网口 %s #%d 应用 VPC 运行态失败: %v\n", vmName, nextOrder, err)
+		logger.App.Warn("为新网口应用 VPC 运行态失败", "vm", vmName, "order", nextOrder, "error", err)
 	}
 	// 仅刷新交换机带宽和 ACL，不修改已有网口
 	if err := applyVPCSwitchBandwidth(sw); err != nil {
-		fmt.Printf("[警告] 刷新交换机 %s 带宽失败: %v\n", sw.Name, err)
+		logger.App.Warn("刷新交换机带宽失败", "switch", sw.Name, "error", err)
 	}
 	if !SwitchUsesDirectBridge(sw) {
 		_ = ApplyVPCACLRules()
@@ -3483,7 +3482,7 @@ func AttachExtraNICs(vmName string, extraNics []AddVMInterfaceRequest) {
 			continue
 		}
 		if _, err := AddVMInterface(vmName, nic); err != nil {
-			log.Printf("[警告] 为 VM %s 添加额外网口 #%d (交换机 %d) 失败: %v\n", vmName, i+1, nic.SwitchID, err)
+			logger.App.Warn("添加额外网口失败", "vm", vmName, "order", i+1, "switchID", nic.SwitchID, "error", err)
 		}
 	}
 }
@@ -3514,7 +3513,7 @@ func applyNewInterfaceRuntime(vmName string, sw model.VPCSwitch, interfaceOrder 
 	if !SwitchUsesDirectBridge(sw) && sw.VLANID > 0 {
 		// 检查端口是否实际存在于 OVS
 		if !ovsPortExists(vnetIF) {
-			log.Printf("[警告] OVS 端口 %s 不存在，跳过新网口 VLAN tag 设置", vnetIF)
+			logger.App.Warn("OVS 端口不存在，跳过新网口 VLAN tag 设置", "port", vnetIF)
 		} else {
 			targetTag := strconv.Itoa(sw.VLANID)
 			result := utils.ExecCommand("ovs-vsctl", "set", "Port", vnetIF, "tag="+targetTag)

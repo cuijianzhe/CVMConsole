@@ -3,7 +3,6 @@ package service
 import (
 	"encoding/xml"
 	"fmt"
-	"log"
 	"os"
 	"regexp"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/digitalocean/go-libvirt"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -235,7 +235,7 @@ func ListVMs(options ...VMListOptions) ([]VmInfo, error) {
 				names = append(names, dom.Name)
 			}
 		} else {
-			log.Printf("[go-libvirt] listAllDomainsRPC 失败，降级为 virsh: %v", err)
+			logger.Libvirt.Warn("listAllDomainsRPC 失败，降级为 virsh", "error", err)
 		}
 	}
 	if len(names) == 0 {
@@ -293,7 +293,7 @@ func ListVMs(options ...VMListOptions) ([]VmInfo, error) {
 			if state, err := getDomainStateRPC(name); err == nil {
 				vm.Status = state
 			} else {
-				log.Printf("[go-libvirt] getDomainStateRPC(%s) 失败，降级为 virsh: %v", name, err)
+				logger.Libvirt.Warn("getDomainStateRPC 失败，降级为 virsh", "domain", name, "error", err)
 			}
 		}
 		if vm.Status == "" {
@@ -312,7 +312,7 @@ func ListVMs(options ...VMListOptions) ([]VmInfo, error) {
 				vm.Memory = int(usedMemKB) / 1024   // KiB -> MB
 				vm.Autostart = autostart
 			} else {
-				log.Printf("[go-libvirt] getDomainInfoRPC(%s) 失败，降级为 virsh: %v", name, err)
+				logger.Libvirt.Warn("getDomainInfoRPC 失败，降级为 virsh", "domain", name, "error", err)
 			}
 		}
 		if vm.VCPU == 0 {
@@ -331,7 +331,7 @@ func ListVMs(options ...VMListOptions) ([]VmInfo, error) {
 			if xmlRPC, err := getDomainXMLRPC(name, libvirt.DomainXMLInactive); err == nil {
 				xmlStr = xmlRPC
 			} else {
-				log.Printf("[go-libvirt] getDomainXMLRPC(%s) 失败，降级为 virsh: %v", name, err)
+				logger.Libvirt.Warn("getDomainXMLRPC 失败，降级为 virsh", "domain", name, "error", err)
 			}
 		}
 		if xmlStr == "" {
@@ -406,7 +406,7 @@ func GetVM(name string) (*VmDetail, error) {
 		if _, _, _, _, err := getDomainInfoRPC(name); err == nil {
 			domExists = true
 		} else {
-			log.Printf("[go-libvirt] getDomainInfoRPC(%s) 失败，降级为 virsh: %v", name, err)
+			logger.Libvirt.Warn("getDomainInfoRPC 失败，降级为 virsh", "domain", name, "error", err)
 		}
 	}
 	if !domExists {
@@ -428,7 +428,7 @@ func GetVM(name string) (*VmDetail, error) {
 		if state, err := getDomainStateRPC(name); err == nil {
 			vm.Status = state
 		} else {
-			log.Printf("[go-libvirt] getDomainStateRPC(%s) 失败，降级为 virsh: %v", name, err)
+			logger.Libvirt.Warn("getDomainStateRPC 失败，降级为 virsh", "domain", name, "error", err)
 		}
 	}
 	if vm.Status == "" {
@@ -447,7 +447,7 @@ func GetVM(name string) (*VmDetail, error) {
 			vm.Memory = int(usedMemKB) / 1024
 			vm.Autostart = autostart
 		} else {
-			log.Printf("[go-libvirt] getDomainInfoRPC(%s) 失败，降级为 virsh: %v", name, err)
+			logger.Libvirt.Warn("getDomainInfoRPC 失败，降级为 virsh", "domain", name, "error", err)
 		}
 	}
 	if dominfoStdout != "" {
@@ -494,7 +494,7 @@ func GetVM(name string) (*VmDetail, error) {
 		if _, err := os.Stat(diskInfo.path); err != nil {
 			unhealthy := false
 			vm.DiskHealthy = &unhealthy
-			log.Printf("[警告] 虚拟机 %s 磁盘文件缺失: %s", name, diskInfo.path)
+			logger.App.Warn("虚拟机磁盘文件缺失", "vm", name, "path", diskInfo.path)
 		} else {
 			healthy := true
 			vm.DiskHealthy = &healthy
@@ -521,7 +521,7 @@ func GetVM(name string) (*VmDetail, error) {
 		if xmlRPC, err := getDomainXMLRPC(name, libvirt.DomainXMLInactive); err == nil {
 			xmlStr = xmlRPC
 		} else {
-			log.Printf("[go-libvirt] getDomainXMLRPC(%s) 失败，降级为 virsh: %v", name, err)
+			logger.Libvirt.Warn("getDomainXMLRPC 失败，降级为 virsh", "domain", name, "error", err)
 		}
 	}
 	if xmlStr == "" {
@@ -617,7 +617,7 @@ func GetVMIPInfo(name string) (string, string, error) {
 		if state, err := getDomainStateRPC(name); err == nil {
 			isRunning = state == "running"
 		} else {
-			log.Printf("[go-libvirt] getDomainStateRPC(%s) 失败，降级为 virsh: %v", name, err)
+			logger.Libvirt.Warn("getDomainStateRPC 失败，降级为 virsh", "domain", name, "error", err)
 		}
 	}
 	if !isRunning {
@@ -777,7 +777,7 @@ func startVM(name string, fixOnReboot bool) error {
 					}
 					return nil
 				}
-				log.Printf("[go-libvirt] 恢复 %s 失败，降级为 virsh: %v", name, err)
+				logger.Libvirt.Warn("恢复虚拟机失败，降级为 virsh", "domain", name, "error", err)
 			}
 			result := utils.ExecCommand("virsh", "resume", name)
 			if result.Error != nil {
@@ -789,7 +789,7 @@ func startVM(name string, fixOnReboot bool) error {
 			}
 			return nil
 		case "crashed", "pmsuspended":
-			log.Printf("[警告] 虚拟机 %s 处于异常状态(%s)，尝试强制关闭后重启", name, state)
+			logger.App.Warn("虚拟机处于异常状态，尝试强制关闭后重启", "vm", name, "state", state)
 			utils.ExecCommand("virsh", "destroy", name)
 		}
 	}
@@ -823,7 +823,7 @@ func startVM(name string, fixOnReboot bool) error {
 		if startErr == nil {
 			started = true
 		} else {
-			log.Printf("[go-libvirt] 启动 %s 失败，降级为 virsh: %v", name, startErr)
+			logger.Libvirt.Warn("启动虚拟机失败，降级为 virsh", "domain", name, "error", startErr)
 		}
 	}
 	if !started {
@@ -898,7 +898,7 @@ func ShutdownVM(name string) error {
 		if err == nil {
 			return nil
 		}
-		log.Printf("[go-libvirt] 关机 %s 失败，降级为 virsh: %v", name, err)
+		logger.Libvirt.Warn("关机失败，降级为 virsh", "domain", name, "error", err)
 	}
 	result := utils.ExecCommand("virsh", "shutdown", name)
 	if result.Error != nil {
@@ -918,7 +918,7 @@ func DestroyVM(name string) error {
 			UpdateVMRuntimeState(name, "shut off", time.Now())
 			return nil
 		}
-		log.Printf("[go-libvirt] 强制断电 %s 失败，降级为 virsh: %v", name, err)
+		logger.Libvirt.Warn("强制断电失败，降级为 virsh", "domain", name, "error", err)
 	}
 	result := utils.ExecCommand("virsh", "destroy", name)
 	if result.Error != nil {
@@ -946,7 +946,7 @@ func RebootVM(name string) error {
 			ResetVMContinuousRuntime(name, time.Now())
 			return nil
 		}
-		log.Printf("[go-libvirt] 重启 %s 失败，降级为 virsh: %v", name, err)
+		logger.Libvirt.Warn("重启失败，降级为 virsh", "domain", name, "error", err)
 	}
 	result := utils.ExecCommand("virsh", "reboot", name)
 	if result.Error != nil {
@@ -974,7 +974,7 @@ func ResetVM(name string) error {
 			}
 			return nil
 		}
-		log.Printf("[go-libvirt] 重置 %s 失败，降级为 virsh: %v", name, err)
+		logger.Libvirt.Warn("重置失败，降级为 virsh", "domain", name, "error", err)
 	}
 	result := utils.ExecCommand("virsh", "reset", name)
 	if result.Error != nil {
@@ -1027,7 +1027,7 @@ func EditVMConfig(name string, vcpu, maxVCPU, memoryMB int) error {
 			if vcpu <= liveMax {
 				if IsLibvirtRPCAvailable() {
 					if err := setDomainVcpusFlagsRPC(name, uint32(vcpu), domainVcpuLive); err != nil {
-						log.Printf("[go-libvirt] 设置 %s live vCPU 失败，降级为 virsh: %v", name, err)
+						logger.Libvirt.Warn("设置 live vCPU 失败，降级为 virsh", "domain", name, "error", err)
 						utils.ExecCommand("virsh", "setvcpus", name, strconv.Itoa(vcpu), "--live")
 					}
 				} else {
@@ -1052,7 +1052,7 @@ func EditVMConfig(name string, vcpu, maxVCPU, memoryMB int) error {
 		if state == "running" {
 			if IsLibvirtRPCAvailable() {
 				if err := setDomainMemoryFlagsRPC(name, uint64(memoryMB*1024), domainMemLive); err != nil {
-					log.Printf("[go-libvirt] 设置 %s live mem 失败，降级为 virsh: %v", name, err)
+					logger.Libvirt.Warn("设置 live mem 失败，降级为 virsh", "domain", name, "error", err)
 					utils.ExecCommand("virsh", "setmem", name, memKB, "--live")
 				}
 			} else {
@@ -1063,7 +1063,7 @@ func EditVMConfig(name string, vcpu, maxVCPU, memoryMB int) error {
 		if IsLibvirtRPCAvailable() {
 			err := setDomainMemoryFlagsRPC(name, uint64(memoryMB*1024), domainMemConfig|domainMemMaximum)
 			if err != nil {
-				log.Printf("[go-libvirt] 设置 %s maxmem 失败，降级为 virsh: %v", name, err)
+				logger.Libvirt.Warn("设置 maxmem 失败，降级为 virsh", "domain", name, "error", err)
 				result = utils.ExecCommand("virsh", "setmaxmem", name, memKB, "--config")
 				if result.Error != nil {
 					return fmt.Errorf("设置最大内存失败: %s", result.Stderr)
@@ -1078,7 +1078,7 @@ func EditVMConfig(name string, vcpu, maxVCPU, memoryMB int) error {
 		if IsLibvirtRPCAvailable() {
 			err := setDomainMemoryFlagsRPC(name, uint64(memoryMB*1024), domainMemConfig)
 			if err != nil {
-				log.Printf("[go-libvirt] 设置 %s config mem 失败，降级为 virsh: %v", name, err)
+				logger.Libvirt.Warn("设置 config mem 失败，降级为 virsh", "domain", name, "error", err)
 				result = utils.ExecCommand("virsh", "setmem", name, memKB, "--config")
 				if result.Error != nil {
 					return fmt.Errorf("设置内存失败: %s", result.Stderr)
@@ -1106,7 +1106,7 @@ func SetVMAutostart(name string, autostart bool) error {
 			RefreshVMCacheByNameAsync(name)
 			return nil
 		}
-		log.Printf("[go-libvirt] 设置 %s 自动启动失败，降级为 virsh: %v", name, err)
+		logger.Libvirt.Warn("设置自动启动失败，降级为 virsh", "domain", name, "error", err)
 	}
 	var args []string
 	if autostart {
@@ -1263,7 +1263,7 @@ func GetVMStats(name string) (*VmStats, error) {
 		if cput, err := getDomainCPUStatsRPC(name); err == nil {
 			cpuTime1 = float64(cput) / 1e9
 		} else {
-			log.Printf("[go-libvirt] getDomainCPUStatsRPC(%s) 失败，降级为 virsh: %v", name, err)
+			logger.Libvirt.Warn("getDomainCPUStatsRPC 失败，降级为 virsh", "domain", name, "error", err)
 		}
 	}
 	if cpuTime1 == 0 {
@@ -1285,7 +1285,7 @@ func GetVMStats(name string) (*VmStats, error) {
 				vcpuCount = 1
 			}
 		} else {
-			log.Printf("[go-libvirt] getDomainInfoRPC(%s) 失败，降级为 virsh: %v", name, err)
+			logger.Libvirt.Warn("getDomainInfoRPC 失败，降级为 virsh", "domain", name, "error", err)
 		}
 	}
 	if vcpuCount == 1 {
@@ -1306,7 +1306,7 @@ func GetVMStats(name string) (*VmStats, error) {
 		if cput, err := getDomainCPUStatsRPC(name); err == nil {
 			cpuTime2 = float64(cput) / 1e9
 		} else {
-			log.Printf("[go-libvirt] getDomainCPUStatsRPC(%s) 失败，降级为 virsh: %v", name, err)
+			logger.Libvirt.Warn("getDomainCPUStatsRPC 失败，降级为 virsh", "domain", name, "error", err)
 		}
 	}
 	if cpuTime2 == 0 {
@@ -1338,7 +1338,7 @@ func GetVMStats(name string) (*VmStats, error) {
 				stats.MemUsed = stats.MemTotal - int64(memStats["usable"])
 			}
 		} else {
-			log.Printf("[go-libvirt] getDomainMemoryStatsRPC(%s) 失败，降级为 virsh: %v", name, err)
+			logger.Libvirt.Warn("getDomainMemoryStatsRPC 失败，降级为 virsh", "domain", name, "error", err)
 		}
 	}
 	if stats.MemTotal == 0 {
@@ -1369,7 +1369,7 @@ func GetVMStats(name string) (*VmStats, error) {
 						netRxBytes = rx
 						netTxBytes = tx
 					} else {
-						log.Printf("[go-libvirt] getDomainInterfaceStatsRPC(%s, %s) 失败，降级为 virsh: %v", name, ifName, err)
+						logger.Libvirt.Warn("getDomainInterfaceStatsRPC 失败，降级为 virsh", "domain", name, "interface", ifName, "error", err)
 					}
 				}
 				if netRxBytes == 0 && netTxBytes == 0 {
@@ -1403,7 +1403,7 @@ func GetVMStats(name string) (*VmStats, error) {
 						diskRdBytes = rd
 						diskWrBytes = wr
 					} else {
-						log.Printf("[go-libvirt] getDomainBlockStatsRPC(%s, %s) 失败，降级为 virsh: %v", name, dev, err)
+						logger.Libvirt.Warn("getDomainBlockStatsRPC 失败，降级为 virsh", "domain", name, "device", dev, "error", err)
 					}
 				}
 				if diskRdBytes == 0 && diskWrBytes == 0 {

@@ -2,11 +2,11 @@ package service
 
 import (
 	"fmt"
-	"log"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"kvm_console/logger"
 	"kvm_console/utils"
 )
 
@@ -284,7 +284,7 @@ func setVMCPUWithTopologySync(name string, vcpu, maxVCPU int) error {
 		if err == nil {
 			return nil
 		}
-		log.Printf("[go-libvirt] define %s 失败，降级为 virsh: %v", name, err)
+		logger.Libvirt.Warn("define 失败，降级为 virsh", "domain", name, "error", err)
 	}
 
 	xmlPath := fmt.Sprintf("/tmp/_cpu-topology-sync-%s.xml", name)

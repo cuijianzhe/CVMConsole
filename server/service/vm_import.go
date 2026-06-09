@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/taskqueue"
 	"kvm_console/utils"
 )
@@ -1227,7 +1227,7 @@ func cleanImportDHCPLeases(vmName, network string) {
 	CleanOVSDHCPLease(mac, "")
 	ReloadOVSDNSMasq()
 
-	log.Printf("[Import] 已清理 MAC %s 的旧 OVS DHCP 租约", mac)
+	logger.App.Info("已清理旧 OVS DHCP 租约", "mac", mac)
 }
 
 // resolveImportDiskSource 解析导入磁盘的源路径（支持绝对路径和存储模式）

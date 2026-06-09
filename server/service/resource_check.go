@@ -3,11 +3,11 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
 
+	"kvm_console/logger"
 	"kvm_console/utils"
 )
 
@@ -129,18 +129,18 @@ func (c *VMCreateCheckpoint) Rollback() {
 	// 1. 如果虚拟机已启动，则强制销毁
 	if c.VMStarted {
 		if result := utils.ExecCommand("virsh", "destroy", c.VMName); result.Error != nil {
-			log.Printf("[Rollback] 销毁虚拟机 %s 失败: %s", c.VMName, result.Stderr)
+			logger.App.Error("销毁虚拟机失败", "vm", c.VMName, "stderr", result.Stderr)
 		} else {
-			log.Printf("[Rollback] 已销毁虚拟机 %s", c.VMName)
+			logger.App.Info("已销毁虚拟机", "vm", c.VMName)
 		}
 	}
 
 	// 2. 如果虚拟机已定义，则取消定义（包含 NVRAM 和快照元数据）
 	if c.VMDefined {
 		if result := utils.ExecCommand("virsh", "undefine", "--nvram", "--snapshots-metadata", c.VMName); result.Error != nil {
-			log.Printf("[Rollback] 取消定义虚拟机 %s 失败: %s", c.VMName, result.Stderr)
+			logger.App.Error("取消定义虚拟机失败", "vm", c.VMName, "stderr", result.Stderr)
 		} else {
-			log.Printf("[Rollback] 已取消定义虚拟机 %s", c.VMName)
+			logger.App.Info("已取消定义虚拟机", "vm", c.VMName)
 		}
 	}
 
@@ -150,9 +150,9 @@ func (c *VMCreateCheckpoint) Rollback() {
 			continue
 		}
 		if err := os.Remove(diskPath); err != nil {
-			log.Printf("[Rollback] 删除磁盘文件 %s 失败: %v", diskPath, err)
+			logger.App.Warn("删除磁盘文件失败", "path", diskPath, "error", err)
 		} else {
-			log.Printf("[Rollback] 已删除磁盘文件 %s", diskPath)
+			logger.App.Info("已删除磁盘文件", "path", diskPath)
 		}
 	}
 }

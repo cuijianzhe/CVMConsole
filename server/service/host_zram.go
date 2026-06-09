@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"kvm_console/logger"
 	"kvm_console/utils"
 )
 
@@ -640,7 +640,7 @@ func resetHostZRAMDevice(device string) error {
 	if hostZRAMSwapActive(device) {
 		return fmt.Errorf("zRAM 设备 %s 仍在 swap 中，无法重置", device)
 	}
-	log.Printf("警告：zRAM swap 已关闭，但设备 %s 暂时 busy，稍后会继续清理", device)
+	logger.App.Warn("zRAM swap 已关闭，但设备暂时 busy，稍后会继续清理", "device", device)
 	return nil
 }
 

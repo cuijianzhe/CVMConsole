@@ -3,8 +3,9 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
+
+	"kvm_console/logger"
 )
 
 // prepareFnOSSystemDiskExpansion 会在 FnOS 首次开机前离线扩展最后一个 ext 系统分区。
@@ -29,7 +30,7 @@ func prepareFnOSSystemDiskExpansion(ctx context.Context, cloneDisk string, progr
 
 	systemPart := layout.findFnOSSystemPartition()
 	if systemPart == nil {
-		log.Printf("[警告] 未找到可扩展的 FnOS ext 系统分区，跳过离线分区调整: %s", cloneDisk)
+		logger.App.Warn("未找到可扩展的 FnOS ext 系统分区，跳过离线分区调整", "disk", cloneDisk)
 		return nil
 	}
 	if systemPart.Num != lastPartition.Num {

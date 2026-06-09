@@ -4,12 +4,12 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"time"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/model"
 )
 
@@ -47,10 +47,10 @@ func RotateJWTSecret() (string, error) {
 	// 持久化到数据库设置表
 	if err := model.SetSetting("jwt_secret_last_rotated", time.Now().UTC().Format(time.RFC3339)); err != nil {
 		// 非致命：数据库写入失败不影响运行时密钥
-		log.Printf("[JWT] 记录轮换时间到数据库失败: %v", err)
+		logger.App.Warn("记录轮换时间到数据库失败", "component", "JWT", "error", err)
 	}
 
-	log.Printf("[JWT] 密钥轮换完成，所有旧 Token 已失效")
+	logger.App.Info("密钥轮换完成，所有旧 Token 已失效", "component", "JWT")
 	return newSecret, nil
 }
 
@@ -96,21 +96,21 @@ func writeJWTSecretToEnv(secret string) error {
 func StartJWTSecretRotator() {
 	rotateHours := config.GlobalConfig.JWTSecretRotateHours
 	if rotateHours <= 0 {
-		log.Printf("[JWT] 密钥自动轮换已禁用（jwt_secret_rotate_hours=%d）", rotateHours)
+		logger.App.Info("密钥自动轮换已禁用", "component", "JWT", "rotate_hours", rotateHours)
 		return
 	}
 	if config.GlobalConfig.DevelopmentMode {
-		log.Printf("[JWT] 开发模式下跳过密钥自动轮换（间隔=%dh）", rotateHours)
+		logger.App.Info("开发模式下跳过密钥自动轮换", "component", "JWT", "interval_hours", rotateHours)
 		return
 	}
 	// 默认密钥不允许自动轮换（防止用户未配置时意外轮换为随机值导致 Token 全部失效）
 	if config.GlobalConfig.JWTSecret == "kvm-console-secret-key-change-me" {
-		log.Printf("[JWT] 检测到默认 JWT 密钥，跳过自动轮换")
+		logger.App.Info("检测到默认 JWT 密钥，跳过自动轮换", "component", "JWT")
 		return
 	}
 
 	interval := time.Duration(rotateHours) * time.Hour
-	log.Printf("[JWT] 密钥自动轮换已启动（间隔=%dh）", rotateHours)
+	logger.App.Info("密钥自动轮换已启动", "component", "JWT", "interval_hours", rotateHours)
 
 	go func() {
 		for {
@@ -124,7 +124,7 @@ func StartJWTSecretRotator() {
 				continue
 			}
 			if _, err := RotateJWTSecret(); err != nil {
-				log.Printf("[JWT] 密钥自动轮换失败: %v", err)
+				logger.App.Warn("密钥自动轮换失败", "component", "JWT", "error", err)
 			}
 		}
 	}()

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"slices"
 	"sort"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/taskqueue"
 )
@@ -190,12 +190,12 @@ func runDueVMSchedulesOnce() {
 	now := time.Now()
 	dueList, err := model.ListDueVMSchedules(now, 20)
 	if err != nil {
-		log.Printf("扫描虚拟机定时任务失败: %v", err)
+		logger.App.Warn("扫描虚拟机定时任务失败", "error", err)
 		return
 	}
 	for _, schedule := range dueList {
 		if err := queueDueVMSchedule(schedule, now); err != nil {
-			log.Printf("提交虚拟机定时任务失败: id=%d vm=%s err=%v", schedule.ID, schedule.VMName, err)
+			logger.App.Warn("提交虚拟机定时任务失败", "schedule_id", schedule.ID, "vm", schedule.VMName, "error", err)
 		}
 	}
 }
@@ -311,7 +311,7 @@ func executeScheduledVMAction(ctx context.Context, params VMScheduledActionTaskP
 		if owner != "" && owner != "admin" {
 			go func(username string) {
 				if err := RebalanceUserBandwidth(username); err != nil {
-					log.Printf("[警告] 定时开机后重新分配用户 %s 带宽失败: %v", username, err)
+					logger.App.Warn("定时开机后重新分配用户带宽失败", "user", username, "error", err)
 				}
 			}(owner)
 		}
@@ -354,7 +354,7 @@ func executeScheduledVMAction(ctx context.Context, params VMScheduledActionTaskP
 		if owner != "" && owner != "admin" {
 			go func(username string) {
 				if err := RebalanceUserBandwidth(username); err != nil {
-					log.Printf("[警告] 定时删除虚拟机后重新分配用户 %s 带宽失败: %v", username, err)
+					logger.App.Warn("定时删除虚拟机后重新分配用户带宽失败", "user", username, "error", err)
 				}
 			}(owner)
 		}
@@ -406,7 +406,7 @@ func markScheduleRunning(scheduleID, taskID uint) {
 		"last_triggered_at": scheduleTimeNow(scheduleID),
 	}
 	if err := model.UpdateVMScheduleFields(scheduleID, fields); err != nil && err != gorm.ErrRecordNotFound {
-		log.Printf("更新定时任务运行状态失败: id=%d err=%v", scheduleID, err)
+		logger.App.Warn("更新定时任务运行状态失败", "schedule_id", scheduleID, "error", err)
 	}
 }
 
@@ -420,7 +420,7 @@ func finishScheduleExecution(scheduleID uint, status, message string) {
 		"last_finished_at": scheduleTimeNow(scheduleID),
 	}
 	if err := model.UpdateVMScheduleFields(scheduleID, fields); err != nil && err != gorm.ErrRecordNotFound {
-		log.Printf("更新定时任务执行结果失败: id=%d err=%v", scheduleID, err)
+		logger.App.Warn("更新定时任务执行结果失败", "schedule_id", scheduleID, "error", err)
 	}
 }
 

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -11,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"kvm_console/logger"
 	"kvm_console/utils"
 )
 
@@ -62,7 +62,7 @@ func prepareWindowsSystemDiskExpansion(ctx context.Context, cloneDisk string, pr
 
 	osPart := layout.findWindowsOSPartition()
 	if osPart == nil {
-		log.Printf("[警告] 未找到可扩展的 Windows NTFS 系统分区，跳过离线分区调整: %s", cloneDisk)
+		logger.App.Warn("未找到可扩展的 Windows NTFS 系统分区，跳过离线分区调整", "disk", cloneDisk)
 		return nil
 	}
 
@@ -77,8 +77,8 @@ func prepareWindowsSystemDiskExpansion(ctx context.Context, cloneDisk string, pr
 		return expandLastWindowsPartition(ctx, cloneDisk, layout, *osPart, progressFn)
 	}
 
-	log.Printf("[警告] Windows 系统分区后存在非恢复分区，跳过离线分区调整: disk=%s osPart=%d lastPart=%d",
-		cloneDisk, osPart.Num, lastPartition.Num)
+	logger.App.Warn("Windows 系统分区后存在非恢复分区，跳过离线分区调整",
+		"disk", cloneDisk, "os_part", osPart.Num, "last_part", lastPartition.Num)
 	return nil
 }
 

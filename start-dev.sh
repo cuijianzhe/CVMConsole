@@ -71,6 +71,24 @@ echo -e "${CYAN}║     QVMConsole 开发环境启动中       ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
 echo ""
 
+# ==================== 日志配置 ====================
+# KVM_LOG_DIR          日志存储目录（默认 ./log）
+# KVM_LOG_LEVEL        文件日志最低级别: debug/info/warn/error（默认 info）
+# KVM_LOG_MAX_DAYS     日志最大保留天数（默认 7）
+# KVM_LOG_COMPRESS     是否压缩归档日志: true/false（默认 true）
+# KVM_LOG_MAX_SIZE_MB  单个日志文件最大MB（默认 100）
+# KVM_LOG_CONSOLE      是否输出到终端: true/false（默认 true）
+# KVM_LOG_CONSOLE_TYPES 终端显示的日志类型，逗号分隔（默认 app,cmd,libvirt）
+#                       可选值: app, request, cmd, libvirt, all
+#                       示例: 只看libvirt → "libvirt"
+#                             看全部 → "all"
+#                             看app和cmd → "app,cmd"
+# KVM_LOG_CONSOLE_LEVEL 终端独立日志级别（留空跟随 KVM_LOG_LEVEL）
+#                       示例: 终端只看warn以上 → "warn"
+export KVM_LOG_CONSOLE_TYPES="libvirt"
+export KVM_LOG_CONSOLE_LEVEL=""
+# ====================================================
+
 info "启动后端 (air 热重载)..."
 cd "$SERVER_DIR" && KVM_DEVELOPMENT_MODE=true air &
 BACKEND_PID=$!

@@ -1,13 +1,13 @@
 package service
 
 import (
-	"log"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/model"
 )
 
@@ -167,7 +167,7 @@ func RegisterSchedulerSSEClient(ch chan SchedulerEventMessage) {
 	schedulerSSEHub.Lock()
 	defer schedulerSSEHub.Unlock()
 	schedulerSSEHub.clients[ch] = true
-	log.Printf("调度事件 SSE 客户端已连接，当前连接数: %d", len(schedulerSSEHub.clients))
+	logger.App.Info("调度事件 SSE 客户端已连接", "clients", len(schedulerSSEHub.clients))
 }
 
 // UnregisterSchedulerSSEClient 注销调度事件 SSE 客户端。
@@ -176,7 +176,7 @@ func UnregisterSchedulerSSEClient(ch chan SchedulerEventMessage) {
 	defer schedulerSSEHub.Unlock()
 	delete(schedulerSSEHub.clients, ch)
 	close(ch)
-	log.Printf("调度事件 SSE 客户端已断开，当前连接数: %d", len(schedulerSSEHub.clients))
+	logger.App.Info("调度事件 SSE 客户端已断开", "clients", len(schedulerSSEHub.clients))
 }
 
 func broadcastSchedulerEvent(message SchedulerEventMessage) {
@@ -210,10 +210,10 @@ func runSchedulerEventCleanupOnce() {
 	cutoff := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
 	count, err := model.DeleteSchedulerEventsBefore(cutoff)
 	if err != nil {
-		log.Printf("清理调度事件失败: %v", err)
+		logger.App.Warn("清理调度事件失败", "error", err)
 		return
 	}
 	if count > 0 {
-		log.Printf("已清理 %d 条过期调度事件", count)
+		logger.App.Info("已清理过期调度事件", "count", count)
 	}
 }

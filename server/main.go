@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/router"
 	"kvm_console/service"
@@ -30,7 +31,21 @@ func main() {
 
 	// 初始化配置
 	config.Init()
-	log.Println("配置初始化完成")
+
+	// 初始化日志系统
+	logger.InitWithConsoleConfig(
+		config.GlobalConfig.LogDir,
+		config.GlobalConfig.LogLevel,
+		config.GlobalConfig.LogMaxDays,
+		config.GlobalConfig.LogCompress,
+		config.GlobalConfig.LogConsole,
+		config.GlobalConfig.LogConsoleTypes,
+		config.GlobalConfig.LogConsoleLevel,
+		config.GlobalConfig.LogMaxSizeMB,
+	)
+	defer logger.Close()
+
+	logger.App.Info("配置初始化完成")
 
 	// 初始化数据库
 	model.InitDB()
@@ -38,7 +53,7 @@ func main() {
 	// 从数据库加载持久化的系统设置（覆盖环境变量默认值）
 	if savedSettings, err := model.GetAllSettings(); err == nil && len(savedSettings) > 0 {
 		config.GlobalConfig.LoadFromDB(savedSettings)
-		log.Printf("已从数据库加载 %d 项持久化系统设置", len(savedSettings))
+	logger.App.Info("已从数据库加载持久化系统设置", "count", len(savedSettings))
 	}
 
 	// 初始化 go-libvirt RPC 连接（失败不影响启动，降级为 virsh）
@@ -46,9 +61,9 @@ func main() {
 	defer service.CloseLibvirt()
 
 	if err := service.BootstrapVMCacheFromHost(); err != nil {
-		log.Printf("[警告] 启动时同步虚拟机缓存失败，已保留数据库旧缓存: %v", err)
+	logger.App.Warn("启动时同步虚拟机缓存失败，已保留数据库旧缓存", "error", err)
 	} else {
-		log.Printf("启动时虚拟机缓存同步完成")
+	logger.App.Info("启动时虚拟机缓存同步完成")
 	}
 
 	// 安全检查（数据库设置加载完成后）
@@ -72,16 +87,16 @@ func main() {
 	service.SyncSSHDenyConfig()
 	service.EnsureAllActiveUsersDefaultSecurityGroup()
 	if err := service.EnsureAllNetworkBridgesRuntime(); err != nil {
-		log.Printf("[警告] 恢复桥接网桥失败: %v", err)
+	logger.App.Warn("恢复桥接网桥失败", "error", err)
 	}
 	if err := service.RestorePortForwardRules(); err != nil {
-		log.Printf("[警告] 恢复端口转发规则失败: %v", err)
+	logger.App.Warn("恢复端口转发规则失败", "error", err)
 	}
 	if err := service.EnsureAllVPCSwitchRuntime(); err != nil {
-		log.Printf("[警告] 恢复 VPC 网络运行态失败: %v", err)
+	logger.App.Warn("恢复 VPC 网络运行态失败", "error", err)
 	}
 	if err := service.RestorePublicIPRules(); err != nil {
-		log.Printf("[警告] 恢复公网 IP 规则失败: %v", err)
+	logger.App.Warn("恢复公网 IP 规则失败", "error", err)
 	}
 
 	// 设置路由
@@ -89,9 +104,10 @@ func main() {
 
 	// 启动服务
 	addr := fmt.Sprintf(":%d", config.GlobalConfig.Port)
-	log.Printf("QVMConsole 服务启动在 %s", addr)
+	logger.App.Info("QVMConsole 服务启动", "addr", addr)
 	if err := r.Run(addr); err != nil {
-		log.Fatalf("服务启动失败: %v", err)
+		logger.App.Error("服务启动失败", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -114,13 +130,13 @@ func registerTaskHandlers() {
 		// 应用 IOPS 限制
 		applyCloneIOPS(params)
 		if saveErr := service.SaveVMCredential(params.Name, params.User, params.Password, "clone", task.CreatedBy, false); saveErr != nil {
-			log.Printf("[警告] 保存虚拟机 %s 的克隆凭据失败: %v", params.Name, saveErr)
+	logger.App.Error("保存虚拟机克隆凭据失败", "vm", params.Name, "error", saveErr)
 		}
 		// 克隆完成后重新分配用户带宽
 		if task.CreatedBy != "" && task.CreatedBy != "admin" {
 			go func() {
 				if err := service.RebalanceUserBandwidth(task.CreatedBy); err != nil {
-					fmt.Printf("[警告] 克隆完成后重新分配用户 %s 带宽失败: %v\n", task.CreatedBy, err)
+					logger.App.Warn("克隆完成后重新分配用户带宽失败", "user", task.CreatedBy, "error", err)
 				}
 			}()
 		}
@@ -165,7 +181,7 @@ func registerTaskHandlers() {
 				continue
 			}
 			if err := bindTaskVMToVPC(task.CreatedBy, result.VMName, params.SwitchID, params.SecurityGroupID); err != nil {
-				log.Printf("[警告] 批量克隆 %s 绑定 VPC 失败: %v", result.VMName, err)
+	logger.App.Warn("批量克隆绑定 VPC 失败", "vm", result.VMName, "error", err)
 			}
 			attachTaskExtraNICs(result.VMName, task.Params)
 			// 每台 VM 可能使用独立随机密码，优先用 result.Password
@@ -174,7 +190,7 @@ func registerTaskHandlers() {
 				credPassword = params.Password
 			}
 			if saveErr := service.SaveVMCredential(result.VMName, params.User, credPassword, "batch_clone", task.CreatedBy, false); saveErr != nil {
-				log.Printf("[警告] 批量克隆 %s 保存凭据失败: %v", result.VMName, saveErr)
+	logger.App.Warn("批量克隆保存凭据失败", "vm", result.VMName, "error", saveErr)
 			}
 			refreshVMCacheAfterTask(result.VMName)
 		}
@@ -368,7 +384,7 @@ func registerTaskHandlers() {
 			if task.CreatedBy != "" && task.CreatedBy != "admin" {
 				go func() {
 					if err := service.RebalanceUserBandwidth(task.CreatedBy); err != nil {
-						fmt.Printf("[警告] 强制删除VM后重新分配用户 %s 带宽失败: %v\n", task.CreatedBy, err)
+						logger.App.Warn("强制删除VM后重新分配用户带宽失败", "user", task.CreatedBy, "error", err)
 					}
 				}()
 			}
@@ -394,7 +410,7 @@ func registerTaskHandlers() {
 		if task.CreatedBy != "" && task.CreatedBy != "admin" {
 			go func() {
 				if err := service.RebalanceUserBandwidth(task.CreatedBy); err != nil {
-					fmt.Printf("[警告] 删除VM后重新分配用户 %s 带宽失败: %v\n", task.CreatedBy, err)
+					logger.App.Warn("删除VM后重新分配用户带宽失败", "user", task.CreatedBy, "error", err)
 				}
 			}()
 		}
@@ -563,7 +579,7 @@ func registerTaskHandlers() {
 		}
 		attachTaskExtraNICs(params.Name, task.Params)
 		if saveErr := service.SaveVMCredential(params.Name, params.User, params.Password, "import", task.CreatedBy, false); saveErr != nil {
-			log.Printf("[警告] 保存虚拟机 %s 的导入凭据失败: %v", params.Name, saveErr)
+			logger.App.Warn("保存虚拟机导入凭据失败", "vm", params.Name, "error", saveErr)
 		}
 		refreshVMCacheAfterTask(params.Name)
 		resultJSON, _ := json.Marshal(result)
@@ -586,7 +602,7 @@ func registerTaskHandlers() {
 		// 应用 IOPS 限制
 		applyImportDiskIOPS(params)
 		if saveErr := service.SaveVMCredential(params.Name, params.User, params.Password, "import_disk", task.CreatedBy, false); saveErr != nil {
-			log.Printf("[警告] 保存虚拟机 %s 的导入凭据失败: %v", params.Name, saveErr)
+			logger.App.Warn("保存虚拟机导入磁盘凭据失败", "vm", params.Name, "error", saveErr)
 		}
 		refreshVMCacheAfterTask(params.Name)
 		resultJSON, _ := json.Marshal(result)
@@ -763,7 +779,7 @@ func registerTaskHandlers() {
 		resultJSON, _ := json.Marshal(result)
 		return string(resultJSON), nil
 	})
-	log.Println("任务处理器注册完成")
+	logger.App.Info("任务处理器注册完成")
 }
 
 func bindTaskVMToVPC(owner, vmName string, switchID, securityGroupID uint) error {
@@ -771,14 +787,14 @@ func bindTaskVMToVPC(owner, vmName string, switchID, securityGroupID uint) error
 		if err := service.BindVMToVPCAsAdmin(vmName, switchID, securityGroupID); err != nil {
 			return err
 		}
-		log.Printf("[VPC] 管理员 VM %s 已绑定到交换机 %d / 安全组 %d", vmName, switchID, securityGroupID)
+	logger.App.Info("管理员 VM 绑定 VPC", "vm", vmName, "switch", switchID, "sg", securityGroupID)
 		return nil
 	}
 	if owner == "" || owner == "admin" {
 		owner = service.FindVMOwner(vmName)
 	}
 	if owner == "" || owner == "admin" {
-		log.Printf("[VPC] VM %s 未找到普通用户归属，跳过自动绑定", vmName)
+	logger.App.Info("VM 未找到普通用户归属，跳过自动绑定", "vm", vmName)
 		return nil
 	}
 	if switchID == 0 || securityGroupID == 0 {
@@ -790,13 +806,13 @@ func bindTaskVMToVPC(owner, vmName string, switchID, securityGroupID uint) error
 		securityGroupID = resolvedSecurityGroupID
 	}
 	if switchID == 0 || securityGroupID == 0 {
-		log.Printf("[VPC] VM %s 未解析到交换机或安全组，跳过自动绑定", vmName)
+	logger.App.Info("VM 未解析到交换机或安全组，跳过自动绑定", "vm", vmName)
 		return nil
 	}
 	if err := service.BindVMToVPC(owner, vmName, switchID, securityGroupID); err != nil {
 		return err
 	}
-	log.Printf("[VPC] VM %s 已自动绑定到用户 %s 的交换机 %d / 安全组 %d", vmName, owner, switchID, securityGroupID)
+logger.App.Info("VM 自动绑定 VPC", "vm", vmName, "user", owner, "switch", switchID, "sg", securityGroupID)
 	return nil
 }
 
@@ -823,7 +839,7 @@ func applyCloneIOPS(params *service.CloneParams) {
 	if params.SystemDiskIOPS != nil && (params.SystemDiskIOPS.TotalIopsSec > 0 || params.SystemDiskIOPS.ReadIopsSec > 0 || params.SystemDiskIOPS.WriteIopsSec > 0) {
 		if dev := getFirstDiskDevice(params.Name); dev != "" {
 			if err := service.SetDiskIOPSTune(params.Name, dev, params.SystemDiskIOPS); err != nil {
-				fmt.Printf("[IOPS] 克隆 %s 系统盘 IOPS 设置失败: %v\n", params.Name, err)
+				logger.App.Warn("克隆系统盘 IOPS 设置失败", "vm", params.Name, "error", err)
 			}
 		}
 	}
@@ -833,7 +849,7 @@ func applyCloneIOPS(params *service.CloneParams) {
 				if err := service.SetDiskIOPSTune(params.Name, dev, &service.DiskIOPSTune{
 					TotalIopsSec: ed.IOPSTotal, ReadIopsSec: ed.IOPSRead, WriteIopsSec: ed.IOPSWrite,
 				}); err != nil {
-					fmt.Printf("[IOPS] 克隆 %s 额外磁盘 %d IOPS 设置失败: %v\n", params.Name, i+1, err)
+					logger.App.Warn("克隆额外磁盘 IOPS 设置失败", "vm", params.Name, "disk", i+1, "error", err)
 				}
 			}
 		}
@@ -844,7 +860,7 @@ func applyLinkedCloneIOPS(params *service.LinkedCloneParams) {
 	if params.SystemDiskIOPS != nil && (params.SystemDiskIOPS.TotalIopsSec > 0 || params.SystemDiskIOPS.ReadIopsSec > 0 || params.SystemDiskIOPS.WriteIopsSec > 0) {
 		if dev := getFirstDiskDevice(params.Name); dev != "" {
 			if err := service.SetDiskIOPSTune(params.Name, dev, params.SystemDiskIOPS); err != nil {
-				fmt.Printf("[IOPS] 链式克隆 %s 系统盘 IOPS 设置失败: %v\n", params.Name, err)
+				logger.App.Warn("链式克隆系统盘 IOPS 设置失败", "vm", params.Name, "error", err)
 			}
 		}
 	}
@@ -854,7 +870,7 @@ func applyLinkedCloneIOPS(params *service.LinkedCloneParams) {
 				if err := service.SetDiskIOPSTune(params.Name, dev, &service.DiskIOPSTune{
 					TotalIopsSec: ed.IOPSTotal, ReadIopsSec: ed.IOPSRead, WriteIopsSec: ed.IOPSWrite,
 				}); err != nil {
-					fmt.Printf("[IOPS] 链式克隆 %s 额外磁盘 %d IOPS 设置失败: %v\n", params.Name, i+1, err)
+					logger.App.Warn("链式克隆额外磁盘 IOPS 设置失败", "vm", params.Name, "disk", i+1, "error", err)
 				}
 			}
 		}
@@ -865,7 +881,7 @@ func applyImportDiskIOPS(params *service.ImportDiskByPathParams) {
 	if params.SystemDiskIOPS != nil && (params.SystemDiskIOPS.TotalIopsSec > 0 || params.SystemDiskIOPS.ReadIopsSec > 0 || params.SystemDiskIOPS.WriteIopsSec > 0) {
 		if dev := getFirstDiskDevice(params.Name); dev != "" {
 			if err := service.SetDiskIOPSTune(params.Name, dev, params.SystemDiskIOPS); err != nil {
-				fmt.Printf("[IOPS] 导入 %s 系统盘 IOPS 设置失败: %v\n", params.Name, err)
+				logger.App.Warn("导入系统盘 IOPS 设置失败", "vm", params.Name, "error", err)
 			}
 		}
 	}
@@ -875,7 +891,7 @@ func applyImportDiskIOPS(params *service.ImportDiskByPathParams) {
 				if err := service.SetDiskIOPSTune(params.Name, dev, &service.DiskIOPSTune{
 					TotalIopsSec: ed.IOPSTotal, ReadIopsSec: ed.IOPSRead, WriteIopsSec: ed.IOPSWrite,
 				}); err != nil {
-					fmt.Printf("[IOPS] 导入 %s 额外磁盘 %d IOPS 设置失败: %v\n", params.Name, i+1, err)
+					logger.App.Warn("导入额外磁盘 IOPS 设置失败", "vm", params.Name, "disk", i+1, "error", err)
 				}
 			}
 		}

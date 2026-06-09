@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/utils"
 )
 
@@ -1463,7 +1464,7 @@ func DeleteTemplateWithVMs(params *DeleteTemplateParams, progressFn func(int, st
 		}
 		if owner != "" {
 			if err := RemoveVMFromUser(owner, vm.Name); err != nil {
-				fmt.Printf("[警告] 从用户 %s 的访问列表移除虚拟机 %s 失败: %v\n", owner, vm.Name, err)
+				logger.App.Warn("从用户访问列表移除虚拟机失败", "owner", owner, "vm", vm.Name, "error", err)
 			}
 			affectedUsers[owner] = true
 		}
@@ -1482,7 +1483,7 @@ func DeleteTemplateWithVMs(params *DeleteTemplateParams, progressFn func(int, st
 
 	for username := range affectedUsers {
 		if err := RebalanceUserBandwidth(username); err != nil {
-			fmt.Printf("[警告] 删除模板后重新分配用户 %s 带宽失败: %v\n", username, err)
+			logger.App.Warn("删除模板后重新分配用户带宽失败", "user", username, "error", err)
 		}
 	}
 

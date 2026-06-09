@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"log"
+	"kvm_console/logger"
 	"os"
 	"regexp"
 	"strconv"
@@ -833,7 +833,7 @@ func registerDynamicMemorySchedulers() {
 func StartMemoryBalloonScheduler() {
 	registerDynamicMemorySchedulers()
 	go func() {
-		log.Printf("动态内存调度器已启动")
+		logger.App.Info("动态内存调度器已启动")
 		for {
 			interval := 30
 			if config.GlobalConfig != nil && config.GlobalConfig.DynamicMemoryIntervalSeconds > 0 {
@@ -876,7 +876,7 @@ func startMemorySchedulerEvent(schedulerKey, schedulerName, vmName, vmBackend, r
 		TriggerReason:  reason,
 	})
 	if err != nil {
-		log.Printf("[动态内存] 记录调度事件失败: %v", err)
+		logger.App.Warn("动态内存记录调度事件失败", "error", err)
 		return nil
 	}
 	return event
@@ -884,13 +884,13 @@ func startMemorySchedulerEvent(schedulerKey, schedulerName, vmName, vmBackend, r
 
 func finishMemorySchedulerEventSuccess(event *model.SchedulerEvent, message string) {
 	if err := FinishSchedulerEventSuccess(event, message); err != nil {
-		log.Printf("[动态内存] 更新调度事件成功状态失败: %v", err)
+		logger.App.Warn("动态内存更新调度事件成功状态失败", "error", err)
 	}
 }
 
 func finishMemorySchedulerEventFailed(event *model.SchedulerEvent, message string) {
 	if err := FinishSchedulerEventFailed(event, message); err != nil {
-		log.Printf("[动态内存] 更新调度事件失败状态失败: %v", err)
+		logger.App.Warn("动态内存更新调度事件失败状态失败", "error", err)
 	}
 }
 
@@ -1039,7 +1039,7 @@ func scheduleVMMemory(name string, host hostMemoryPressure) {
 		needExtraKB := int64(targetMB-actualMB) * 1024
 		if host.AvailableKB-needExtraKB < host.ReserveKB {
 			message := fmt.Sprintf("宿主机可用内存不足，目标内存 %dMB，当前可用 %dMB，保留阈值 %dMB", targetMB, host.AvailableKB/1024, host.ReserveKB/1024)
-			log.Printf("[动态内存] %s，跳过 %s 增长到 %dMB", message, name, targetMB)
+			logger.App.Warn("动态内存跳过增长", "message", message, "vm", name, "targetMB", targetMB)
 			finishMemorySchedulerEventFailed(event, message)
 			return
 		}
@@ -1132,13 +1132,13 @@ func scheduleVMVirtioMem(name string, meta *vmMemoryMetadata, host hostMemoryPre
 		needExtraKB := int64(targetMB-actualMB) * 1024
 		if host.AvailableKB-needExtraKB < host.ReserveKB {
 			message := fmt.Sprintf("宿主机可用内存不足，目标内存 %dMB，当前可用 %dMB，保留阈值 %dMB", targetMB, host.AvailableKB/1024, host.ReserveKB/1024)
-			log.Printf("[动态内存] %s，跳过 %s Windows 弹性内存增长到 %dMB", message, name, targetMB)
+			logger.App.Warn("动态内存跳过Windows弹性内存增长", "message", message, "vm", name, "targetMB", targetMB)
 			finishMemorySchedulerEventFailed(event, message)
 			return
 		}
 	}
 	if err := setVirtioMemRequestedLive(name, targetMB-meta.MemoryInitialMB); err != nil {
-		log.Printf("[动态内存] 调整 %s Windows 弹性内存到 %dMB 失败: %v", name, targetMB, err)
+		logger.App.Warn("动态内存调整Windows弹性内存失败", "vm", name, "targetMB", targetMB, "error", err)
 		finishMemorySchedulerEventFailed(event, err.Error())
 		return
 	}
@@ -1206,10 +1206,10 @@ func setVMMemoryLive(name string, targetMB int) error {
 		if errText == "" {
 			errText = result.Error.Error()
 		}
-		log.Printf("[动态内存] 调整 %s 当前内存到 %dMB 失败: %s", name, targetMB, errText)
+		logger.App.Warn("动态内存调整当前内存失败", "vm", name, "targetMB", targetMB, "error", errText)
 		return fmt.Errorf("调整当前内存失败: %s", errText)
 	}
-	log.Printf("[动态内存] 已调整 %s 当前内存到 %dMB", name, targetMB)
+	logger.App.Info("动态内存已调整当前内存", "vm", name, "targetMB", targetMB)
 	return nil
 }
 
@@ -1229,7 +1229,7 @@ func setVirtioMemRequestedLive(name string, requestedMB int) error {
 	if result.Error != nil {
 		return fmt.Errorf("调整 Windows 弹性内存失败: %s", result.Stderr)
 	}
-	log.Printf("[动态内存] 已调整 %s virtio-mem requested 到 %dMB", name, requestedMB)
+	logger.App.Info("动态内存已调整virtio-mem requested", "vm", name, "requestedMB", requestedMB)
 	return nil
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -494,7 +495,7 @@ func RemoveLightweightVMRegistrationByVMName(username string, vmName string) err
 	// 从用户的VM访问列表中移除该VM
 	if err := RemoveVMFromUser(username, vmName); err != nil {
 		// 记录错误但不阻止操作完成
-		fmt.Printf("[警告] 移除轻量云 VM %s 后从用户 %s 的访问列表中移除失败: %v\n", vmName, username, err)
+		logger.App.Warn("移除轻量云VM后从用户访问列表移除失败", "vm", vmName, "user", username, "error", err)
 	}
 
 	return nil

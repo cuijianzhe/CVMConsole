@@ -3,11 +3,11 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"kvm_console/logger"
 	"kvm_console/taskqueue"
 	"kvm_console/utils"
 )
@@ -131,7 +131,7 @@ func ExportVM(ctx context.Context, params *ExportVMParams, progressFn func(int, 
 	if hasBacking {
 		// 链式克隆：使用 qemu-img convert 合并为独立文件
 		progressFn(20, "检测到链式克隆磁盘，正在合并导出（可能需要较长时间）...")
-		log.Printf("导出 VM %s: 链式克隆磁盘，使用 qemu-img convert 合并", params.VMName)
+		logger.App.Info("导出 VM: 链式克隆磁盘，使用 qemu-img convert 合并", "vm", params.VMName)
 
 		var convertCmd string
 		if useSudo {
@@ -150,7 +150,7 @@ func ExportVM(ctx context.Context, params *ExportVMParams, progressFn func(int, 
 	} else {
 		// 独立磁盘：使用 cp 复制
 		progressFn(20, "正在复制磁盘文件...")
-		log.Printf("导出 VM %s: 独立磁盘，使用 cp 复制", params.VMName)
+		logger.App.Info("导出 VM: 独立磁盘，使用 cp 复制", "vm", params.VMName)
 
 		var result *utils.CmdResult
 		if useSudo {

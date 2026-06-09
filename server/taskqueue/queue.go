@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"encoding/json"
+
+	"kvm_console/logger"
 
 	"kvm_console/model"
 )
@@ -127,7 +128,7 @@ func RegisterSSEClient(ch chan TaskEvent) {
 	sseClientsMu.Lock()
 	defer sseClientsMu.Unlock()
 	sseClients[ch] = true
-	log.Printf("SSE 客户端已连接，当前连接数: %d", len(sseClients))
+	logger.App.Info("SSE客户端已连接", "connections", len(sseClients))
 }
 
 // UnregisterSSEClient 注销 SSE 客户端
@@ -136,7 +137,7 @@ func UnregisterSSEClient(ch chan TaskEvent) {
 	defer sseClientsMu.Unlock()
 	delete(sseClients, ch)
 	close(ch)
-	log.Printf("SSE 客户端已断开，当前连接数: %d", len(sseClients))
+	logger.App.Info("SSE客户端已断开", "connections", len(sseClients))
 }
 
 // broadcastEvent 广播任务事件到所有 SSE 客户端
@@ -162,7 +163,7 @@ func RegisterHandler(taskType string, handler TaskFunc) {
 	handlersMu.Lock()
 	defer handlersMu.Unlock()
 	handlers[taskType] = handler
-	log.Printf("注册任务处理器: %s", taskType)
+	logger.App.Info("注册任务处理器", "type", taskType)
 }
 
 // ===================== 任务队列核心 =====================
@@ -176,7 +177,7 @@ func Start(workerCount int) {
 	}
 	// 启动 24 小时自动清理协程
 	go autoCleanup()
-	log.Printf("任务队列已启动，Worker 数量: %d，24小时自动清理已启用", workerCount)
+	logger.App.Info("任务队列已启动", "workers", workerCount)
 }
 
 // Submit 提交任务
@@ -205,7 +206,7 @@ func Submit(taskType, params, createdBy string) (*model.Task, error) {
 
 	// 发送到任务通道
 	taskChan <- task.ID
-	log.Printf("任务已提交: ID=%d, Type=%s", task.ID, taskType)
+	logger.App.Info("任务已提交", "id", task.ID, "type", taskType)
 	return task, nil
 }
 
@@ -229,13 +230,13 @@ func worker(id int) {
 func processTask(workerID int, taskID uint) {
 	task, ok := getTask(taskID)
 	if !ok {
-		log.Printf("[Worker-%d] 获取任务失败: ID=%d，任务不存在", workerID, taskID)
+		logger.App.Warn("Worker获取任务失败", "worker", workerID, "id", taskID, "error", "任务不存在")
 		return
 	}
 
 	// 检查是否已取消
 	if task.Status == model.TaskStatusCanceled {
-		log.Printf("[Worker-%d] 任务已取消，跳过: ID=%d", workerID, taskID)
+		logger.App.Info("任务已取消跳过", "worker", workerID, "id", taskID)
 		return
 	}
 
@@ -261,7 +262,7 @@ func processTask(workerID int, taskID uint) {
 		Message:  "任务开始执行",
 	})
 
-	log.Printf("[Worker-%d] 开始执行任务: ID=%d, Type=%s", workerID, taskID, task.Type)
+	logger.App.Info("开始执行任务", "worker", workerID, "id", taskID, "type", task.Type)
 
 	// 查找处理器
 	handlersMu.RLock()
@@ -280,7 +281,7 @@ func processTask(workerID int, taskID uint) {
 			Progress: 0,
 			Message:  "未找到任务处理器: " + task.Type,
 		})
-		log.Printf("[Worker-%d] 未找到处理器: %s", workerID, task.Type)
+		logger.App.Warn("Worker未找到处理器", "worker", workerID, "type", task.Type)
 		return
 	}
 
@@ -318,7 +319,7 @@ func processTask(workerID int, taskID uint) {
 			Progress: task.Progress,
 			Message:  "任务已被用户取消",
 		})
-		log.Printf("[Worker-%d] 任务已取消: ID=%d, 耗时=%v", workerID, taskID, duration)
+		logger.App.Info("任务已取消", "worker", workerID, "id", taskID, "duration", duration)
 	} else if err != nil {
 		updateTask(taskID, func(t *model.Task) {
 			t.Status = model.TaskStatusFailed
@@ -333,7 +334,7 @@ func processTask(workerID int, taskID uint) {
 			Progress: 100,
 			Message:  "任务失败: " + err.Error(),
 		})
-		log.Printf("[Worker-%d] 任务失败: ID=%d, 耗时=%v, err=%v", workerID, taskID, duration, err)
+		logger.App.Error("任务失败", "worker", workerID, "id", taskID, "duration", duration, "error", err)
 	} else {
 		updateTask(taskID, func(t *model.Task) {
 			t.Status = model.TaskStatusSuccess
@@ -348,7 +349,7 @@ func processTask(workerID int, taskID uint) {
 			Progress: 100,
 			Message:  "任务完成",
 		})
-		log.Printf("[Worker-%d] 任务完成: ID=%d, 耗时=%v", workerID, taskID, duration)
+		logger.App.Info("任务完成", "worker", workerID, "id", taskID, "duration", duration)
 	}
 }
 
@@ -555,6 +556,6 @@ func cleanupExpiredTasks() {
 	}
 
 	if count > 0 {
-		log.Printf("自动清理: 已删除 %d 条超过 24 小时的任务记录", count)
+		logger.App.Info("自动清理过期任务", "deleted", count)
 	}
 }

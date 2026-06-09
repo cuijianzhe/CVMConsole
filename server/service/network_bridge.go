@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -243,7 +244,7 @@ func EnsureAllNetworkBridgesRuntime() error {
 	for _, row := range rows {
 		if err := EnsureOVSBridgeDirect(row.Name, row.UplinkIF, row.MigrateHostIP); err != nil {
 			lastErr = err
-			fmt.Printf("[警告] 恢复桥接网桥 %s 失败: %v\n", row.Name, err)
+			logger.App.Warn("恢复桥接网桥失败", "bridge", row.Name, "error", err)
 		}
 	}
 	return lastErr

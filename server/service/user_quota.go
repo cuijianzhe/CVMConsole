@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -360,7 +361,7 @@ func UpdateUserQuota(username string, maxCPU, maxMemory, maxDisk, maxVM, maxStor
 
 	// 同步存储配额到文件系统
 	if err := SetUserStorageQuota(username, maxStorage); err != nil {
-		fmt.Printf("[警告] 同步用户 %s 文件系统配额失败: %v\n", username, err)
+		logger.App.Warn("同步用户文件系统配额失败", "user", username, "error", err)
 	}
 
 	// 检查流量配额调整后是否需要恢复限速
@@ -368,7 +369,7 @@ func UpdateUserQuota(username string, maxCPU, maxMemory, maxDisk, maxVM, maxStor
 
 	// 重新分配用户所有 VM 的带宽（内部已兼容流量超限状态）
 	if err := RebalanceUserBandwidth(username); err != nil {
-		fmt.Printf("[警告] 重新分配用户 %s 带宽失败: %v\n", username, err)
+		logger.App.Warn("重新分配用户带宽失败", "user", username, "error", err)
 	}
 
 	// 运行时长配额调整后立即同步，避免更新后仍沿用旧状态。

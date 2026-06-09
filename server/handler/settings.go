@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/service"
 	"kvm_console/taskqueue"
@@ -533,12 +534,12 @@ func UpdateSettings(c *gin.Context) {
 		go func() {
 			if cfg.MaxBurstInbound <= 0 && cfg.MaxBurstOutbound <= 0 {
 				if err := service.ClearGlobalBandwidthLimit(); err != nil {
-					fmt.Printf("[全局带宽] 清除全局带宽限制失败: %v\n", err)
+					logger.App.Warn("清除全局带宽限制失败", "component", "全局带宽", "error", err)
 				}
 				return
 			}
 			if err := service.ApplyGlobalBandwidthLimit(); err != nil {
-				fmt.Printf("[全局带宽] 应用全局带宽限制失败: %v\n", err)
+				logger.App.Warn("应用全局带宽限制失败", "component", "全局带宽", "error", err)
 			}
 		}()
 	}

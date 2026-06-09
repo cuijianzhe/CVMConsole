@@ -2,13 +2,13 @@ package handler
 
 import (
 	"io"
-	"log"
 	"net"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
+	"kvm_console/logger"
 	"kvm_console/service"
 )
 
@@ -162,7 +162,7 @@ func VncWebSocket(c *gin.Context) {
 	// 升级为 WebSocket
 	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("WebSocket 升级失败: %v", err)
+		logger.App.Warn("WebSocket 升级失败", "error", err)
 		return
 	}
 	defer ws.Close()
@@ -170,14 +170,14 @@ func VncWebSocket(c *gin.Context) {
 	// 连接 VNC（支持 unix socket 和 tcp）
 	vncConn, err := net.Dial(connInfo.Network, connInfo.Address)
 	if err != nil {
-		log.Printf("连接 VNC 失败: %v (network: %s, addr: %s)", err, connInfo.Network, connInfo.Address)
+		logger.App.Warn("连接 VNC 失败", "error", err, "network", connInfo.Network, "addr", connInfo.Address)
 		ws.WriteMessage(websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "无法连接 VNC"))
 		return
 	}
 	defer vncConn.Close()
 
-	log.Printf("VNC WebSocket 代理已建立: %s → %s://%s", name, connInfo.Network, connInfo.Address)
+	logger.App.Info("VNC WebSocket 代理已建立", "vm", name, "network", connInfo.Network, "addr", connInfo.Address)
 
 	// 双向转发
 	errChan := make(chan error, 2)
@@ -217,5 +217,5 @@ func VncWebSocket(c *gin.Context) {
 
 	// 等待任一方向断开
 	<-errChan
-	log.Printf("VNC WebSocket 代理断开: %s", name)
+	logger.App.Info("VNC WebSocket 代理断开", "vm", name)
 }

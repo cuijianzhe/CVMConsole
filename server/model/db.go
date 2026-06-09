@@ -1,17 +1,53 @@
 package model
 
 import (
-	"log"
+	"context"
 	"os"
 	"path/filepath"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 )
+
+// gormAppLogger 将 GORM 日志写入 appWriter，不直接输出到 stdout
+// 可被 KVM_LOG_CONSOLE_TYPES=app 控制是否显示在终端
+type gormAppLogger struct {
+	slowThreshold time.Duration
+}
+
+func (l *gormAppLogger) LogMode(level gormlogger.LogLevel) gormlogger.Interface {
+	return l // 始终 Warn 级别，忽略外部设置
+}
+
+func (l *gormAppLogger) Info(_ context.Context, msg string, args ...interface{}) {
+	// Info 级别不输出（GORM info 太嘈杂）
+}
+
+func (l *gormAppLogger) Warn(_ context.Context, msg string, args ...interface{}) {
+	logger.App.Warn(msg, "source", "gorm")
+}
+
+func (l *gormAppLogger) Error(_ context.Context, msg string, args ...interface{}) {
+	logger.App.Error(msg, "source", "gorm")
+}
+
+func (l *gormAppLogger) Trace(_ context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
+	elapsed := time.Since(begin)
+	sql, rows := fc()
+	if err != nil && err.Error() != "record not found" {
+		logger.App.Error("数据库查询错误", "elapsed", elapsed, "rows", rows, "sql", sql, "error", err)
+		return
+	}
+	if l.slowThreshold > 0 && elapsed > l.slowThreshold {
+		logger.App.Warn("慢查询", "elapsed", elapsed, "rows", rows, "sql", sql)
+	}
+}
 
 // DB 全局数据库实例
 var DB *gorm.DB
@@ -21,15 +57,17 @@ func InitDB() {
 	// 确保数据目录存在
 	dbDir := filepath.Dir(config.GlobalConfig.DBPath)
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
-		log.Fatalf("创建数据库目录失败: %v", err)
+		logger.App.Error("创建数据库目录失败", "error", err)
+		os.Exit(1)
 	}
 
 	var err error
 	DB, err = gorm.Open(sqlite.Open(config.GlobalConfig.DBPath), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Warn),
+		Logger: &gormAppLogger{},
 	})
 	if err != nil {
-		log.Fatalf("连接数据库失败: %v", err)
+		logger.App.Error("连接数据库失败", "error", err)
+		os.Exit(1)
 	}
 
 	hadMaxPortForwardsColumn := DB.Migrator().HasColumn(&User{}, "max_port_forwards")
@@ -46,7 +84,8 @@ func InitDB() {
 		&LightweightVMQuota{}, &LightweightVMTrafficMonthly{}, &LightweightVMRegistration{},
 		&VPCSwitch{}, &VPCSecurityGroup{}, &VPCSecurityGroupRule{}, &VPCVMBinding{}, &VPCSwitchTrafficMonthly{}, &PublicIP{}, &PublicIPBinding{},
 		&VMLock{}); err != nil {
-		log.Fatalf("数据库迁移失败: %v", err)
+		logger.App.Error("数据库迁移失败", "error", err)
+		os.Exit(1)
 	}
 	migrateUserCloudType()
 	migratePublicIPCIDRColumn()
@@ -61,12 +100,12 @@ func InitDB() {
 	if err := DB.Model(&User{}).Where("status = '' OR status IS NULL").Updates(map[string]interface{}{
 		"status": "active",
 	}).Error; err != nil {
-		log.Printf("修复旧用户状态失败: %v", err)
+		logger.App.Warn("修复旧用户状态失败", "error", err)
 	}
 
 	// 初始化默认管理员
 	initDefaultAdmin()
-	log.Println("数据库初始化完成")
+	logger.App.Info("数据库初始化完成")
 }
 
 func migrateUserCloudType() {
@@ -76,7 +115,7 @@ func migrateUserCloudType() {
 	if err := DB.Model(&User{}).
 		Where("cloud_type = '' OR cloud_type IS NULL").
 		Update("cloud_type", "elastic").Error; err != nil {
-		log.Printf("初始化用户云类型失败: %v", err)
+		logger.App.Warn("初始化用户云类型失败", "error", err)
 	}
 }
 
@@ -87,7 +126,7 @@ func migrateUserPortForwardQuota(hadColumn bool) {
 	if err := DB.Model(&User{}).
 		Where("role <> ? AND (max_port_forwards IS NULL OR max_port_forwards = 0)", "admin").
 		Update("max_port_forwards", 10).Error; err != nil {
-		log.Printf("初始化用户端口转发配额失败: %v", err)
+		logger.App.Warn("初始化用户端口转发配额失败", "error", err)
 	}
 }
 
@@ -98,7 +137,7 @@ func migrateUserPortForwardFeature(hadColumn bool) {
 	if err := DB.Model(&User{}).
 		Where("role <> ?", "admin").
 		Update("enable_port_forward", true).Error; err != nil {
-		log.Printf("初始化用户端口转发开关失败: %v", err)
+		logger.App.Warn("初始化用户端口转发开关失败", "error", err)
 	}
 }
 
@@ -109,7 +148,7 @@ func migrateUserSnapshotQuota(hadColumn bool) {
 	if err := DB.Model(&User{}).
 		Where("role <> ? AND (max_snapshots IS NULL OR max_snapshots = 0)", "admin").
 		Update("max_snapshots", 5).Error; err != nil {
-		log.Printf("初始化用户快照配额失败: %v", err)
+		logger.App.Warn("初始化用户快照配额失败", "error", err)
 	}
 }
 
@@ -121,14 +160,14 @@ func migrateLightweightSnapshotQuota(hadQuotaColumn, hadRegistrationColumn bool)
 		if err := DB.Model(&LightweightVMQuota{}).
 			Where("max_snapshots IS NULL OR max_snapshots = 0").
 			Update("max_snapshots", 2).Error; err != nil {
-			log.Printf("初始化轻量云 VM 快照配额失败: %v", err)
+			logger.App.Warn("初始化轻量云VM快照配额失败", "error", err)
 		}
 	}
 	if !hadRegistrationColumn {
 		if err := DB.Model(&LightweightVMRegistration{}).
 			Where("max_snapshots IS NULL OR max_snapshots = 0").
 			Update("max_snapshots", 2).Error; err != nil {
-			log.Printf("初始化轻量云 VM 注册快照配额失败: %v", err)
+			logger.App.Warn("初始化轻量云VM注册快照配额失败", "error", err)
 		}
 	}
 }
@@ -141,14 +180,14 @@ func migrateLightweightRuntimeQuota(hadQuotaColumn, hadRegistrationColumn bool) 
 		if err := DB.Model(&LightweightVMQuota{}).
 			Where("max_runtime_hours IS NULL").
 			Update("max_runtime_hours", 0).Error; err != nil {
-			log.Printf("初始化轻量云 VM 运行时长配额失败: %v", err)
+			logger.App.Warn("初始化轻量云VM运行时长配额失败", "error", err)
 		}
 	}
 	if !hadRegistrationColumn {
 		if err := DB.Model(&LightweightVMRegistration{}).
 			Where("max_runtime_hours IS NULL").
 			Update("max_runtime_hours", 0).Error; err != nil {
-			log.Printf("初始化轻量云 VM 注册运行时长配额失败: %v", err)
+			logger.App.Warn("初始化轻量云VM注册运行时长配额失败", "error", err)
 		}
 	}
 }
@@ -161,7 +200,7 @@ func migratePublicIPCIDRColumn() {
 		return
 	}
 	if err := DB.Exec("UPDATE public_ips SET cidr = c_id_r WHERE (cidr IS NULL OR cidr = '') AND c_id_r IS NOT NULL AND c_id_r <> ''").Error; err != nil {
-		log.Printf("迁移公网 IP CIDR 字段失败: %v", err)
+		logger.App.Warn("迁移公网IP CIDR字段失败", "error", err)
 	}
 }
 
@@ -176,12 +215,12 @@ func migrateVPCBindingInterfaceOrder(hadColumn bool) {
 		if err := DB.Model(&VPCVMBinding{}).
 			Where("interface_order IS NULL OR interface_order = 0").
 			Update("interface_order", 0).Error; err != nil {
-			log.Printf("初始化 VPC 绑定 interface_order 失败: %v", err)
+			logger.App.Warn("初始化VPC绑定interface_order失败", "error", err)
 		}
 		if err := DB.Model(&VPCVMBinding{}).
 			Where("nic_model IS NULL OR nic_model = ''").
 			Update("nic_model", "virtio").Error; err != nil {
-			log.Printf("初始化 VPC 绑定 nic_model 失败: %v", err)
+			logger.App.Warn("初始化VPC绑定nic_model失败", "error", err)
 		}
 	}
 
@@ -204,7 +243,7 @@ func migrateVPCBindingUniqueIndex() {
 	}
 	// 创建新的联合唯一索引
 	if err := DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vm_interface ON vpc_vm_bindings(vm_name, interface_order)").Error; err != nil {
-		log.Printf("创建 VPC 绑定联合唯一索引失败: %v", err)
+		logger.App.Warn("创建VPC绑定联合唯一索引失败", "error", err)
 	}
 }
 
@@ -221,7 +260,8 @@ func initDefaultAdmin() {
 		[]byte(config.GlobalConfig.DefaultAdminPass), bcrypt.DefaultCost,
 	)
 	if err != nil {
-		log.Fatalf("生成密码哈希失败: %v", err)
+		logger.App.Error("生成密码哈希失败", "error", err)
+		os.Exit(1)
 	}
 
 	admin := User{
@@ -232,8 +272,8 @@ func initDefaultAdmin() {
 	}
 
 	if err := DB.Create(&admin).Error; err != nil {
-		log.Printf("创建默认管理员失败: %v", err)
+		logger.App.Warn("创建默认管理员失败", "error", err)
 	} else {
-		log.Printf("默认管理员账号已创建: %s", admin.Username)
+		logger.App.Info("默认管理员账号已创建", "username", admin.Username)
 	}
 }

@@ -2,11 +2,11 @@ package service
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/taskqueue"
 	"kvm_console/utils"
@@ -106,7 +106,7 @@ func CheckLightweightVMRuntimeQuotaAvailableForQuota(quota *model.LightweightVMQ
 func SyncAllLightweightVMRuntimeQuotaStates(observedAt time.Time) {
 	activeVMs, err := getRuntimeActiveVMSetFromHost()
 	if err != nil {
-		log.Printf("[轻量云运行时长] 获取宿主机运行中虚拟机列表失败: %v", err)
+		logger.App.Warn("获取宿主机运行中虚拟机列表失败", "component", "轻量云运行时长", "error", err)
 		return
 	}
 	syncAllLightweightVMRuntimeQuotaStatesWithActiveVMs(activeVMs, observedAt)
@@ -118,13 +118,13 @@ func syncAllLightweightVMRuntimeQuotaStatesWithActiveVMs(activeVMs map[string]st
 	}
 	var quotas []model.LightweightVMQuota
 	if err := model.DB.Find(&quotas).Error; err != nil {
-		log.Printf("[轻量云运行时长] 查询配额列表失败: %v", err)
+		logger.App.Warn("查询配额列表失败", "component", "轻量云运行时长", "error", err)
 		return
 	}
 	for i := range quotas {
 		active := isRuntimeVMActive(quotas[i].VMName, activeVMs)
 		if err := syncLightweightVMRuntimeQuotaState(&quotas[i], active, observedAt); err != nil {
-			log.Printf("[轻量云运行时长] 同步 VM %s 配额失败: %v", quotas[i].VMName, err)
+			logger.App.Warn("同步 VM 配额失败", "component", "轻量云运行时长", "vm", quotas[i].VMName, "error", err)
 		}
 	}
 }
@@ -142,12 +142,12 @@ func SyncLightweightVMRuntimeQuotaState(vmName string, observedAt time.Time) {
 
 	activeVMs, err := getRuntimeActiveVMSetFromHost()
 	if err != nil {
-		log.Printf("[轻量云运行时长] 获取 VM %s 运行状态失败: %v", vmName, err)
+		logger.App.Warn("获取 VM 运行状态失败", "component", "轻量云运行时长", "vm", vmName, "error", err)
 		return
 	}
 	active := isRuntimeVMActive(vmName, activeVMs)
 	if err := syncLightweightVMRuntimeQuotaState(&quota, active, observedAt); err != nil {
-		log.Printf("[轻量云运行时长] 同步 VM %s 配额失败: %v", vmName, err)
+		logger.App.Warn("同步 VM 配额失败", "component", "轻量云运行时长", "vm", vmName, "error", err)
 	}
 }
 
@@ -162,7 +162,7 @@ func syncLightweightVMRuntimeQuotaState(quota *model.LightweightVMQuota, active 
 	}
 	if shouldWarn {
 		if err := sendLightweightVMRuntimeQuotaWarningEmail(quota, snapshot); err != nil {
-			log.Printf("[轻量云运行时长] 向用户 %s 发送 VM %s 预警邮件失败: %v", quota.Username, quota.VMName, err)
+			logger.App.Warn("向用户发送 VM 预警邮件失败", "component", "轻量云运行时长", "user", quota.Username, "vm", quota.VMName, "error", err)
 		}
 	}
 
@@ -260,11 +260,11 @@ func maybeSubmitLightweightRuntimeQuotaShutdownTask(quota *model.LightweightVMQu
 	}, "system")
 	if err != nil {
 		releaseLightweightRuntimeQuotaEnforcement(quota.VMName)
-		log.Printf("[轻量云运行时长] 提交 VM %s 自动关机任务失败: %v", quota.VMName, err)
+		logger.App.Warn("提交 VM 自动关机任务失败", "component", "轻量云运行时长", "vm", quota.VMName, "error", err)
 		return
 	}
 
-	log.Printf("[轻量云运行时长] VM %s 运行时长配额已耗尽，已提交自动关机任务 #%d", quota.VMName, task.ID)
+	logger.App.Info("VM 运行时长配额已耗尽，已提交自动关机任务", "component", "轻量云运行时长", "vm", quota.VMName, "task_id", task.ID)
 }
 
 func maybeReleaseLightweightRuntimeQuotaEnforcement(vmName string, snapshot LightweightVMRuntimeQuotaSnapshot, active bool) {

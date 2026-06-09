@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/xml"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -495,7 +495,7 @@ func CreateSnapshotWithOptions(vmName, snapName, description string, includeMemo
 			if pauseForMemorySnapshot {
 				// 运行中 + 包含内存：先暂停 VM → 创建内部快照 → 恢复运行。
 				// 这样更容易得到一致的内部快照，但快照写入期间业务会处于暂停状态。
-				fmt.Printf("[快照] 暂停虚拟机 %s 以创建内部快照...\n", vmName)
+				logger.App.Info("暂停虚拟机以创建内部快照", "vm", vmName)
 				pauseResult := utils.ExecCommand("virsh", "suspend", vmName)
 				if pauseResult.Error != nil {
 					return fmt.Errorf("暂停虚拟机失败，无法创建内部快照: %s", pauseResult.Stderr)
@@ -508,10 +508,10 @@ func CreateSnapshotWithOptions(vmName, snapName, description string, includeMemo
 				result := utils.ExecCommand("virsh", args...)
 
 				// 无论成功失败，都恢复 VM 运行。
-				fmt.Printf("[快照] 恢复虚拟机 %s 运行...\n", vmName)
+				logger.App.Info("恢复虚拟机运行", "vm", vmName)
 				resumeResult := utils.ExecCommand("virsh", "resume", vmName)
 				if resumeResult.Error != nil {
-					fmt.Printf("[警告] 恢复虚拟机运行失败: %s\n", resumeResult.Stderr)
+					logger.App.Warn("恢复虚拟机运行失败", "stderr", resumeResult.Stderr)
 				}
 
 				if result.Error != nil {
@@ -520,7 +520,7 @@ func CreateSnapshotWithOptions(vmName, snapName, description string, includeMemo
 			} else {
 				// 实验模式：不主动 suspend，交给 libvirt/QEMU 自行处理运行中内存快照。
 				// 该模式能减少面板主动暂停时间，但不同宿主机/libvirt 版本的行为可能不同。
-				fmt.Printf("[快照] 不主动暂停虚拟机 %s，直接创建内存快照...\n", vmName)
+				logger.App.Info("不主动暂停虚拟机，直接创建内存快照", "vm", vmName)
 				result := utils.ExecCommand("virsh", args...)
 				if result.Error != nil {
 					return formatSnapshotCreateError(result.Stderr)
@@ -529,7 +529,7 @@ func CreateSnapshotWithOptions(vmName, snapName, description string, includeMemo
 		} else {
 			// 运行中 + 不包含内存：仅磁盘快照（外部）
 			// 注意：外部快照不支持 virsh snapshot-revert
-			fmt.Printf("[警告] 虚拟机 %s 运行中创建仅磁盘快照，该快照为外部快照，恢复时需要特殊处理\n", vmName)
+			logger.App.Warn("运行中创建仅磁盘快照为外部快照", "vm", vmName)
 			args = append(args, "--disk-only")
 			result := utils.ExecCommand("virsh", args...)
 			if result.Error != nil {
@@ -555,7 +555,7 @@ func CreateSnapshotWithOptions(vmName, snapName, description string, includeMemo
 	// 创建完成后，检查实际创建的快照类型，向调用者报告
 	state, location, err := getSnapshotType(vmName, snapName)
 	if err == nil && location == "external" {
-		fmt.Printf("[警告] 快照 %s 被创建为外部快照(state=%s, location=%s)，恢复时需要特殊处理\n", snapName, state, location)
+		logger.App.Warn("快照被创建为外部快照", "snapshot", snapName, "state", state, "location", location)
 	}
 
 	return nil
@@ -741,10 +741,10 @@ func RevertSnapshot(vmName, snapName string) error {
 	// 恢复后检查 VM 状态，如果是暂停状态（快照在暂停时创建的）则自动恢复运行
 	vmState := utils.ExecCommand("virsh", "domstate", vmName)
 	if vmState.Error == nil && strings.TrimSpace(vmState.Stdout) == "paused" {
-		fmt.Printf("[快照恢复] 虚拟机 %s 处于暂停状态，自动恢复运行\n", vmName)
+		logger.App.Info("虚拟机处于暂停状态，自动恢复运行", "vm", vmName)
 		resumeResult := utils.ExecCommand("virsh", "resume", vmName)
 		if resumeResult.Error != nil {
-			fmt.Printf("[警告] 自动恢复运行失败: %s\n", resumeResult.Stderr)
+			logger.App.Warn("自动恢复运行失败", "stderr", resumeResult.Stderr)
 		}
 	}
 
@@ -758,7 +758,7 @@ func ensureInternalSnapshotRestoreDiskAccess(vmName, snapName string) error {
 	}
 	snapshotDiskPaths, err := getSnapshotDomainDiskPaths(vmName, snapName)
 	if err != nil {
-		log.Printf("[快照权限修正] 获取快照 %s 磁盘配置失败: %v", snapName, err)
+		logger.App.Warn("获取快照磁盘配置失败", "snapshot", snapName, "error", err)
 	}
 	diskPaths = append(diskPaths, snapshotDiskPaths...)
 	if err := ensureSnapshotDiskAccessForPaths(diskPaths); err != nil {
@@ -815,7 +815,7 @@ func revertExternalSnapshot(vmName, snapName string) error {
 	if vmState.Error == nil && strings.TrimSpace(vmState.Stdout) == "running" {
 		destroyResult := utils.ExecCommand("virsh", "destroy", vmName)
 		if destroyResult.Error != nil {
-			log.Printf("[警告] 关闭虚拟机失败，继续尝试快照恢复: %s", destroyResult.Stderr)
+			logger.App.Warn("关闭虚拟机失败，继续尝试快照恢复", "vm", vmName, "stderr", destroyResult.Stderr)
 		}
 	}
 
@@ -879,7 +879,7 @@ func revertExternalSnapshot(vmName, snapName string) error {
 		}
 		restoreDisks[disk.target] = restoreOverlay
 		createdRestoreOverlays = append(createdRestoreOverlays, restoreOverlay)
-		fmt.Printf("[快照恢复] 磁盘 %s 将以 %s 为 backing，切换到新的恢复 overlay %s\n", disk.target, originalDisk, restoreOverlay)
+		logger.App.Info("快照恢复磁盘信息", "device", disk.target, "backing", originalDisk, "overlay", restoreOverlay)
 	}
 
 	// 使用 sed 方式批量修改 XML（通过 EDITOR 环境变量）
@@ -917,7 +917,7 @@ func revertExternalSnapshot(vmName, snapName string) error {
 			shellCmd := fmt.Sprintf("EDITOR=\"sed -i '/<backingStore type/,/<\\/backingStore>/d'\" virsh edit %s", utils.ShellSingleQuote(vmName))
 			cleanResult := utils.ExecShell(shellCmd)
 			if cleanResult.Error != nil {
-				fmt.Printf("[警告] 清理 backingStore 失败: %s\n", cleanResult.Stderr)
+				logger.App.Warn("清理 backingStore 失败", "stderr", cleanResult.Stderr)
 			}
 		}
 	}
@@ -948,7 +948,7 @@ func revertExternalSnapshot(vmName, snapName string) error {
 		return fmt.Errorf("恢复快照后启动虚拟机失败: %s，请检查虚拟机配置", err.Error())
 	}
 
-	fmt.Printf("[快照恢复] 虚拟机 %s 已成功恢复到快照 %s 之前的状态并启动\n", vmName, snapName)
+	logger.App.Info("虚拟机已成功恢复到快照状态并启动", "vm", vmName, "snapshot", snapName)
 	return nil
 }
 
@@ -1145,7 +1145,7 @@ func isInternalSnapshotDiskMismatchDeleteError(stderr string) bool {
 
 func deleteSnapshotMetadataOnly(vmName, snapName, reason string) error {
 	if strings.TrimSpace(reason) != "" {
-		fmt.Printf("[快照删除] %s: %s\n", snapName, reason)
+		logger.App.Info("删除快照元数据", "snapshot", snapName, "reason", reason)
 	}
 	result := utils.ExecCommand("virsh", "snapshot-delete", vmName, snapName, "--metadata")
 	if result.Error != nil {
@@ -1160,13 +1160,13 @@ func deleteExternalSnapshot(vmName, snapName string, preserveOtherSnapshots bool
 	// 获取快照关联的 overlay 文件
 	snapFiles, err := getExternalSnapshotDiskFiles(vmName, snapName)
 	if err != nil {
-		fmt.Printf("[警告] 获取外部快照文件列表失败: %v\n", err)
+		logger.App.Warn("获取外部快照文件列表失败", "error", err)
 	}
 
 	// 获取当前 VM 正在使用的磁盘文件，当前活动 overlay 必须先 blockcommit + pivot，不能只删元数据。
 	currentDiskList, diskErr := getCurrentVMDiskSources(vmName)
 	if diskErr != nil {
-		fmt.Printf("[警告] 获取当前磁盘列表失败: %v\n", diskErr)
+		logger.App.Warn("获取当前磁盘列表失败", "error", diskErr)
 	}
 	activeDiskTargets := make(map[string]string)
 	for _, disk := range currentDiskList {
@@ -1195,13 +1195,13 @@ func deleteExternalSnapshot(vmName, snapName string, preserveOtherSnapshots bool
 			}
 			if isRunning {
 				if preserveOtherSnapshots && protectedBacking[backingPath] {
-					fmt.Printf("[快照删除] 文件 %s 正在被 VM 使用，且 backing 是其他快照恢复点，执行 blockcopy 独立当前盘\n", f)
+					logger.App.Info("执行 blockcopy 独立当前盘", "file", f)
 					if err := copyActiveExternalOverlayToStandalone(vmName, target, f); err != nil {
 						return fmt.Errorf("复制当前活动磁盘失败 (%s): %w", f, err)
 					}
 					continue
 				}
-				fmt.Printf("[快照删除] 文件 %s 正在被 VM 使用，执行在线 blockcommit 并 pivot\n", f)
+				logger.App.Info("执行在线 blockcommit 并 pivot", "file", f)
 				if err := commitActiveExternalOverlay(vmName, target, f); err != nil {
 					return fmt.Errorf("合并当前正在使用的外部快照失败 (%s): %w", f, err)
 				}
@@ -1210,7 +1210,7 @@ func deleteExternalSnapshot(vmName, snapName string, preserveOtherSnapshots bool
 					return fmt.Errorf("外部快照 %s 没有 backing 文件，无法合并", f)
 				}
 				if preserveOtherSnapshots && protectedBacking[backingPath] {
-					fmt.Printf("[快照删除] 文件 %s 的 backing 是其他快照恢复点，删除 overlay 文件但不 commit\n", f)
+					logger.App.Info("删除 overlay 文件但不 commit", "file", f)
 					_ = os.Remove(f)
 					continue
 				}
@@ -1222,17 +1222,17 @@ func deleteExternalSnapshot(vmName, snapName string, preserveOtherSnapshots bool
 		}
 		if _, err := os.Stat(f); err == nil {
 			if preserveOtherSnapshots {
-				fmt.Printf("[快照删除] 文件 %s 不是当前活动磁盘，删除 overlay 文件但不 commit，避免污染早期恢复点\n", f)
+				logger.App.Info("删除 overlay 文件避免污染", "file", f)
 				_ = os.Remove(f)
 			} else {
 				commitResult := utils.ExecCommandLongRunning("qemu-img", "commit", f)
 				if commitResult.Error != nil {
-					fmt.Printf("[警告] 合并overlay文件 %s 失败: %s\n", f, commitResult.Stderr)
+					logger.App.Warn("合并overlay文件失败", "file", f, "stderr", commitResult.Stderr)
 				} else {
 					if err := os.Remove(f); err != nil {
-						fmt.Printf("[警告] 删除overlay文件 %s 失败: %v\n", f, err)
+						logger.App.Warn("删除overlay文件失败", "file", f, "error", err)
 					} else {
-						fmt.Printf("[快照删除] 已合并并删除overlay文件: %s\n", f)
+						logger.App.Info("已合并并删除overlay文件", "file", f)
 					}
 				}
 			}
@@ -1378,7 +1378,7 @@ func cleanupSnapshotResidualFiles(vmName, snapName string, allSnapshots bool) er
 			}
 			cleanPath := normalizeSnapshotFilePath(filepath.ToSlash(filePath))
 			if protected[cleanPath] {
-				log.Printf("[快照残留清理] 跳过仍被引用的文件: %s", cleanPath)
+				logger.App.Info("跳过仍被引用的文件", "path", cleanPath)
 				return nil
 			}
 			if err := os.Remove(filePath); err != nil {
@@ -1387,7 +1387,7 @@ func cleanupSnapshotResidualFiles(vmName, snapName string, allSnapshots bool) er
 				}
 				return nil
 			}
-			log.Printf("[快照残留清理] 已删除残留文件: %s", cleanPath)
+			logger.App.Info("已删除残留文件", "path", cleanPath)
 			return nil
 		})
 		if err != nil {
@@ -1446,7 +1446,7 @@ func collectSnapshotCleanupProtectedPaths(vmName string) map[string]bool {
 func getCurrentVMDiskSourcePathsOrEmpty(vmName string) []string {
 	diskPaths, err := getCurrentVMDiskSourcePaths(vmName)
 	if err != nil {
-		log.Printf("[快照残留清理] 获取当前磁盘路径失败: %v", err)
+		logger.App.Warn("获取当前磁盘路径失败", "error", err)
 		return nil
 	}
 	return diskPaths
@@ -1640,11 +1640,11 @@ func replaceVMDiskSource(vmName, oldPath, newPath string) error {
 func fixSnapshotDiskPermissions(vmName string) {
 	diskPaths, err := getCurrentVMDiskSourcePaths(vmName)
 	if err != nil {
-		log.Printf("[快照权限修正] %v", err)
+		logger.App.Warn("快照权限修正", "error", err)
 		return
 	}
 	if err := ensureSnapshotDiskAccessForPaths(diskPaths); err != nil {
-		log.Printf("[快照权限修正] 修复磁盘访问权限失败: %v", err)
+		logger.App.Error("修复磁盘访问权限失败", "error", err)
 	}
 
 	// 清理 VM XML 中不完整的 backingStore 标签
@@ -1657,9 +1657,9 @@ func fixSnapshotDiskPermissions(vmName string) {
 		shellCmd := fmt.Sprintf("EDITOR=\"sed -i '/<backingStore type/,/<\\/backingStore>/d'\" virsh edit %s", utils.ShellSingleQuote(vmName))
 		cleanResult := utils.ExecShell(shellCmd)
 		if cleanResult.Error != nil {
-			log.Printf("[快照权限修正] 清理 backingStore XML 失败: %s", cleanResult.Stderr)
+			logger.App.Warn("清理 backingStore XML 失败", "stderr", cleanResult.Stderr)
 		} else {
-			log.Printf("[快照权限修正] 已清理 VM %s 的 backingStore XML", vmName)
+			logger.App.Info("已清理 backingStore XML", "vm", vmName)
 		}
 	}
 }
@@ -1720,7 +1720,7 @@ func ensureSnapshotDiskAccessForPaths(diskPaths []string) error {
 		if chownResult.Error != nil {
 			return fmt.Errorf("chown %s 失败: %s", diskPath, chownResult.Stderr)
 		} else {
-			log.Printf("[快照权限修正] 已修正 %s 的权限为 libvirt-qemu:kvm", diskPath)
+			logger.App.Info("已修正磁盘权限", "path", diskPath)
 		}
 	}
 	return nil
@@ -1734,7 +1734,7 @@ func expandDiskPathsWithBackingChain(diskPaths []string) []string {
 		}
 		chain, err := qemuInfoChain(diskPath)
 		if err != nil {
-			log.Printf("[快照权限修正] 读取磁盘 backing chain 失败 %s: %v", diskPath, err)
+			logger.App.Warn("读取磁盘 backing chain 失败", "path", diskPath, "error", err)
 			continue
 		}
 		for _, item := range chain {
@@ -1850,7 +1850,7 @@ func ensureLibvirtStorageAppArmorAccess(roots []string) error {
 		if err := reloadVirtAAHelperAppArmorProfile(); err != nil {
 			return err
 		}
-		log.Printf("[快照权限修正] 已更新 libvirt AppArmor 规则: %s", strings.Join(uniqueNonEmptyStrings(roots), ", "))
+		logger.App.Info("已更新 libvirt AppArmor 规则", "roots", strings.Join(uniqueNonEmptyStrings(roots), ", "))
 	}
 	return nil
 }

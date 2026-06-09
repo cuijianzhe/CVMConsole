@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -118,14 +119,14 @@ func applyTCVPCSwitchDownlinkLimit(gwPort string, downMbps int) {
 	result := utils.ExecShell(fmt.Sprintf(
 		"tc qdisc add dev %s root handle 1: htb default 1", utils.ShellSingleQuote(gwPort)))
 	if result.Error != nil {
-		fmt.Printf("[警告] 添加 VPC 网关 tc qdisc 失败 (%s): %s\n", gwPort, result.Stderr)
+		logger.App.Warn("添加VPC网关tc qdisc失败", "port", gwPort, "stderr", result.Stderr)
 		return
 	}
 	result = utils.ExecShell(fmt.Sprintf(
 		"tc class add dev %s parent 1: classid 1:1 htb rate %dkbit ceil %dkbit burst %d",
 		utils.ShellSingleQuote(gwPort), rateKbit, rateKbit, burstBytes))
 	if result.Error != nil {
-		fmt.Printf("[警告] 添加 VPC 网关 tc class 失败 (%s): %s\n", gwPort, result.Stderr)
+		logger.App.Warn("添加VPC网关tc class失败", "port", gwPort, "stderr", result.Stderr)
 	}
 }
 
@@ -161,7 +162,7 @@ func applyTCDownloadLimit(vnetIF string, avgKBps, peakKBps, burstKB int) {
 	result := utils.ExecShell(fmt.Sprintf(
 		"tc qdisc add dev %s root handle 1: htb default 1", utils.ShellSingleQuote(vnetIF)))
 	if result.Error != nil {
-		fmt.Printf("[警告] 添加 tc qdisc 失败 (%s): %s\n", vnetIF, result.Stderr)
+		logger.App.Warn("添加tc qdisc失败", "iface", vnetIF, "stderr", result.Stderr)
 		return
 	}
 
@@ -170,7 +171,7 @@ func applyTCDownloadLimit(vnetIF string, avgKBps, peakKBps, burstKB int) {
 		"tc class add dev %s parent 1: classid 1:1 htb rate %dkbit ceil %dkbit burst %d",
 		utils.ShellSingleQuote(vnetIF), rateKbit, rateKbit, burstBytes))
 	if result.Error != nil {
-		fmt.Printf("[警告] 添加 tc class 失败 (%s): %s\n", vnetIF, result.Stderr)
+		logger.App.Warn("添加tc class失败", "iface", vnetIF, "stderr", result.Stderr)
 	}
 }
 
@@ -232,42 +233,42 @@ func applyTCUploadLimit(vnetIF string, avgKBps int) {
 	result := utils.ExecShell(fmt.Sprintf("ip link show %s >/dev/null 2>&1 || ip link add %s type ifb",
 		utils.ShellSingleQuote(ifbIF), utils.ShellSingleQuote(ifbIF)))
 	if result.Error != nil {
-		fmt.Printf("[警告] 创建 IFB 上行整形接口失败 (%s): %s\n", ifbIF, result.Stderr)
+		logger.App.Warn("创建IFB上行整形接口失败", "iface", ifbIF, "stderr", result.Stderr)
 		return
 	}
 	result = utils.ExecShell(fmt.Sprintf("ip link set %s up", utils.ShellSingleQuote(ifbIF)))
 	if result.Error != nil {
-		fmt.Printf("[警告] 启用 IFB 上行整形接口失败 (%s): %s\n", ifbIF, result.Stderr)
+		logger.App.Warn("启用IFB上行整形接口失败", "iface", ifbIF, "stderr", result.Stderr)
 		return
 	}
 	result = utils.ExecShell(fmt.Sprintf("ip link set dev %s txqueuelen %d", utils.ShellSingleQuote(ifbIF), tcIFBTxQueueLen()))
 	if result.Error != nil {
-		fmt.Printf("[警告] 调整 IFB 上行队列长度失败 (%s): %s\n", ifbIF, result.Stderr)
+		logger.App.Warn("调整IFB上行队列长度失败", "iface", ifbIF, "stderr", result.Stderr)
 	}
 	result = utils.ExecShell(fmt.Sprintf(
 		"tc qdisc add dev %s root handle 1: htb default 1", utils.ShellSingleQuote(ifbIF)))
 	if result.Error != nil {
-		fmt.Printf("[警告] 添加 IFB 上行 qdisc 失败 (%s): %s\n", ifbIF, result.Stderr)
+		logger.App.Warn("添加IFB上行qdisc失败", "iface", ifbIF, "stderr", result.Stderr)
 		return
 	}
 	result = utils.ExecShell(fmt.Sprintf(
 		"tc class add dev %s parent 1: classid 1:1 htb rate %dkbit ceil %dkbit burst %d",
 		utils.ShellSingleQuote(ifbIF), rateKbit, rateKbit, burstBytes))
 	if result.Error != nil {
-		fmt.Printf("[警告] 添加 IFB 上行 class 失败 (%s): %s\n", ifbIF, result.Stderr)
+		logger.App.Warn("添加IFB上行class失败", "iface", ifbIF, "stderr", result.Stderr)
 		return
 	}
 	result = utils.ExecShell(fmt.Sprintf(
 		"tc qdisc add dev %s parent 1:1 handle 10: fq_codel limit 100 target 20ms interval 100ms",
 		utils.ShellSingleQuote(ifbIF)))
 	if result.Error != nil {
-		fmt.Printf("[警告] 添加 IFB 上行 fq_codel 队列失败 (%s): %s\n", ifbIF, result.Stderr)
+		logger.App.Warn("添加IFB上行fq_codel队列失败", "iface", ifbIF, "stderr", result.Stderr)
 	}
 
 	result = utils.ExecShell(fmt.Sprintf(
 		"tc qdisc add dev %s ingress", utils.ShellSingleQuote(vnetIF)))
 	if result.Error != nil {
-		fmt.Printf("[警告] 添加 tc ingress qdisc 失败 (%s): %s\n", vnetIF, result.Stderr)
+		logger.App.Warn("添加tc ingress qdisc失败", "iface", vnetIF, "stderr", result.Stderr)
 		return
 	}
 
@@ -279,7 +280,7 @@ func applyTCUploadLimit(vnetIF string, avgKBps int) {
 			"tc filter add dev %s parent ffff: protocol all prio 1 u32 match u32 0 0 action mirred egress redirect dev %s",
 			utils.ShellSingleQuote(vnetIF), utils.ShellSingleQuote(ifbIF)))
 		if result.Error != nil {
-			fmt.Printf("[警告] 添加 tc 上行 IFB 重定向规则失败 (%s -> %s): %s\n", vnetIF, ifbIF, result.Stderr)
+			logger.App.Warn("添加tc上行IFB重定向规则失败", "vnetIF", vnetIF, "ifbIF", ifbIF, "stderr", result.Stderr)
 		}
 	}
 }
@@ -653,7 +654,7 @@ func ApplyVMBandwidth(vmName string, downAvg, downPeak, downBurst, upAvg, upPeak
 			liveResult := utils.ExecCommand("virsh", "domiftune", vmName, mac,
 				"--inbound", zeroArg, "--outbound", zeroArg, "--live")
 			if liveResult.Error != nil {
-				fmt.Printf("[警告] VM %s 清理实时 domiftune 速率限制失败: %s\n", vmName, liveResult.Stderr)
+				logger.App.Warn("清理实时domiftune速率限制失败", "vm", vmName, "stderr", liveResult.Stderr)
 			}
 			if vnetIF != "" {
 				if err := applyOVSBandwidthLimit(vmName, mac, vnetIF, downAvg, upAvg); err != nil {
@@ -664,7 +665,7 @@ func ApplyVMBandwidth(vmName string, downAvg, downPeak, downBurst, upAvg, upPeak
 			liveResult := utils.ExecCommand("virsh", "domiftune", vmName, mac,
 				"--inbound", inboundArg, "--outbound", outboundArg, "--live")
 			if liveResult.Error != nil {
-				fmt.Printf("[警告] VM %s 实时应用速率限制失败: %s\n", vmName, liveResult.Stderr)
+				logger.App.Warn("实时应用速率限制失败", "vm", vmName, "stderr", liveResult.Stderr)
 			}
 			if vnetIF != "" {
 				// 非 OVS 环境保留旧的下行 tc 兜底。
@@ -700,7 +701,7 @@ func ApplyVMNICBandwidth(vmName string, downAvg, downPeak, downBurst, upAvg, upP
 		liveResult := utils.ExecCommand("virsh", "domiftune", vmName, mac,
 			"--inbound", zeroArg, "--outbound", zeroArg, "--live")
 		if liveResult.Error != nil {
-			fmt.Printf("[警告] VM %s 清理实时 domiftune 速率限制失败: %s\n", vmName, liveResult.Stderr)
+			logger.App.Warn("清理实时domiftune速率限制失败", "vm", vmName, "stderr", liveResult.Stderr)
 		}
 
 		vnetIF := getVMVnetIF(vmName)
@@ -758,11 +759,11 @@ func listBandwidthConfigurableVMs(vms []string) []string {
 			continue
 		}
 		if IsVPCBoundVM(vmName) {
-			fmt.Printf("[信息] 跳过 VM %s 的用户带宽重分配：VPC 交换机负责聚合限速\n", vmName)
+			logger.App.Info("跳过VM的用户带宽重分配", "vm", vmName, "reason", "VPC交换机负责聚合限速")
 			continue
 		}
 		if getVMMAC(vmName) == "" {
-			fmt.Printf("[警告] 跳过 VM %s 的速率重分配：无法获取网卡 MAC 地址\n", vmName)
+			logger.App.Warn("跳过VM的速率重分配，无法获取网卡MAC地址", "vm", vmName)
 			continue
 		}
 		configurable = append(configurable, vmName)
@@ -785,7 +786,7 @@ func RebalanceUserBandwidth(username string) error {
 	}
 	configurableVMs := listBandwidthConfigurableVMs(vms)
 	if len(configurableVMs) == 0 {
-		fmt.Printf("[警告] 用户 %s 没有可配置速率限制的 VM，跳过带宽重分配\n", username)
+		logger.App.Warn("用户没有可配置速率限制的VM，跳过带宽重分配", "user", username)
 		return nil
 	}
 
@@ -1078,13 +1079,12 @@ func ApplyGlobalBandwidthLimit() error {
 	vmCount := len(runningVMs)
 
 	if vmCount == 0 {
-		fmt.Println("[全局带宽] 没有运行中的非轻量云虚拟机，跳过VM级带宽分配")
+		logger.App.Info("没有运行中的非轻量云虚拟机，跳过VM级带宽分配")
 		return nil
 	}
 
 	totalDown, totalUp := getGlobalEffectiveBandwidth()
-	fmt.Printf("[全局带宽] 有效带宽: 下行 %dMbps / 上行 %dMbps，运行中VM数: %d，每台VM限速为全量带宽，多VM运行时由TCP自然分享\n",
-		totalDown, totalUp, vmCount)
+	logger.App.Info("全局带宽有效带宽信息", "downMbps", totalDown, "upMbps", totalUp, "vmCount", vmCount)
 
 	// 找出哪些VM属于VPC交换机，避免重复限速
 	vpcSwitches := make(map[uint]bool)
@@ -1094,14 +1094,14 @@ func ApplyGlobalBandwidthLimit() error {
 		// 跳过静态获取MAC失败的VM（可能刚关闭）
 		mac := getVMMAC(vmName)
 		if mac == "" {
-			fmt.Printf("[全局带宽] 跳过 VM %s: 无法获取MAC地址\n", vmName)
+			logger.App.Info("全局带宽跳过VM，无法获取MAC地址", "vm", vmName)
 			continue
 		}
 
 		if sw, ok := getVPCSwitchForVM(vmName); ok && sw != nil {
 			// VPC VM：标记交换机需要重新应用带宽，不在VM级单独限制
 			vpcSwitches[sw.ID] = true
-			fmt.Printf("[全局带宽] VM %s 属于VPC交换机 %s (ID=%d), 由交换机聚合限速\n", vmName, sw.Name, sw.ID)
+			logger.App.Info("全局带宽VM属于VPC交换机，由交换机聚合限速", "vm", vmName, "switchName", sw.Name, "switchID", sw.ID)
 			continue
 		}
 
@@ -1112,7 +1112,7 @@ func ApplyGlobalBandwidthLimit() error {
 		upBurstKB := upAvgKB * 30
 
 		if err := ApplyVMBandwidth(vmName, downAvgKB, downAvgKB, downBurstKB, upAvgKB, upAvgKB, upBurstKB); err != nil {
-			fmt.Printf("[全局带宽] 应用VM %s 带宽限制失败: %v\n", vmName, err)
+			logger.App.Warn("全局带宽应用VM带宽限制失败", "vm", vmName, "error", err)
 			lastErr = err
 		}
 	}
@@ -1121,11 +1121,11 @@ func ApplyGlobalBandwidthLimit() error {
 	for switchID := range vpcSwitches {
 		var sw model.VPCSwitch
 		if err := model.DB.First(&sw, switchID).Error; err != nil {
-			fmt.Printf("[全局带宽] 查找VPC交换机 %d 失败: %v\n", switchID, err)
+			logger.App.Warn("全局带宽查找VPC交换机失败", "switchID", switchID, "error", err)
 			continue
 		}
 		if err := applyVPCSwitchBandwidth(sw); err != nil {
-			fmt.Printf("[全局带宽] 应用VPC交换机 %s(%d) 带宽限制失败: %v\n", sw.Name, sw.ID, err)
+			logger.App.Warn("全局带宽应用VPC交换机带宽限制失败", "switchName", sw.Name, "switchID", sw.ID, "error", err)
 			lastErr = err
 		}
 	}
@@ -1148,18 +1148,18 @@ func ClearGlobalBandwidthLimit() error {
 			continue
 		}
 		if err := ClearVMBandwidth(vmName); err != nil {
-			fmt.Printf("[全局带宽] 清除VM %s 限速失败: %v\n", vmName, err)
+			logger.App.Warn("全局带宽清除VM限速失败", "vm", vmName, "error", err)
 		}
 	}
 
 	for switchID := range vpcSwitches {
 		var sw model.VPCSwitch
 		if err := model.DB.First(&sw, switchID).Error; err != nil {
-			fmt.Printf("[全局带宽] 查找VPC交换机 %d 失败: %v\n", switchID, err)
+			logger.App.Warn("全局带宽查找VPC交换机失败", "switchID", switchID, "error", err)
 			continue
 		}
 		if err := applyVPCSwitchBandwidth(sw); err != nil {
-			fmt.Printf("[全局带宽] 恢复VPC交换机 %s(%d) 原始带宽失败: %v\n", sw.Name, sw.ID, err)
+			logger.App.Warn("全局带宽恢复VPC交换机原始带宽失败", "switchName", sw.Name, "switchID", sw.ID, "error", err)
 		}
 	}
 

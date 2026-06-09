@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/digitalocean/go-libvirt"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 )
 
 var (
@@ -21,16 +21,16 @@ var (
 // InitLibvirtRPC 初始化 go-libvirt RPC 连接（程序启动时调用）
 // 连接失败不影响程序启动，后续会降级为 virsh
 func InitLibvirtRPC() {
-	log.Printf("[libvirt-rpc] 开始初始化 (UseGoLibvirt=%v, socket=%s)", config.GlobalConfig.UseGoLibvirt, libvirtSocket)
+	logger.Libvirt.Info("开始初始化", "useGoLibvirt", config.GlobalConfig.UseGoLibvirt, "socket", libvirtSocket)
 
 	if !config.GlobalConfig.UseGoLibvirt {
-		log.Println("[libvirt-rpc] 配置已禁用 go-libvirt，跳过初始化")
+		logger.Libvirt.Info("配置已禁用 go-libvirt，跳过初始化")
 		return
 	}
 
 	l, err := dialLibvirt()
 	if err != nil {
-		log.Printf("[libvirt-rpc] 初始化连接失败（将降级为 virsh 命令行）: %v", err)
+		logger.Libvirt.Warn("初始化连接失败，将降级为 virsh 命令行", "error", err)
 		startBackgroundReconnect()
 		return
 	}
@@ -42,9 +42,9 @@ func InitLibvirtRPC() {
 	// 验证连接：获取 libvirt 版本
 	ver, err := l.ConnectGetLibVersion()
 	if err != nil {
-		log.Printf("[libvirt-rpc] 连接已建立但版本查询失败: %v", err)
+		logger.Libvirt.Warn("连接已建立但版本查询失败", "error", err)
 	} else {
-		log.Printf("[libvirt-rpc] 连接初始化成功 (libvirt 版本: %d.%d.%d)", ver/1000000, (ver/1000)%1000, ver%1000)
+		logger.Libvirt.Info("连接初始化成功", "version_major", ver/1000000, "version_minor", (ver/1000)%1000, "version_patch", ver%1000)
 	}
 }
 
@@ -102,7 +102,7 @@ func CloseLibvirt() {
 	if libvirtConn != nil {
 		_ = libvirtConn.Disconnect()
 		libvirtConn = nil
-		log.Println("[libvirt-rpc] 连接已关闭")
+		logger.Libvirt.Info("连接已关闭")
 	}
 }
 
@@ -114,7 +114,7 @@ func reconnectLibvirt() (*libvirt.Libvirt, error) {
 
 	for i := 0; i < 3; i++ {
 		if i > 0 {
-			log.Printf("[libvirt-rpc] 第 %d 次重连，等待 %v ...", i+1, backoffs[i-1])
+			logger.Libvirt.Warn("重连中", "attempt", i+1, "wait", backoffs[i-1])
 			time.Sleep(backoffs[i-1])
 		}
 
@@ -142,17 +142,17 @@ func startBackgroundReconnect() {
 
 			l, err := dialLibvirt()
 			if err != nil {
-				log.Printf("[libvirt-rpc] 后台重连第 %d 次失败: %v", i+1, err)
+				logger.Libvirt.Warn("后台重连失败", "attempt", i+1, "error", err)
 				continue
 			}
 
 			libvirtConnMu.Lock()
 			libvirtConn = l
 			libvirtConnMu.Unlock()
-			log.Println("[libvirt-rpc] 后台重连成功")
+			logger.Libvirt.Info("后台重连成功")
 			return
 		}
-		log.Println("[libvirt-rpc] 后台重连放弃（已尝试 5 次），将持续使用 virsh 命令行")
+		logger.Libvirt.Warn("后台重连放弃，将持续使用 virsh 命令行", "attempts", 5)
 	}()
 }
 

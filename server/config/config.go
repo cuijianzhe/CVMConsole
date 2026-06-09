@@ -137,6 +137,15 @@ type Config struct {
 	BatchCloneMaxConcurrency int `json:"batch_clone_max_concurrency"`
 	// 是否使用 go-libvirt RPC（默认 true，关闭后降级为 virsh 命令行）
 	UseGoLibvirt bool `json:"use_go_libvirt"`
+	// 日志配置
+	LogDir       string `json:"log_dir"`
+	LogLevel     string `json:"log_level"`
+	LogMaxDays   int    `json:"log_max_days"`
+	LogCompress  bool   `json:"log_compress"`
+	LogConsole      bool   `json:"log_console"`
+	LogConsoleTypes string `json:"log_console_types"` // 终端输出的日志类型，逗号分隔：app,request,cmd,libvirt
+	LogConsoleLevel string `json:"log_console_level"` // 终端输出的日志级别（可独立于文件级别）
+	LogMaxSizeMB    int    `json:"log_max_size_mb"`
 }
 
 // GlobalConfig 全局配置实例
@@ -217,6 +226,14 @@ func Init() {
 		RateLimitPublicPerMin:                getEnvInt("KVM_RATE_LIMIT_PUBLIC", 20),
 		RateLimitAuthPerMin:                  getEnvInt("KVM_RATE_LIMIT_AUTH", 0),
 		UseGoLibvirt:                         getEnvBool("KVM_USE_GO_LIBVIRT", true),
+		LogDir:                                getEnv("KVM_LOG_DIR", "./log"),
+		LogLevel:                              getEnv("KVM_LOG_LEVEL", "info"),
+		LogMaxDays:                            getEnvInt("KVM_LOG_MAX_DAYS", 7),
+		LogCompress:                           getEnvBool("KVM_LOG_COMPRESS", true),
+		LogConsole:                            getEnvBool("KVM_LOG_CONSOLE", true),
+		LogConsoleTypes:                       getEnv("KVM_LOG_CONSOLE_TYPES", "app,cmd,libvirt"),
+		LogConsoleLevel:                       getEnv("KVM_LOG_CONSOLE_LEVEL", ""),
+		LogMaxSizeMB:                          getEnvInt("KVM_LOG_MAX_SIZE_MB", 100),
 	}
 	if GlobalConfig.VMCredentialSecret == "" {
 		GlobalConfig.VMCredentialSecret = GlobalConfig.JWTSecret
@@ -351,6 +368,14 @@ var PersistableKeys = []string{
 	"batch_clone_max_concurrency",
 	"jwt_secret_rotate_hours",
 	"use_go_libvirt",
+	"log_dir",
+	"log_level",
+	"log_max_days",
+	"log_compress",
+	"log_console",
+	"log_console_types",
+	"log_console_level",
+	"log_max_size_mb",
 }
 
 // keyToEnvVar 配置项到环境变量的映射
@@ -411,6 +436,14 @@ var keyToEnvVar = map[string]string{
 	"batch_clone_max_concurrency":               "KVM_BATCH_CLONE_MAX_CONCURRENCY",
 	"jwt_secret_rotate_hours":                   "KVM_JWT_SECRET_ROTATE_HOURS",
 	"use_go_libvirt":                            "KVM_USE_GO_LIBVIRT",
+	"log_dir":                                   "KVM_LOG_DIR",
+	"log_level":                                 "KVM_LOG_LEVEL",
+	"log_max_days":                              "KVM_LOG_MAX_DAYS",
+	"log_compress":                              "KVM_LOG_COMPRESS",
+	"log_console":                               "KVM_LOG_CONSOLE",
+	"log_console_types":                         "KVM_LOG_CONSOLE_TYPES",
+	"log_console_level":                         "KVM_LOG_CONSOLE_LEVEL",
+	"log_max_size_mb":                           "KVM_LOG_MAX_SIZE_MB",
 }
 
 // LoadFromDB 从数据库加载持久化的设置覆盖当前配置
@@ -598,6 +631,30 @@ func (c *Config) LoadFromDB(settings map[string]string) {
 			if v, err := strconv.ParseBool(value); err == nil {
 				c.UseGoLibvirt = v
 			}
+		case "log_dir":
+			c.LogDir = value
+		case "log_level":
+			c.LogLevel = value
+		case "log_max_days":
+			if v, err := strconv.Atoi(value); err == nil {
+				c.LogMaxDays = v
+			}
+		case "log_compress":
+			if v, err := strconv.ParseBool(value); err == nil {
+				c.LogCompress = v
+			}
+		case "log_console":
+			if v, err := strconv.ParseBool(value); err == nil {
+				c.LogConsole = v
+			}
+		case "log_console_types":
+			c.LogConsoleTypes = value
+		case "log_console_level":
+			c.LogConsoleLevel = value
+		case "log_max_size_mb":
+			if v, err := strconv.Atoi(value); err == nil {
+				c.LogMaxSizeMB = v
+			}
 		}
 	}
 }
@@ -661,6 +718,14 @@ func (c *Config) ToSettingsMap() map[string]string {
 		"batch_clone_max_concurrency":               strconv.Itoa(c.BatchCloneMaxConcurrency),
 		"jwt_secret_rotate_hours":                   strconv.Itoa(c.JWTSecretRotateHours),
 		"use_go_libvirt":                            strconv.FormatBool(c.UseGoLibvirt),
+		"log_dir":                                   c.LogDir,
+		"log_level":                                 c.LogLevel,
+		"log_max_days":                              strconv.Itoa(c.LogMaxDays),
+		"log_compress":                              strconv.FormatBool(c.LogCompress),
+		"log_console":                               strconv.FormatBool(c.LogConsole),
+		"log_console_types":                         c.LogConsoleTypes,
+		"log_console_level":                         c.LogConsoleLevel,
+		"log_max_size_mb":                           strconv.Itoa(c.LogMaxSizeMB),
 	}
 }
 

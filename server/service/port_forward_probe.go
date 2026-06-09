@@ -13,6 +13,7 @@ import (
 
 	"gorm.io/gorm"
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/model"
 )
 
@@ -94,7 +95,7 @@ func StartPortForwardHTTPProbeScheduler() {
 			}
 			if !IsMaintenanceModeEnabled() && (config.GlobalConfig == nil || config.GlobalConfig.PortForwardHTTPProbeEnabled) {
 				if _, err := RunPortForwardHTTPProbeScan(context.Background(), "", "scheduler", nil); err != nil {
-					fmt.Printf("[警告] 端口转发 HTTP 探测调度执行失败: %v\n", err)
+					logger.App.Warn("端口转发HTTP探测调度执行失败", "error", err)
 				}
 			}
 			time.Sleep(time.Duration(intervalMinutes) * time.Minute)
@@ -913,7 +914,7 @@ func startPortForwardProbeSchedulerEvent(vmName, backend, reason string) *model.
 		TriggerReason:  strings.TrimSpace(reason),
 	})
 	if err != nil {
-		fmt.Printf("[警告] 端口转发 HTTP 探测记录调度事件失败: %v\n", err)
+		logger.App.Warn("端口转发HTTP探测记录调度事件失败", "error", err)
 		return nil
 	}
 	return event
@@ -924,7 +925,7 @@ func finishPortForwardProbeEventSuccess(event *model.SchedulerEvent, message str
 		return
 	}
 	if err := FinishSchedulerEventSuccess(event, message); err != nil {
-		fmt.Printf("[警告] 更新端口转发 HTTP 探测成功事件失败: %v\n", err)
+		logger.App.Warn("端口转发HTTP探测更新成功事件失败", "error", err)
 	}
 }
 
@@ -933,6 +934,6 @@ func finishPortForwardProbeEventFailure(event *model.SchedulerEvent, message str
 		return
 	}
 	if err := FinishSchedulerEventFailed(event, message); err != nil {
-		fmt.Printf("[警告] 更新端口转发 HTTP 探测失败事件失败: %v\n", err)
+		logger.App.Warn("端口转发HTTP探测更新失败事件失败", "error", err)
 	}
 }

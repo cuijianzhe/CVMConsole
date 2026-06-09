@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/service"
 	"kvm_console/taskqueue"
@@ -501,7 +502,7 @@ func OperateVm(c *gin.Context) {
 					time.Sleep(3 * time.Second)
 				}
 				if err := service.ApplyGlobalBandwidthLimit(); err != nil {
-					fmt.Printf("[全局带宽] VM %s %s后重新分配带宽失败: %v\n", name, req.Action, err)
+					logger.App.Warn("VM 操作后重新分配带宽失败", "component", "全局带宽", "vm", name, "action", req.Action, "error", err)
 				}
 			}()
 		}
@@ -516,12 +517,12 @@ func OperateVm(c *gin.Context) {
 			go func() {
 				if service.IsLightweightCloudUser(usernameStr) {
 					if err := service.ApplyLightweightVMBandwidth(name); err != nil {
-						fmt.Printf("[警告] 开机后应用轻量云 VM %s 带宽失败: %v\n", name, err)
+						logger.App.Warn("开机后应用轻量云 VM 带宽失败", "vm", name, "error", err)
 					}
 					return
 				}
 				if err := service.RebalanceUserBandwidth(usernameStr); err != nil {
-					fmt.Printf("[警告] 开机后应用带宽限速失败: %v\n", err)
+					logger.App.Warn("开机后应用带宽限速失败", "error", err)
 				}
 			}()
 		}
@@ -703,7 +704,7 @@ func EditVm(c *gin.Context) {
 				return
 			}
 			if msg != "" {
-				fmt.Printf("[动态内存] %s: %s\n", name, msg)
+				logger.App.Info("动态内存调整", "vm", name, "message", msg)
 			}
 		}
 	}

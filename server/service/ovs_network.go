@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -257,7 +258,7 @@ func isSystemdUnitFailed(unit string) bool {
 
 func logNetworkRuntimeChange(message string) {
 	if strings.TrimSpace(message) != "" {
-		fmt.Printf("[网络] %s\n", message)
+		logger.App.Info(message)
 	}
 }
 
@@ -492,7 +493,7 @@ WantedBy=multi-user.target
 
 func ReloadOVSDNSMasq() {
 	if err := EnsureOVSBridgeExists(ovsBridgeName()); err != nil {
-		fmt.Printf("[警告] OVS 网桥不存在，跳过 dnsmasq 重载: %v\n", err)
+		logger.App.Warn("OVS 网桥不存在，跳过 dnsmasq 重载", "error", err)
 		return
 	}
 	result := utils.ExecCommand("systemctl", "reload", ovsDNSMasqUnit)

@@ -8,6 +8,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -223,7 +224,7 @@ func provisionSystemUserResources(user *model.User, password string) error {
 	// 设置文件系统存储配额（所有角色都支持）
 	if user.MaxStorage > 0 {
 		if err := SetUserStorageQuota(user.Username, user.MaxStorage); err != nil {
-			fmt.Printf("[警告] 设置用户 %s 文件系统配额失败: %v\n", user.Username, err)
+			logger.App.Warn("设置用户文件系统配额失败", "user", user.Username, "error", err)
 		}
 	}
 
@@ -465,7 +466,7 @@ func DeleteSystemUser(username string, progressFn func(int, string)) error {
 			vmProgress := 5 + (i*35)/totalVMs
 			progressFn(vmProgress, fmt.Sprintf("正在删除虚拟机 %s (%d/%d)...", vmName, i+1, totalVMs))
 			if err := DeleteVM(vmName); err != nil {
-				fmt.Printf("[警告] 删除用户 %s 的虚拟机 %s 失败: %v\n", username, vmName, err)
+				logger.App.Warn("删除用户虚拟机失败", "user", username, "vm", vmName, "error", err)
 				// 继续删除其他虚拟机，不中断流程
 			}
 		}
@@ -481,7 +482,7 @@ func DeleteSystemUser(username string, progressFn func(int, string)) error {
 	// 第三步：清理用户网络资源
 	progressFn(55, "正在清理用户 VPC/OVS 网络资源...")
 	if err := CleanupUserNetworkResources(username, userVMs); err != nil {
-		fmt.Printf("[警告] 清理用户 %s 网络资源失败: %v\n", username, err)
+		logger.App.Warn("清理用户网络资源失败", "user", username, "error", err)
 	}
 
 	// 第四步：删除用户存储池目录
@@ -491,14 +492,14 @@ func DeleteSystemUser(username string, progressFn func(int, string)) error {
 	if strings.TrimSpace(checkResult.Stdout) == "yes" {
 		result := utils.ExecShell(fmt.Sprintf("rm -rf %s", utils.ShellSingleQuote(userStorageDir)))
 		if result.Error != nil {
-			fmt.Printf("[警告] 删除用户 %s 存储池目录失败: %s\n", username, result.Stderr)
+			logger.App.Warn("删除用户存储池目录失败", "user", username, "stderr", result.Stderr)
 		}
 	}
 
 	// 第五步：清除文件系统配额
 	progressFn(70, "正在清理文件系统配额...")
 	if err := RemoveUserStorageQuota(username); err != nil {
-		fmt.Printf("[警告] 清除用户 %s 文件系统配额失败: %v\n", username, err)
+		logger.App.Warn("清除用户文件系统配额失败", "user", username, "error", err)
 	}
 
 	// 第六步：删除数据库记录
@@ -518,7 +519,7 @@ func DeleteSystemUser(username string, progressFn func(int, string)) error {
 	// 第九步：重新生成 polkit 规则
 	progressFn(95, "正在更新权限规则...")
 	if err := regeneratePolkitRules(); err != nil {
-		fmt.Printf("[警告] 重新生成 polkit 规则失败: %v\n", err)
+		logger.App.Warn("重新生成 polkit 规则失败", "error", err)
 	}
 
 	// 第十步：同步 SSH 拒绝配置
@@ -532,7 +533,7 @@ func DeleteSystemUser(username string, progressFn func(int, string)) error {
 func cleanupUserTrafficRecords(username string) {
 	result := model.DB.Where("username = ?", username).Delete(&model.UserTrafficDaily{})
 	if result.RowsAffected > 0 {
-		fmt.Printf("[流量] 已清理用户 %s 的流量记录（共 %d 条）\n", username, result.RowsAffected)
+		logger.App.Info("已清理用户流量记录", "user", username, "rows", result.RowsAffected)
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/taskqueue"
 	"kvm_console/utils"
 )
@@ -27,14 +27,14 @@ var fnOSDeviceIDRegexp = regexp.MustCompile(`^[0-9a-fA-F]{32}([0-9a-fA-F]{8})?$`
 func checkCanceled(ctx context.Context, vmName, diskPath string) error {
 	select {
 	case <-ctx.Done():
-		log.Printf("任务被取消，开始清理资源: vm=%s, disk=%s", vmName, diskPath)
+		logger.App.Info("任务被取消，开始清理资源", "vm", vmName, "disk", diskPath)
 		if vmName != "" {
 			utils.ExecCommand("virsh", "destroy", vmName)
 			utils.ExecCommand("virsh", "undefine", vmName, "--nvram", "--snapshots-metadata")
 		}
 		if diskPath != "" {
 			if err := os.Remove(diskPath); err != nil && !os.IsNotExist(err) {
-				log.Printf("[警告] 取消任务时删除磁盘失败: %v", err)
+				logger.App.Warn("取消任务时删除磁盘失败", "error", err)
 			}
 		}
 		return taskqueue.ErrTaskCanceled
@@ -502,14 +502,14 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 			}
 		}
 		if err := WriteVMTemplateSource(params.Name, params.Template, params.CloneMode); err != nil {
-			log.Printf("[警告] 写入VM模板源信息失败(VM已创建可用): %v", err)
+			logger.App.Warn("写入VM模板源信息失败", "error", err)
 		}
 		if err := SetVMRemark(params.Name, params.Remark); err != nil {
-			log.Printf("[警告] 设置VM备注失败(VM已创建可用): %v", err)
+			logger.App.Warn("设置VM备注失败", "error", err)
 		}
 
 		if err := SetVMFreeze(params.Name, params.Freeze); err != nil {
-			log.Printf("[警告] 设置VM冻结配置失败(VM已创建可用): %v", err)
+			logger.App.Warn("设置VM冻结配置失败", "error", err)
 		}
 
 		if err := StartVM(params.Name); err != nil {
@@ -574,7 +574,7 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 		}
 		progressFn(70, "SSH 初始化中...")
 		if err := initLinuxClone(params, ip, progressFn); err != nil {
-			log.Printf("[警告] Linux SSH初始化失败(VM已创建可用): %v", err)
+			logger.App.Warn("Linux SSH初始化失败", "error", err)
 			// 不中断流程，VM可正常使用，用户可手动配置
 		}
 
@@ -955,14 +955,14 @@ func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ra
 		}
 	}
 	if err := WriteVMTemplateSource(params.Name, params.Template, "linked"); err != nil {
-		log.Printf("[警告] 写入VM模板源信息失败(VM已创建可用): %v", err)
+		logger.App.Warn("写入VM模板源信息失败", "error", err)
 	}
 	if err := SetVMRemark(params.Name, params.Remark); err != nil {
-		log.Printf("[警告] 设置VM备注失败(VM已创建可用): %v", err)
+		logger.App.Warn("设置VM备注失败", "error", err)
 	}
 
 	if err := SetVMFreeze(params.Name, params.Freeze); err != nil {
-		log.Printf("[警告] 设置VM冻结配置失败(VM已创建可用): %v", err)
+		logger.App.Warn("设置VM冻结配置失败", "error", err)
 	}
 
 	startFn := StartVM
@@ -1598,7 +1598,7 @@ func BatchCloneVM(ctx context.Context, params *BatchCloneParams, progressFn func
 			}
 
 			subProgress := func(_ int, msg string) {
-				log.Printf("[批量克隆 %s] %s", vmName, msg)
+				logger.App.Info("批量克隆", "vm", vmName, "msg", msg)
 			}
 
 			result, err := CloneVM(ctx, cloneParams, subProgress)
@@ -2043,17 +2043,17 @@ func ReinstallVM(ctx context.Context, params *ReinstallParams, progressFn func(i
 		}
 		progressFn(70, "正在执行 Linux SSH 初始化...")
 		if err := initLinuxClone(cloneParams, ip, progressFn); err != nil {
-			log.Printf("[警告] Linux SSH初始化失败(VM已创建可用): %v", err)
+			logger.App.Warn("Linux SSH初始化失败", "error", err)
 			// 不中断流程，VM可正常使用，用户可手动配置
 		}
 	}
 
 	progressFn(95, "正在更新虚拟机模板与凭据记录...")
 	if err := WriteVMTemplateSource(params.Name, params.Template, "linked"); err != nil {
-		log.Printf("[警告] 写入VM模板源信息失败(VM已创建可用): %v", err)
+		logger.App.Warn("写入VM模板源信息失败", "error", err)
 	}
 	if err := SaveVMCredential(params.Name, cloneParams.User, cloneParams.Password, "reinstall", params.Operator, false); err != nil {
-		log.Printf("[警告] 保存虚拟机 %s 的重装凭据失败: %v", params.Name, err)
+		logger.App.Warn("保存虚拟机重装凭据失败", "vm", params.Name, "error", err)
 	}
 
 	if err := os.Remove(backupDiskPath); err != nil && !os.IsNotExist(err) {
@@ -2086,11 +2086,11 @@ func DeleteVMWithDisks(name string, deleteDisks []string, transferDisks []string
 
 	if diskFilesExist {
 		if _, err := DeleteAllSnapshots(name, nil); err != nil {
-			log.Printf("[警告] 删除虚拟机 %s 的快照失败(继续清理): %v", name, err)
+			logger.App.Warn("删除虚拟机快照失败", "vm", name, "error", err)
 			warnings = append(warnings, fmt.Sprintf("清理快照失败: %v", err))
 		}
 	} else {
-		log.Printf("[警告] 虚拟机 %s 的磁盘文件已丢失，跳过快照清理，直接进行 undefine", name)
+		logger.App.Warn("虚拟机磁盘文件已丢失，跳过快照清理", "vm", name)
 	}
 
 	// 强制关机
@@ -2103,7 +2103,7 @@ func DeleteVMWithDisks(name string, deleteDisks []string, transferDisks []string
 	// 解绑静态 IP（内部会级联删除对应静态 IP 的端口转发规则）
 	unbindErr := UnbindStaticIP(name)
 	if unbindErr != nil {
-		log.Printf("清理静态 IP 绑定: %s (可忽略)", unbindErr)
+		logger.App.Warn("清理静态IP绑定失败", "error", unbindErr)
 	}
 
 	// 无论是否有静态绑定，都确保清理所有关联 IP 的端口转发规则
@@ -2137,9 +2137,9 @@ func DeleteVMWithDisks(name string, deleteDisks []string, transferDisks []string
 		result = utils.ExecCommand("virsh", "undefine", name, "--snapshots-metadata")
 		if result.Error != nil {
 			if strings.Contains(result.Stderr, "domain not found") || strings.Contains(result.Stderr, "Domain not found") {
-				log.Printf("[警告] 虚拟机 %s 已不存在，清理完成", name)
+				logger.App.Warn("虚拟机已不存在，清理完成", "vm", name)
 			} else {
-				log.Printf("[警告] 取消虚拟机 %s 定义失败(继续清理磁盘): %s", name, result.Stderr)
+				logger.App.Warn("取消虚拟机定义失败", "vm", name, "stderr", result.Stderr)
 				warnings = append(warnings, fmt.Sprintf("取消虚拟机定义失败: %s", result.Stderr))
 			}
 		}
@@ -2153,7 +2153,7 @@ func DeleteVMWithDisks(name string, deleteDisks []string, transferDisks []string
 	for _, diskPath := range deleteDiskList {
 		if diskPath != "" {
 			if err := os.Remove(diskPath); err != nil && !os.IsNotExist(err) {
-				log.Printf("[警告] 删除磁盘文件 %s 失败(继续清理): %v", diskPath, err)
+				logger.App.Warn("删除磁盘文件失败", "path", diskPath, "error", err)
 				warnings = append(warnings, fmt.Sprintf("删除磁盘 %s 失败: %v", diskPath, err))
 			}
 		}
@@ -2170,7 +2170,7 @@ func DeleteVMWithDisks(name string, deleteDisks []string, transferDisks []string
 			// 检查磁盘文件是否存在
 			diskExists := utils.ExecShell(fmt.Sprintf("test -f %s && echo yes", utils.ShellSingleQuote(diskPath)))
 			if strings.TrimSpace(diskExists.Stdout) != "yes" {
-				log.Printf("[警告] 转移磁盘 %s 失败: 文件不存在，已跳过", diskPath)
+				logger.App.Warn("转移磁盘失败，文件不存在", "path", diskPath)
 				continue
 			}
 			filename := filepath.Base(diskPath)
@@ -2185,7 +2185,7 @@ func DeleteVMWithDisks(name string, deleteDisks []string, transferDisks []string
 			}
 			mvResult := utils.ExecShell(fmt.Sprintf("mv %s %s", utils.ShellSingleQuote(diskPath), utils.ShellSingleQuote(destPath)))
 			if mvResult.Error != nil {
-				log.Printf("[警告] 转移磁盘 %s 到用户存储失败: %s", diskPath, mvResult.Stderr)
+				logger.App.Warn("转移磁盘到用户存储失败", "path", diskPath, "stderr", mvResult.Stderr)
 			} else {
 				utils.ExecCommand("chown", "libvirt-qemu:kvm", destPath)
 			}
@@ -2198,7 +2198,7 @@ func DeleteVMWithDisks(name string, deleteDisks []string, transferDisks []string
 	CleanupVMVPCBinding(name)
 	CleanupLightweightVMResources(name)
 	if err := DeleteVMSchedules(name); err != nil {
-		log.Printf("[警告] 清理虚拟机 %s 定时任务失败: %v", name, err)
+		logger.App.Warn("清理虚拟机定时任务失败", "vm", name, "error", err)
 		warnings = append(warnings, fmt.Sprintf("清理定时任务失败: %v", err))
 	}
 
@@ -2211,7 +2211,7 @@ func DeleteVMWithDisks(name string, deleteDisks []string, transferDisks []string
 // ForceDeleteVM 强制删除僵尸虚拟机，绕过磁盘和快照操作
 // 适用于磁盘文件丢失、libvirt 状态不一致等异常情况
 func ForceDeleteVM(name string) error {
-	log.Printf("[强制删除] 开始强制清理虚拟机 %s", name)
+	logger.App.Info("开始强制清理虚拟机", "vm", name)
 
 	// 尽量强制关机
 	utils.ExecCommand("virsh", "destroy", name)
@@ -2231,12 +2231,12 @@ func ForceDeleteVM(name string) error {
 			result = utils.ExecCommand("virsh", "undefine", name)
 			if result.Error != nil {
 				// 正常 undefine 全部失败，尝试强制清理 libvirt 配置文件
-				log.Printf("[强制删除] undefine 失败，尝试直接清理 libvirt 配置文件: %s", result.Stderr)
+				logger.App.Warn("undefine失败，尝试直接清理libvirt配置文件", "stderr", result.Stderr)
 
 				// 删除 libvirt 域 XML 配置文件
 				xmlPath := fmt.Sprintf("/etc/libvirt/qemu/%s.xml", name)
 				if err := os.Remove(xmlPath); err != nil && !os.IsNotExist(err) {
-					log.Printf("[强制删除] 删除 XML 配置文件失败: %s", err)
+					logger.App.Warn("删除XML配置文件失败", "error", err)
 				}
 
 				// 删除自动启动链接
@@ -2250,7 +2250,7 @@ func ForceDeleteVM(name string) error {
 				// 重启 libvirtd 以清理残留状态
 				restartResult := utils.ExecCommand("systemctl", "restart", "libvirtd")
 				if restartResult.Error != nil {
-					log.Printf("[强制删除] 重启 libvirtd 失败: %v", restartResult.Error)
+					logger.App.Warn("重启libvirtd失败", "error", restartResult.Error)
 				}
 				// 等待 libvirtd 重新就绪
 				time.Sleep(3 * time.Second)
@@ -2265,7 +2265,7 @@ func ForceDeleteVM(name string) error {
 	CleanupLightweightVMResources(name)
 	_ = DeleteVMSchedules(name)
 
-	log.Printf("[强制删除] 虚拟机 %s 强制清理完成", name)
+	logger.App.Info("虚拟机强制清理完成", "vm", name)
 	return nil
 }
 

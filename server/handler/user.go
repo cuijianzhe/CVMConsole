@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/service"
 	"kvm_console/taskqueue"
@@ -571,13 +571,13 @@ func AssignVMs(c *gin.Context) {
 		if service.IsLightweightCloudUser(username) {
 			for _, vmName := range assignedVMs {
 				if err := service.ApplyLightweightVMBandwidth(vmName); err != nil {
-					fmt.Printf("[警告] 分配轻量云 VM %s 后应用带宽失败: %v\n", vmName, err)
+					logger.App.Warn("分配轻量云 VM 后应用带宽失败", "vm", vmName, "error", err)
 				}
 			}
 			return
 		}
 		if err := service.RebalanceUserBandwidth(username); err != nil {
-			fmt.Printf("[警告] 分配VM后重新分配用户 %s 带宽失败: %v\n", username, err)
+			logger.App.Warn("分配VM后重新分配用户带宽失败", "user", username, "error", err)
 		}
 	}()
 }

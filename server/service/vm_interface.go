@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -41,7 +42,7 @@ func attachVMInterface(vmName string, sw model.VPCSwitch, nicModel string, inter
 		// 同时持久化
 		attachPersist := utils.ExecCommandWithTimeout("virsh", 60*time.Second, "attach-device", vmName, xmlPath, "--config")
 		if attachPersist.Error != nil {
-			fmt.Printf("[警告] 持久化网口失败（运行态已生效）: %s\n", firstNonEmpty(attachPersist.Stderr, attachPersist.Error.Error()))
+			logger.App.Warn("持久化网口失败（运行态已生效）", "detail", firstNonEmpty(attachPersist.Stderr, attachPersist.Error.Error()))
 		}
 	} else {
 		// 关机状态：修改持久化 XML
@@ -117,7 +118,7 @@ func detachVMInterface(vmName string, interfaceOrder int) error {
 		// 同时持久化
 		detachPersist := utils.ExecCommandWithTimeout("virsh", 60*time.Second, "detach-device", vmName, xmlPath, "--config")
 		if detachPersist.Error != nil {
-			fmt.Printf("[警告] 持久化移除网口失败（运行态已生效）: %s\n", firstNonEmpty(detachPersist.Stderr, detachPersist.Error.Error()))
+			logger.App.Warn("持久化移除网口失败（运行态已生效）", "detail", firstNonEmpty(detachPersist.Stderr, detachPersist.Error.Error()))
 		}
 	} else {
 		// 关机状态：修改持久化 XML，从 XML 中移除对应的 interface 块

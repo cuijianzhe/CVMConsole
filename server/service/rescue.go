@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"kvm_console/logger"
 	"kvm_console/utils"
 )
 
@@ -135,7 +136,7 @@ func StopRescue(vmName string, progress func(int, string)) error {
 	origConfig, err := loadOriginalConfig(vmName)
 	if err != nil {
 		// 如果配置文件不存在，仍然尝试恢复引导顺序并开机
-		fmt.Printf("[警告] 读取救援原始配置失败: %v，将仅恢复引导顺序\n", err)
+		logger.App.Warn("读取救援原始配置失败，将仅恢复引导顺序", "error", err)
 		_ = SetVMBootOrder(vmName, []string{"hd"})
 		_ = StartVM(vmName)
 		return nil
@@ -144,14 +145,14 @@ func StopRescue(vmName string, progress func(int, string)) error {
 	// 步骤 4: 恢复磁盘总线
 	progress(40, "正在恢复磁盘总线为原始类型...")
 	if err := restoreDiskBus(vmName, origConfig); err != nil {
-		fmt.Printf("[警告] 恢复磁盘总线失败: %v\n", err)
+		logger.App.Warn("恢复磁盘总线失败", "error", err)
 	}
 
 	// 步骤 5: 恢复网卡类型
 	progress(55, "正在恢复网卡类型...")
 	if origConfig.NicModel != "" {
 		if err := SetVMNicModel(vmName, origConfig.NicModel); err != nil {
-			fmt.Printf("[警告] 恢复网卡类型失败: %v\n", err)
+			logger.App.Warn("恢复网卡类型失败", "error", err)
 		}
 	}
 
@@ -162,7 +163,7 @@ func StopRescue(vmName string, progress func(int, string)) error {
 		bootOrder = []string{"hd"}
 	}
 	if err := SetVMBootOrder(vmName, bootOrder); err != nil {
-		fmt.Printf("[警告] 恢复引导顺序失败: %v\n", err)
+		logger.App.Warn("恢复引导顺序失败", "error", err)
 	}
 
 	// 步骤 7: 开机

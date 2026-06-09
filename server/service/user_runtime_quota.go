@@ -2,11 +2,11 @@ package service
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/taskqueue"
 	"kvm_console/utils"
@@ -123,7 +123,7 @@ func CheckRuntimeQuotaAvailableForUser(user *model.User, observedAt time.Time) e
 func SyncAllUserRuntimeQuotaStates(observedAt time.Time) {
 	activeVMs, err := getRuntimeActiveVMSetFromHost()
 	if err != nil {
-		log.Printf("[运行时长] 获取宿主机运行中虚拟机列表失败: %v", err)
+		logger.App.Warn("获取宿主机运行中虚拟机列表失败", "component", "运行时长", "error", err)
 		return
 	}
 	SyncAllUserRuntimeQuotaStatesWithActiveVMs(activeVMs, observedAt)
@@ -133,14 +133,14 @@ func SyncAllUserRuntimeQuotaStates(observedAt time.Time) {
 func SyncAllUserRuntimeQuotaStatesWithActiveVMs(activeVMs map[string]struct{}, observedAt time.Time) {
 	var users []model.User
 	if err := model.DB.Where("role = ?", "user").Find(&users).Error; err != nil {
-		log.Printf("[运行时长] 查询用户列表失败: %v", err)
+		logger.App.Warn("查询用户列表失败", "component", "运行时长", "error", err)
 		return
 	}
 
 	for _, user := range users {
 		activeCount := countUserActiveVMs(user.Username, activeVMs)
 		if err := syncUserRuntimeQuotaState(&user, activeCount, observedAt); err != nil {
-			log.Printf("[运行时长] 同步用户 %s 配额失败: %v", user.Username, err)
+			logger.App.Warn("同步用户配额失败", "component", "运行时长", "user", user.Username, "error", err)
 		}
 	}
 }
@@ -162,13 +162,13 @@ func SyncUserRuntimeQuotaState(username string, observedAt time.Time) {
 
 	activeVMs, err := getRuntimeActiveVMSetFromHost()
 	if err != nil {
-		log.Printf("[运行时长] 获取用户 %s 的运行中虚拟机列表失败: %v", username, err)
+		logger.App.Warn("获取用户运行中虚拟机列表失败", "component", "运行时长", "user", username, "error", err)
 		return
 	}
 
 	activeCount := countUserActiveVMs(username, activeVMs)
 	if err := syncUserRuntimeQuotaState(&user, activeCount, observedAt); err != nil {
-		log.Printf("[运行时长] 同步用户 %s 配额失败: %v", username, err)
+		logger.App.Warn("同步用户配额失败", "component", "运行时长", "user", username, "error", err)
 	}
 }
 
@@ -184,7 +184,7 @@ func syncUserRuntimeQuotaState(user *model.User, activeCount int, observedAt tim
 
 	if shouldWarn {
 		if err := sendRuntimeQuotaWarningEmail(user, snapshot); err != nil {
-			log.Printf("[运行时长] 向用户 %s 发送配额预警邮件失败: %v", user.Username, err)
+			logger.App.Warn("向用户发送配额预警邮件失败", "component", "运行时长", "user", user.Username, "error", err)
 		}
 	}
 
@@ -317,11 +317,11 @@ func maybeSubmitRuntimeQuotaShutdownTask(user *model.User, snapshot UserRuntimeQ
 	}, "system")
 	if err != nil {
 		releaseRuntimeQuotaEnforcement(user.Username)
-		log.Printf("[运行时长] 提交用户 %s 自动关机任务失败: %v", user.Username, err)
+		logger.App.Warn("提交用户自动关机任务失败", "component", "运行时长", "user", user.Username, "error", err)
 		return
 	}
 
-	log.Printf("[运行时长] 用户 %s 总运行时长配额已耗尽，已提交自动关机任务 #%d", user.Username, task.ID)
+	logger.App.Info("用户总运行时长配额已耗尽，已提交自动关机任务", "component", "运行时长", "user", user.Username, "task_id", task.ID)
 }
 
 func maybeReleaseRuntimeQuotaEnforcement(username string, snapshot UserRuntimeQuotaSnapshot, activeCount int) {

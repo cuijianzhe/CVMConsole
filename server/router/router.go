@@ -1,7 +1,6 @@
 package router
 
 import (
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,13 +11,14 @@ import (
 
 	"kvm_console/config"
 	"kvm_console/handler"
+	"kvm_console/logger"
 	"kvm_console/middleware"
 )
 
 // Setup 初始化路由
 func Setup() *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery())
+	r.Use(middleware.RequestLoggerMiddleware(), gin.Recovery())
 
 	// 全局中间件
 	r.Use(middleware.CORSMiddleware())
@@ -489,13 +489,13 @@ func setupStaticFileServing(r *gin.Engine) {
 		// 也尝试相对于工作目录查找
 		webDistDir = "web-dist"
 		if _, err := os.Stat(webDistDir); os.IsNotExist(err) {
-			log.Println("未找到 web-dist 目录，跳过前端静态文件服务（开发环境请使用 vite dev）")
+		logger.App.Info("未找到 web-dist 目录，跳过前端静态文件服务（开发环境请使用 vite dev）")
 			return
 		}
 	}
 
 	absWebDistDir, _ := filepath.Abs(webDistDir)
-	log.Printf("启用前端静态文件服务: %s", absWebDistDir)
+	logger.App.Info("启用前端静态文件服务", "dir", absWebDistDir)
 
 	// 提供静态资源文件（CSS/JS/图片等）
 	r.Static("/assets", filepath.Join(absWebDistDir, "assets"))

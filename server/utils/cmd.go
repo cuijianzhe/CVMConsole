@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
+
+	"kvm_console/logger"
 )
 
 // CmdResult 命令执行结果
@@ -42,11 +43,14 @@ func ExecCommandContextWithTimeout(ctx context.Context, name string, timeout tim
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	// 记录命令执行日志
-	log.Printf("[CMD] %s %s", name, strings.Join(args, " "))
+	argsStr := strings.Join(args, " ")
+	logger.CMD.Info("执行命令", "cmd", name, "args", argsStr)
+
+	start := time.Now()
 
 	// 启动命令
 	if err := cmd.Start(); err != nil {
+		logger.CMD.Error("命令启动失败", "cmd", name, "args", argsStr, "error", err)
 		return &CmdResult{
 			Stderr:   err.Error(),
 			ExitCode: -1,
@@ -62,6 +66,7 @@ func ExecCommandContextWithTimeout(ctx context.Context, name string, timeout tim
 
 	select {
 	case err := <-done:
+		elapsed := time.Since(start)
 		result := &CmdResult{
 			Stdout: strings.TrimSpace(stdout.String()),
 			Stderr: strings.TrimSpace(stderr.String()),
@@ -73,6 +78,9 @@ func ExecCommandContextWithTimeout(ctx context.Context, name string, timeout tim
 				result.ExitCode = -1
 			}
 			result.Error = fmt.Errorf("命令执行失败: %w, stderr: %s", err, result.Stderr)
+			logger.CMD.Error("命令执行失败", "cmd", name, "args", argsStr, "exit_code", result.ExitCode, "error", result.Error, "stderr", truncate(result.Stderr, 500), "duration", elapsed.String())
+		} else {
+			logger.CMD.Info("命令执行完成", "cmd", name, "args", argsStr, "exit_code", result.ExitCode, "duration", elapsed.String())
 		}
 		return result
 
@@ -82,6 +90,7 @@ func ExecCommandContextWithTimeout(ctx context.Context, name string, timeout tim
 		case <-done:
 		case <-time.After(5 * time.Second):
 		}
+		logger.CMD.Error("命令执行超时", "cmd", name, "args", argsStr, "timeout", timeout.String())
 		return &CmdResult{
 			Stderr:   "命令执行超时",
 			ExitCode: -1,
@@ -94,6 +103,7 @@ func ExecCommandContextWithTimeout(ctx context.Context, name string, timeout tim
 		case <-done:
 		case <-time.After(5 * time.Second):
 		}
+		logger.CMD.Warn("命令已取消", "cmd", name, "args", argsStr, "reason", ctx.Err())
 		return &CmdResult{
 			Stderr:   "命令已取消",
 			ExitCode: -1,
@@ -130,4 +140,15 @@ func ShellSingleQuote(value string) string {
 		return "''"
 	}
 	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
+}
+
+// truncate 截断字符串到指定长度，超过部分用 "..." 替代
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+	return s[:maxLen-3] + "..."
 }

@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/digitalocean/go-libvirt"
+
+	"kvm_console/logger"
 )
 
 // ==================== vCPU 标志常量 ====================
@@ -82,6 +84,7 @@ func listAllDomainsRPC() ([]libvirt.Domain, error) {
 	if err != nil {
 		return nil, fmt.Errorf("列出所有域失败: %w", err)
 	}
+	logger.Libvirt.Info("RPC: 列出所有域成功", "count", len(domains))
 	return domains, nil
 }
 
@@ -99,7 +102,9 @@ func getDomainStateRPC(name string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("获取域 %s 信息失败: %w", name, err)
 	}
-	return domainStateToString(libvirt.DomainState(state)), nil
+	stateStr := domainStateToString(libvirt.DomainState(state))
+	logger.Libvirt.Info("RPC: 获取域状态成功", "domain", name, "state", stateStr)
+	return stateStr, nil
 }
 
 // getDomainInfoRPC 获取 VM 基本信息（替代 virsh dominfo）
@@ -128,6 +133,8 @@ func getDomainInfoRPC(name string) (vcpu int, maxMemKB uint64, usedMemKB uint64,
 		autoVal = 0
 	}
 
+	logger.Libvirt.Info("RPC: 获取域基本信息成功", "domain", name,
+		"vcpu", nrVirtCPU, "maxMemKB", maxMem, "usedMemKB", memory, "autostart", autoVal == 1)
 	return int(nrVirtCPU), maxMem, memory, autoVal == 1, nil
 }
 
@@ -146,6 +153,7 @@ func getDomainXMLRPC(name string, flags libvirt.DomainXMLFlags) (string, error) 
 	if err != nil {
 		return "", fmt.Errorf("获取域 %s XML 描述失败: %w", name, err)
 	}
+	logger.Libvirt.Info("RPC: 获取域 XML 成功", "domain", name, "size", len(xml))
 	return xml, nil
 }
 
@@ -164,6 +172,7 @@ func getDomainCPUStatsRPC(name string) (cpuTime uint64, err error) {
 	if infoErr != nil {
 		return 0, fmt.Errorf("获取域 %s CPU 时间失败: %w", name, infoErr)
 	}
+	logger.Libvirt.Debug("RPC: 获取 CPU 统计成功", "domain", name, "cpuTime", cput)
 	return cput, nil
 }
 
@@ -209,6 +218,7 @@ func getDomainMemoryStatsRPC(name string) (map[string]uint64, error) {
 		}
 		result[key] = s.Val
 	}
+	logger.Libvirt.Debug("RPC: 获取内存统计成功", "domain", name, "items", len(result))
 	return result, nil
 }
 
@@ -230,6 +240,8 @@ func getDomainBlockStatsRPC(name, dev string) (rdBytes, wrBytes int64, err error
 	_ = rdReq
 	_ = wrReq
 	_ = errs
+	logger.Libvirt.Debug("RPC: 获取磁盘 I/O 统计成功", "domain", name, "device", dev,
+		"rdBytes", rdByt, "wrBytes", wrByt)
 	return rdByt, wrByt, nil
 }
 
@@ -254,6 +266,8 @@ func getDomainInterfaceStatsRPC(name, iface string) (rxBytes, txBytes int64, err
 	_ = txPkt
 	_ = txErr
 	_ = txDrop
+	logger.Libvirt.Debug("RPC: 获取网卡 I/O 统计成功", "domain", name, "interface", iface,
+		"rxBytes", rxByt, "txBytes", txByt)
 	return rxByt, txByt, nil
 }
 
@@ -272,6 +286,7 @@ func startDomainRPC(name string) error {
 	if err := l.DomainCreate(dom); err != nil {
 		return fmt.Errorf("启动域 %s 失败: %w", name, err)
 	}
+	logger.Libvirt.Info("RPC: 启动域成功", "domain", name)
 	return nil
 }
 
@@ -289,6 +304,7 @@ func startDomainPausedRPC(name string) error {
 	if _, err := l.DomainCreateWithFlags(dom, uint32(libvirt.DomainStartPaused)); err != nil {
 		return fmt.Errorf("暂停启动域 %s 失败: %w", name, err)
 	}
+	logger.Libvirt.Info("RPC: 暂停启动域成功", "domain", name)
 	return nil
 }
 
@@ -305,6 +321,7 @@ func shutdownDomainRPC(name string) error {
 	if err := l.DomainShutdown(dom); err != nil {
 		return fmt.Errorf("关机域 %s 失败: %w", name, err)
 	}
+	logger.Libvirt.Info("RPC: 关机域成功", "domain", name)
 	return nil
 }
 
@@ -321,6 +338,7 @@ func destroyDomainRPC(name string) error {
 	if err := l.DomainDestroy(dom); err != nil {
 		return fmt.Errorf("强制断电域 %s 失败: %w", name, err)
 	}
+	logger.Libvirt.Info("RPC: 强制断电成功", "domain", name)
 	return nil
 }
 
@@ -337,6 +355,7 @@ func rebootDomainRPC(name string) error {
 	if err := l.DomainReboot(dom, 0); err != nil {
 		return fmt.Errorf("重启域 %s 失败: %w", name, err)
 	}
+	logger.Libvirt.Info("RPC: 重启域成功", "domain", name)
 	return nil
 }
 
@@ -353,6 +372,7 @@ func resetDomainRPC(name string) error {
 	if err := l.DomainReset(dom, 0); err != nil {
 		return fmt.Errorf("硬重置域 %s 失败: %w", name, err)
 	}
+	logger.Libvirt.Info("RPC: 硬重置成功", "domain", name)
 	return nil
 }
 
@@ -369,6 +389,7 @@ func suspendDomainRPC(name string) error {
 	if err := l.DomainSuspend(dom); err != nil {
 		return fmt.Errorf("暂停域 %s 失败: %w", name, err)
 	}
+	logger.Libvirt.Info("RPC: 暂停域成功", "domain", name)
 	return nil
 }
 
@@ -385,6 +406,7 @@ func resumeDomainRPC(name string) error {
 	if err := l.DomainResume(dom); err != nil {
 		return fmt.Errorf("恢复域 %s 失败: %w", name, err)
 	}
+	logger.Libvirt.Info("RPC: 恢复域成功", "domain", name)
 	return nil
 }
 
@@ -405,6 +427,7 @@ func setDomainAutostartRPC(name string, autostart bool) error {
 	if err := l.DomainSetAutostart(dom, autostartInt); err != nil {
 		return fmt.Errorf("设置域 %s 自动启动失败: %w", name, err)
 	}
+	logger.Libvirt.Info("RPC: 设置自动启动成功", "domain", name, "autostart", autostart)
 	return nil
 }
 
@@ -418,6 +441,7 @@ func defineDomainXMLRPC(xmlContent string) (libvirt.Domain, error) {
 	if err != nil {
 		return libvirt.Domain{}, fmt.Errorf("定义域失败: %w", err)
 	}
+	logger.Libvirt.Info("RPC: 定义域配置成功", "domain", dom.Name)
 	return dom, nil
 }
 
@@ -435,6 +459,7 @@ func setDomainVcpusFlagsRPC(name string, count uint32, flags uint32) error {
 	if err := l.DomainSetVcpusFlags(dom, count, flags); err != nil {
 		return fmt.Errorf("设置域 %s vCPU 为 %d 失败: %w", name, count, err)
 	}
+	logger.Libvirt.Info("RPC: 设置 vCPU 成功", "domain", name, "count", count, "flags", flags)
 	return nil
 }
 
@@ -452,6 +477,7 @@ func setDomainMemoryFlagsRPC(name string, memKB uint64, flags libvirt.DomainMemo
 	if err := l.DomainSetMemoryFlags(dom, memKB, uint32(flags)); err != nil {
 		return fmt.Errorf("设置域 %s 内存为 %d KB 失败: %w", name, memKB, err)
 	}
+	logger.Libvirt.Info("RPC: 设置内存成功", "domain", name, "memKB", memKB, "flags", flags)
 	return nil
 }
 
@@ -469,5 +495,6 @@ func getDomainVcpuCountRPC(name string, flags uint32) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("获取域 %s vCPU 计数失败: %w", name, err)
 	}
+	logger.Libvirt.Debug("RPC: 获取 vCPU 计数成功", "domain", name, "count", count)
 	return int(count), nil
 }

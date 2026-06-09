@@ -2,11 +2,11 @@ package service
 
 import (
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 )
 
@@ -222,7 +222,7 @@ func UpsertLightweightVMQuota(username string, req LightweightVMQuotaRequest) (*
 		return nil, err
 	}
 	if err := ApplyLightweightVMBandwidth(req.VMName); err != nil {
-		log.Printf("[轻量云] 应用 VM %s 带宽失败: %v", req.VMName, err)
+		logger.App.Warn("应用 VM 带宽失败", "component", "轻量云", "vm", req.VMName, "error", err)
 	}
 	SyncLightweightVMRuntimeQuotaState(req.VMName, time.Now())
 	RefreshVMCacheByNameAsync(req.VMName)
@@ -466,17 +466,23 @@ func CheckAndApplyLightweightVMTrafficLimit(quota model.LightweightVMQuota) {
 	record.IsLimitedDown = downLimited
 	record.IsLimitedUp = upLimited
 	if err := saveLightweightVMTrafficMonthly(record); err != nil {
-		log.Printf("[轻量云流量配额] 保存 VM %s 月流量失败: %v", quota.VMName, err)
+		logger.App.Warn("保存 VM 月流量失败", "component", "轻量云流量配额", "vm", quota.VMName, "error", err)
 		return
 	}
 	if changed {
 		if err := ApplyLightweightVMBandwidth(quota.VMName); err != nil {
-			log.Printf("[轻量云流量配额] 应用 VM %s 限速状态失败: %v", quota.VMName, err)
+			logger.App.Warn("应用 VM 限速状态失败", "component", "轻量云流量配额", "vm", quota.VMName, "error", err)
 		}
 	}
 	if (downLimited || upLimited) && changed {
-		log.Printf("[轻量云流量配额] VM %s 本月流量超限，已按超限方向强制限速 %dMbps（下行 %s / %.2fGB，上行 %s / %.2fGB）",
-			quota.VMName, lightweightTrafficPenaltyMbps(), formatTrafficBytes(effectiveDown), quota.TrafficDownGB, formatTrafficBytes(effectiveUp), quota.TrafficUpGB)
+		logger.App.Warn("VM 本月流量超限，已按超限方向强制限速",
+			"component", "轻量云流量配额",
+			"vm", quota.VMName,
+			"penalty_mbps", lightweightTrafficPenaltyMbps(),
+			"down", formatTrafficBytes(effectiveDown),
+			"down_quota_gb", quota.TrafficDownGB,
+			"up", formatTrafficBytes(effectiveUp),
+			"up_quota_gb", quota.TrafficUpGB)
 	}
 }
 
@@ -513,11 +519,11 @@ func CheckLightweightVMTrafficAfterQuotaUpdate(vmName string) {
 	record.IsLimitedDown = downLimited
 	record.IsLimitedUp = upLimited
 	if err := saveLightweightVMTrafficMonthly(record); err != nil {
-		log.Printf("[轻量云流量配额] 保存 VM %s 配额调整状态失败: %v", quota.VMName, err)
+		logger.App.Warn("保存 VM 配额调整状态失败", "component", "轻量云流量配额", "vm", quota.VMName, "error", err)
 		return
 	}
 	if err := ApplyLightweightVMBandwidth(quota.VMName); err != nil {
-		log.Printf("[轻量云流量配额] 配额调整后应用 VM %s 带宽失败: %v", quota.VMName, err)
+		logger.App.Warn("配额调整后应用 VM 带宽失败", "component", "轻量云流量配额", "vm", quota.VMName, "error", err)
 	}
 }
 
@@ -530,7 +536,7 @@ func ResetAllLightweightVMTraffic() {
 	model.DB.Where("month = ? AND (is_limited_down = ? OR is_limited_up = ?)", lastMonth, true, true).Find(&records)
 	for _, record := range records {
 		if err := ApplyLightweightVMBandwidth(record.VMName); err != nil {
-			log.Printf("[轻量云流量配额] 月重置后恢复 VM %s 带宽失败: %v", record.VMName, err)
+			logger.App.Warn("月重置后恢复 VM 带宽失败", "component", "轻量云流量配额", "vm", record.VMName, "error", err)
 		}
 	}
 	cleanupMonth := time.Now().AddDate(0, -12, 0).Format("2006-01")
@@ -605,7 +611,7 @@ func CleanupLightweightVMResources(vmName string) {
 	}
 	if len(groups) > 0 {
 		if err := ApplyVPCACLRules(); err != nil {
-			log.Printf("[轻量云] 清理 VM %s 专属安全组后重建 VPC ACL 失败: %v", vmName, err)
+			logger.App.Warn("清理 VM 专属安全组后重建 VPC ACL 失败", "component", "轻量云", "vm", vmName, "error", err)
 		}
 	}
 }

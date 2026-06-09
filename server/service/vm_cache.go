@@ -3,7 +3,6 @@ package service
 import (
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -12,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -68,7 +68,7 @@ func TriggerAdminVMCacheRefreshIfNeeded() {
 			vmCacheRefreshState.Unlock()
 		}()
 		if err := vmCacheRunFullSync(); err != nil {
-			log.Printf("[警告] 管理员触发虚拟机缓存刷新失败: %v", err)
+			logger.App.Warn("管理员触发虚拟机缓存刷新失败", "error", err)
 		}
 	}()
 }
@@ -180,7 +180,7 @@ func SyncVMCacheFromHost() error {
 		seen[name] = true
 		record, buildErr := vmCacheBuildRecordFromHost(name, syncedAt)
 		if buildErr != nil {
-			log.Printf("[警告] 构建虚拟机 %s 缓存失败，已保留旧缓存: %v", name, buildErr)
+			logger.App.Warn("构建虚拟机缓存失败，已保留旧缓存", "vm", name, "error", buildErr)
 			continue
 		}
 		records = append(records, record)
@@ -264,7 +264,7 @@ func RefreshVMCacheByNameAsync(name string) {
 	}
 	go func() {
 		if err := RefreshVMCacheByName(name); err != nil {
-			log.Printf("[警告] 刷新虚拟机 %s 缓存失败: %v", name, err)
+			logger.App.Warn("刷新虚拟机缓存失败", "vm", name, "error", err)
 		}
 	}()
 }
@@ -277,7 +277,7 @@ func MarkVMCacheMissingAsync(name string) {
 	}
 	go func() {
 		if err := MarkVMCacheMissing(name); err != nil {
-			log.Printf("[警告] 标记虚拟机 %s 缓存失效失败: %v", name, err)
+			logger.App.Warn("标记虚拟机缓存失效失败", "vm", name, "error", err)
 		}
 	}()
 }
@@ -305,7 +305,7 @@ func defaultVMCacheListNamesFromHost() ([]string, error) {
 			}
 			return names, nil
 		}
-		log.Printf("[go-libvirt] listAllDomainsRPC 失败，降级为 virsh: %v", err)
+		logger.Libvirt.Warn("listAllDomainsRPC 失败，降级为 virsh", "error", err)
 	}
 
 	// fallback: 原有 virsh 逻辑
@@ -350,7 +350,7 @@ func defaultVMCacheBuildRecordFromHost(name string, syncedAt time.Time) (model.V
 			if isDomainNotFoundError(infoErr) {
 				return model.VMCache{}, errVMCacheSourceMissing
 			}
-			log.Printf("[go-libvirt] getDomainInfoRPC(%s) 失败，降级为 virsh: %v", name, infoErr)
+			logger.Libvirt.Warn("getDomainInfoRPC 失败，降级为 virsh", "domain", name, "error", infoErr)
 		} else {
 			vcpu = vcpuRPC
 			maxMemKB = maxMemKB_RPC
@@ -361,7 +361,7 @@ func defaultVMCacheBuildRecordFromHost(name string, syncedAt time.Time) (model.V
 
 		statusRPC, stateErr := getDomainStateRPC(name)
 		if stateErr != nil {
-			log.Printf("[go-libvirt] getDomainStateRPC(%s) 失败，降级为 virsh: %v", name, stateErr)
+			logger.Libvirt.Warn("getDomainStateRPC 失败，降级为 virsh", "domain", name, "error", stateErr)
 		} else {
 			status = statusRPC
 		}
@@ -489,7 +489,7 @@ func UpdateVMCacheOwner(name, owner string) {
 		owner = "admin"
 	}
 	if err := model.DB.Model(&model.VMCache{}).Where("name = ?", name).Update("owner_username", owner).Error; err != nil {
-		log.Printf("[警告] 更新虚拟机 %s 缓存归属失败: %v", name, err)
+		logger.App.Warn("更新虚拟机缓存归属失败", "vm", name, "error", err)
 	}
 }
 
@@ -519,7 +519,7 @@ func SyncVMCacheOwnersForAssignment(username string, assignedVMs []string) {
 
 	var records []model.VMCache
 	if err := model.DB.Where("owner_username = ?", username).Find(&records).Error; err != nil {
-		log.Printf("[警告] 查询用户 %s 的虚拟机缓存归属失败: %v", username, err)
+		logger.App.Warn("查询用户虚拟机缓存归属失败", "user", username, "error", err)
 		return
 	}
 	for _, record := range records {

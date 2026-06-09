@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"kvm_console/logger"
 	"os"
 	"path/filepath"
 	"strings"
@@ -410,23 +410,23 @@ func cleanupLinkedCloneArtifacts(vmName, diskPath string) {
 	if strings.TrimSpace(vmName) != "" {
 		// 尝试销毁（如果 VM 正在运行）
 		if result := utils.ExecCommand("virsh", "destroy", vmName); result.Error != nil {
-			log.Printf("[LinkedClone] 销毁虚拟机 %s 失败（可能未运行）: %s", vmName, strings.TrimSpace(result.Stderr))
+			logger.App.Warn("销毁虚拟机失败", "vm", vmName, "stderr", strings.TrimSpace(result.Stderr))
 		} else {
-			log.Printf("[LinkedClone] 已销毁虚拟机 %s", vmName)
+			logger.App.Info("已销毁虚拟机", "vm", vmName)
 		}
 		// 尝试取消定义
 		if result := utils.ExecCommand("virsh", "undefine", vmName, "--nvram", "--snapshots-metadata"); result.Error != nil {
-			log.Printf("[LinkedClone] 取消定义虚拟机 %s 失败: %s", vmName, strings.TrimSpace(result.Stderr))
+			logger.App.Warn("取消定义虚拟机失败", "vm", vmName, "stderr", strings.TrimSpace(result.Stderr))
 		} else {
-			log.Printf("[LinkedClone] 已取消定义虚拟机 %s", vmName)
+			logger.App.Info("已取消定义虚拟机", "vm", vmName)
 		}
 	}
 	// 删除磁盘文件
 	if strings.TrimSpace(diskPath) != "" {
 		if err := os.Remove(diskPath); err != nil && !os.IsNotExist(err) {
-			log.Printf("[LinkedClone] 删除磁盘文件 %s 失败: %v", diskPath, err)
+			logger.App.Warn("删除磁盘文件失败", "path", diskPath, "error", err)
 		} else if err == nil {
-			log.Printf("[LinkedClone] 已删除磁盘文件 %s", diskPath)
+			logger.App.Info("已删除磁盘文件", "path", diskPath)
 		}
 	}
 }

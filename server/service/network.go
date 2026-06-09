@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -1080,7 +1081,7 @@ func removePortForwardsForCIDR(cidr string) {
 	sort.Sort(sort.Reverse(sort.IntSlice(ids)))
 	for _, id := range ids {
 		if err := DeletePortForward(id); err != nil {
-			fmt.Printf("[警告] 删除 VPC CIDR %s 的端口转发规则 %d 失败: %v\n", cidr, id, err)
+			logger.App.Warn("删除端口转发规则失败", "cidr", cidr, "id", id, "error", err)
 		}
 	}
 }
@@ -1117,7 +1118,7 @@ func cleanupOVSStaticHostsForVMs(vmNames []string) {
 		return
 	}
 	if err := writeOVSStaticHosts(next); err != nil {
-		fmt.Printf("[警告] 清理 OVS 静态 IP 绑定失败: %v\n", err)
+		logger.App.Warn("清理 OVS 静态 IP 绑定失败", "error", err)
 		return
 	}
 	ReloadOVSDNSMasq()
@@ -1653,7 +1654,7 @@ func RestorePortForwardRules() error {
 	for _, line := range strings.Split(string(data), "\n") {
 		if err := restorePortForwardCommand(line, hostIP); err != nil {
 			lastErr = err
-			fmt.Printf("[警告] 恢复端口转发规则失败: %v\n", err)
+			logger.App.Warn("恢复端口转发规则失败", "error", err)
 			continue
 		}
 		if strings.HasPrefix(strings.TrimSpace(line), "iptables ") {
@@ -1662,7 +1663,7 @@ func RestorePortForwardRules() error {
 	}
 	if restored > 0 && lastErr == nil {
 		if err := SavePortForwardRules(); err != nil {
-			fmt.Printf("[警告] 重写端口转发持久化规则失败: %v\n", err)
+			logger.App.Warn("重写端口转发持久化规则失败", "error", err)
 		}
 	}
 	return lastErr

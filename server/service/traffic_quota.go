@@ -2,10 +2,10 @@ package service
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 )
 
@@ -173,13 +173,13 @@ func CheckAndApplyTrafficLimit(username string) {
 		if !daily.IsLimitedDown {
 			daily.IsLimitedDown = true
 			needApplyPenalty = true
-			log.Printf("[流量配额] 用户 %s 下行流量超限（已用 %s / 配额 %.2fGB），启用限速 %dMbps",
-				username, formatTrafficBytes(effectiveDown), user.MaxTrafficDown, trafficPenaltyDownMbps)
+			logger.App.Warn("用户下行流量超限，启用限速",
+				"user", username, "used", formatTrafficBytes(effectiveDown), "quota_gb", user.MaxTrafficDown, "penalty_mbps", trafficPenaltyDownMbps)
 		}
 	} else if daily.IsLimitedDown {
 		daily.IsLimitedDown = false
 		needRecover = true
-		log.Printf("[流量配额] 用户 %s 下行流量已低于当前月配额，恢复正常", username)
+		logger.App.Info("用户下行流量已低于当前月配额，恢复正常", "user", username)
 	}
 
 	// 检查上行是否超限
@@ -187,13 +187,13 @@ func CheckAndApplyTrafficLimit(username string) {
 		if !daily.IsLimitedUp {
 			daily.IsLimitedUp = true
 			needApplyPenalty = true
-			log.Printf("[流量配额] 用户 %s 上行流量超限（已用 %s / 配额 %.2fGB），启用限速 %dMbps",
-				username, formatTrafficBytes(effectiveUp), user.MaxTrafficUp, trafficPenaltyUpMbps)
+			logger.App.Warn("用户上行流量超限，启用限速",
+				"user", username, "used", formatTrafficBytes(effectiveUp), "quota_gb", user.MaxTrafficUp, "penalty_mbps", trafficPenaltyUpMbps)
 		}
 	} else if daily.IsLimitedUp {
 		daily.IsLimitedUp = false
 		needRecover = true
-		log.Printf("[流量配额] 用户 %s 上行流量已低于当前月配额，恢复正常", username)
+		logger.App.Info("用户上行流量已低于当前月配额，恢复正常", "user", username)
 	}
 
 	// 保存本月记录
@@ -205,7 +205,7 @@ func CheckAndApplyTrafficLimit(username string) {
 
 	if needRecover {
 		if err := RebalanceUserBandwidth(username); err != nil {
-			log.Printf("[流量配额] 恢复用户 %s 带宽失败: %v", username, err)
+			logger.App.Warn("恢复用户带宽失败", "component", "流量配额", "user", username, "error", err)
 		}
 	}
 
@@ -230,7 +230,7 @@ func applyTrafficPenalty(username string, downLimited, upLimited bool) {
 
 	for _, vmName := range vms {
 		if IsVPCBoundVM(vmName) {
-			log.Printf("[流量配额] 跳过 VPC VM %s 的用户级惩罚限速，交换机配额负责控制", vmName)
+			logger.App.Info("跳过 VPC VM 的用户级惩罚限速，交换机配额负责控制", "component", "流量配额", "vm", vmName)
 			continue
 		}
 		// 获取当前带宽设置
@@ -262,7 +262,7 @@ func applyTrafficPenalty(username string, downLimited, upLimited bool) {
 		if err := ApplyVMBandwidth(vmName,
 			MbpsToKBps(downAvg), MbpsToKBps(downPeak), downBurst,
 			MbpsToKBps(upAvg), MbpsToKBps(upPeak), upBurst); err != nil {
-			log.Printf("[流量配额] 为 VM %s 设置惩罚速率失败: %v", vmName, err)
+			logger.App.Warn("为 VM 设置惩罚速率失败", "component", "流量配额", "vm", vmName, "error", err)
 		}
 	}
 }
@@ -303,15 +303,15 @@ func ResetUserTrafficQuota(username string) error {
 		return fmt.Errorf("恢复带宽设置失败: %w", err)
 	}
 
-	log.Printf("[流量配额] 管理员已重置用户 %s 的流量配额（偏移量: 下行 %s / 上行 %s）",
-		username, formatTrafficBytes(downBytes), formatTrafficBytes(upBytes))
+	logger.App.Info("管理员已重置用户的流量配额",
+		"component", "流量配额", "user", username, "offset_down", formatTrafficBytes(downBytes), "offset_up", formatTrafficBytes(upBytes))
 	return nil
 }
 
 // ResetAllDailyTraffic 每月定时重置所有用户的月流量配额。
 // 保留函数名用于兼容旧调用，实际重置窗口已改为月。
 func ResetAllDailyTraffic() {
-	log.Println("[流量配额] 开始执行月流量配额重置...")
+	logger.App.Info("开始执行月流量配额重置", "component", "流量配额")
 
 	// 查找上月有限速记录的用户
 	lastMonth := time.Now().AddDate(0, -1, 0).Format("2006-01")
@@ -322,9 +322,9 @@ func ResetAllDailyTraffic() {
 	// 恢复所有被限速用户的带宽
 	for _, record := range limitedRecords {
 		if err := RebalanceUserBandwidth(record.Username); err != nil {
-			log.Printf("[流量配额] 恢复用户 %s 带宽失败: %v", record.Username, err)
+			logger.App.Warn("恢复用户带宽失败", "component", "流量配额", "user", record.Username, "error", err)
 		} else {
-			log.Printf("[流量配额] 已恢复用户 %s 的正常带宽", record.Username)
+			logger.App.Info("已恢复用户的正常带宽", "component", "流量配额", "user", record.Username)
 		}
 	}
 
@@ -334,7 +334,7 @@ func ResetAllDailyTraffic() {
 	ResetAllVPCSwitchMonthlyTraffic()
 	ResetAllLightweightVMTraffic()
 
-	log.Println("[流量配额] 月流量配额重置完成")
+	logger.App.Info("月流量配额重置完成", "component", "流量配额")
 }
 
 // CheckAllUsersTrafficQuota 检查所有用户的流量配额（定时调用）
@@ -381,7 +381,7 @@ func CheckTrafficAfterQuotaUpdate(username string) {
 		if user.MaxTrafficDown <= 0 || float64(daily.TrafficDown) < user.MaxTrafficDown*1024*1024*1024 {
 			daily.IsLimitedDown = false
 			needRecover = true
-			log.Printf("[流量配额] 用户 %s 下行配额调整后恢复正常", username)
+			logger.App.Info("用户下行配额调整后恢复正常", "component", "流量配额", "user", username)
 		}
 	}
 
@@ -390,7 +390,7 @@ func CheckTrafficAfterQuotaUpdate(username string) {
 		if user.MaxTrafficUp <= 0 || float64(daily.TrafficUp) < user.MaxTrafficUp*1024*1024*1024 {
 			daily.IsLimitedUp = false
 			needRecover = true
-			log.Printf("[流量配额] 用户 %s 上行配额调整后恢复正常", username)
+			logger.App.Info("用户上行配额调整后恢复正常", "component", "流量配额", "user", username)
 		}
 	}
 
@@ -398,7 +398,7 @@ func CheckTrafficAfterQuotaUpdate(username string) {
 		model.DB.Save(&daily)
 		// 恢复正常带宽
 		if err := RebalanceUserBandwidth(username); err != nil {
-			log.Printf("[流量配额] 恢复用户 %s 带宽失败: %v", username, err)
+			logger.App.Warn("恢复用户带宽失败", "component", "流量配额", "user", username, "error", err)
 		}
 	}
 }
@@ -431,7 +431,7 @@ func StartTrafficQuotaChecker() {
 		checkTicker := time.NewTicker(60 * time.Second)
 		defer checkTicker.Stop()
 
-		log.Println("[流量配额] 定时检查器已启动（间隔: 60s）")
+		logger.App.Info("定时检查器已启动", "component", "流量配额", "interval", "60s")
 
 		for range checkTicker.C {
 			CheckAllUsersTrafficQuota()
@@ -445,7 +445,7 @@ func StartTrafficQuotaChecker() {
 			// 计算距下个月 1 日 0 点的时间
 			next := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, now.Location())
 			duration := next.Sub(now)
-			log.Printf("[流量配额] 下次重置时间: %s（%v 后）", next.Format("2006-01-02 15:04:05"), duration)
+			logger.App.Info("下次重置时间", "component", "流量配额", "next", next.Format("2006-01-02 15:04:05"), "duration", duration)
 
 			timer := time.NewTimer(duration)
 			<-timer.C

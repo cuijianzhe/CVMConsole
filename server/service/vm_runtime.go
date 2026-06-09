@@ -1,11 +1,11 @@
 package service
 
 import (
-	"log"
 	"strings"
 	"sync"
 	"time"
 
+	"kvm_console/logger"
 	"kvm_console/utils"
 )
 
@@ -71,7 +71,7 @@ func UpdateVMRuntimeState(name, status string, observedAt time.Time) {
 	vmRuntimeCache.Unlock()
 
 	if changed {
-		log.Printf("虚拟机连续运行状态已更新 [%s]: %s", name, normalizeVMRuntimeState(status))
+		logger.App.Info("虚拟机连续运行状态已更新", "vm", name, "state", normalizeVMRuntimeState(status))
 	}
 }
 
@@ -97,7 +97,7 @@ func ResetVMContinuousRuntime(name string, observedAt time.Time) {
 	vmRuntimeCache.Unlock()
 
 	if changed {
-		log.Printf("虚拟机连续运行时间已重置 [%s]", name)
+		logger.App.Info("虚拟机连续运行时间已重置", "vm", name)
 	}
 }
 

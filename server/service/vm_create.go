@@ -3,7 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"kvm_console/logger"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -545,7 +545,7 @@ func CreateVM(params *CreateVMParams, progressFn func(int, string)) (string, err
 			}
 		}
 		if len(extraDiskFailures) > 0 {
-			log.Printf("[CreateVM] 虚拟机 %s 额外磁盘部分失败: %s", params.Name, strings.Join(extraDiskFailures, "; "))
+			logger.App.Warn("虚拟机额外磁盘部分失败", "vm", params.Name, "failures", strings.Join(extraDiskFailures, "; "))
 		}
 	}
 

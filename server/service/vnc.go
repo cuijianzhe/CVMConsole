@@ -2,9 +2,9 @@ package service
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
+	"kvm_console/logger"
 	"kvm_console/utils"
 )
 
@@ -126,7 +126,7 @@ func EnableVnc(vmName, password string) error {
 	if state == "running" {
 		destroyResult := utils.ExecCommand("virsh", "destroy", vmName)
 		if destroyResult.Error != nil {
-			log.Printf("[警告] VNC配置: 关闭虚拟机失败(可能已关闭): %s", destroyResult.Stderr)
+			logger.App.Warn("VNC配置: 关闭虚拟机失败(可能已关闭)", "stderr", destroyResult.Stderr)
 		}
 
 		defineResult := utils.ExecCommand("virsh", "define", tmpXML)
@@ -176,7 +176,7 @@ func DisableVnc(vmName string) error {
 	if state == "running" {
 		destroyResult := utils.ExecCommand("virsh", "destroy", vmName)
 		if destroyResult.Error != nil {
-			log.Printf("[警告] VNC配置: 关闭虚拟机失败(可能已关闭): %s", destroyResult.Stderr)
+			logger.App.Warn("VNC配置: 关闭虚拟机失败(可能已关闭)", "stderr", destroyResult.Stderr)
 		}
 
 		defineResult := utils.ExecCommand("virsh", "define", tmpXML)
@@ -231,7 +231,7 @@ func ChangeVncPassword(vmName, newPassword string) error {
 			newPassword, utils.ShellSingleQuote(tmpXML)))
 		defineResult := utils.ExecCommand("virsh", "define", tmpXML)
 		if defineResult.Error != nil {
-			log.Printf("[警告] VNC配置: 持久化密码到XML定义失败: %s", defineResult.Stderr)
+			logger.App.Warn("VNC配置: 持久化密码到XML定义失败", "stderr", defineResult.Stderr)
 		}
 		utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(tmpXML)))
 	}
@@ -336,7 +336,7 @@ func ExposeVnc(vmName string, expose bool) error {
 	if state == "running" {
 		destroyResult := utils.ExecCommand("virsh", "destroy", vmName)
 		if destroyResult.Error != nil {
-			log.Printf("[警告] VNC配置: 关闭虚拟机失败(可能已关闭): %s", destroyResult.Stderr)
+			logger.App.Warn("VNC配置: 关闭虚拟机失败(可能已关闭)", "stderr", destroyResult.Stderr)
 		}
 
 		defineResult := utils.ExecCommand("virsh", "define", tmpXML)

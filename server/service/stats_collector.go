@@ -1,7 +1,6 @@
 package service
 
 import (
-	"log"
 	"regexp"
 	"strings"
 	"sync"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/digitalocean/go-libvirt"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -43,7 +43,7 @@ func StartStatsCollector() {
 		defer collectTicker.Stop()
 		defer persistTicker.Stop()
 
-		log.Println("资源采集器已启动（采集间隔: 10s, 持久化间隔: 60s）")
+		logger.App.Info("资源采集器已启动", "collectInterval", "10s", "persistInterval", "60s")
 
 		for {
 			select {
@@ -52,7 +52,7 @@ func StartStatsCollector() {
 				observedAt := time.Now()
 				activeVMs, err := getRuntimeActiveVMSetFromHost()
 				if err != nil {
-					log.Printf("[运行时长] 获取宿主机运行中虚拟机列表失败: %v", err)
+					logger.App.Warn("获取宿主机运行中虚拟机列表失败", "error", err)
 				} else {
 					SyncAllUserRuntimeQuotaStatesWithActiveVMs(activeVMs, observedAt)
 					syncAllLightweightVMRuntimeQuotaStatesWithActiveVMs(activeVMs, observedAt)
@@ -91,7 +91,7 @@ func collectAllVMStats() {
 		if rpcNames, err := getRunningVMNamesRPC(); err == nil {
 			names = rpcNames
 		} else {
-			log.Printf("[go-libvirt] 获取运行中 VM 列表失败，降级为 virsh: %v", err)
+			logger.Libvirt.Warn("获取运行中 VM 列表失败，降级为 virsh", "error", err)
 		}
 	}
 	if names == nil {
@@ -118,7 +118,7 @@ func collectAllVMStats() {
 		if IsLibvirtRPCAvailable() {
 			stats, err = collectVMStatsRPC(name)
 			if err != nil {
-				log.Printf("[go-libvirt] 采集 %s 统计失败，降级为 virsh: %v", name, err)
+				logger.Libvirt.Warn("采集 VM 统计失败，降级为 virsh", "vm", name, "error", err)
 			}
 		}
 
@@ -297,7 +297,7 @@ func persistStatsToDB() {
 			RecordedAt:  now,
 		}
 		if err := model.DB.Create(&record).Error; err != nil {
-			log.Printf("持久化资源记录失败 [%s]: %v", vmName, err)
+			logger.App.Error("持久化资源记录失败", "vm", vmName, "error", err)
 		}
 	}
 }
@@ -323,7 +323,7 @@ func persistHostStatsToDB() {
 		RecordedAt:  time.Now(),
 	}
 	if err := model.DB.Create(&record).Error; err != nil {
-		log.Printf("持久化宿主机资源记录失败: %v", err)
+		logger.App.Error("持久化宿主机资源记录失败", "error", err)
 	}
 }
 
@@ -350,9 +350,9 @@ func GetAllCachedStats() map[string]*VmStats {
 func DeleteVMStatsRecords(name string) {
 	result := model.DB.Where("vm_name = ?", name).Delete(&model.VmStatsRecord{})
 	if result.Error != nil {
-		log.Printf("清理资源历史记录失败 [%s]: %v", name, result.Error)
+		logger.App.Warn("清理资源历史记录失败", "vm", name, "error", result.Error)
 	} else if result.RowsAffected > 0 {
-		log.Printf("已清理 %s 的 %d 条资源历史记录", name, result.RowsAffected)
+		logger.App.Info("已清理资源历史记录", "vm", name, "rows", result.RowsAffected)
 	}
 
 	// 同时清理缓存

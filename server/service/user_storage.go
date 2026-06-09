@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -87,7 +88,7 @@ func InitUserStorage(username string) error {
 
 	// 设置 project 配额映射（将所有目录绑定到同一个 project ID）
 	if err := SetupUserProject(username, []string{isoDir, shareDir, diskDir}); err != nil {
-		fmt.Printf("[警告] 设置用户 %s 的 project 映射失败: %v\n", username, err)
+		logger.App.Warn("设置用户 project 映射失败", "user", username, "error", err)
 	}
 
 	// 设置配额限制
@@ -95,7 +96,7 @@ func InitUserStorage(username string) error {
 	if err := model.DB.Where("username = ?", username).First(&user).Error; err == nil {
 		if user.MaxStorage > 0 {
 			if err := SetUserStorageQuota(username, user.MaxStorage); err != nil {
-				fmt.Printf("[警告] 设置用户 %s 存储配额失败: %v\n", username, err)
+				logger.App.Warn("设置用户存储配额失败", "user", username, "error", err)
 			}
 		}
 	}
