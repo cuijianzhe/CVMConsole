@@ -815,7 +815,7 @@ func revertExternalSnapshot(vmName, snapName string) error {
 	if vmState.Error == nil && strings.TrimSpace(vmState.Stdout) == "running" {
 		destroyResult := utils.ExecCommand("virsh", "destroy", vmName)
 		if destroyResult.Error != nil {
-			return fmt.Errorf("关闭虚拟机失败: %s", destroyResult.Stderr)
+			log.Printf("[警告] 关闭虚拟机失败，继续尝试快照恢复: %s", destroyResult.Stderr)
 		}
 	}
 
@@ -842,7 +842,14 @@ func revertExternalSnapshot(vmName, snapName string) error {
 		}
 	}
 
-	// 5. 恢复外部快照的语义是切回快照创建时的磁盘状态。
+	// 5. 恢复外部快照前校验磁盘链完整性，防止损坏的 backing chain 导致恢复失败或数据丢失。
+	for _, diskPath := range originalDisks {
+		if err := ValidateDiskBackingChain(diskPath); err != nil {
+			return fmt.Errorf("磁盘链完整性校验失败，无法恢复快照: %w", err)
+		}
+	}
+
+	// 6. 恢复外部快照的语义是切回快照创建时的磁盘状态。
 	// 不能执行 qemu-img commit，否则会把快照后的写入合并回 backing，导致没有真正回滚。
 	for _, snapFile := range snapFiles {
 		if _, err := os.Stat(snapFile); os.IsNotExist(err) {
@@ -850,7 +857,7 @@ func revertExternalSnapshot(vmName, snapName string) error {
 		}
 	}
 
-	// 6. 为每块恢复目标盘创建新的可写 overlay。
+	// 7. 为每块恢复目标盘创建新的可写 overlay。
 	// 外部快照的恢复点必须只作为 backing 使用，不能让 VM 直接写入恢复点文件，
 	// 否则从早期快照恢复后再创建分支快照时，会污染这个早期快照。
 	restoreDisks := make(map[string]string, len(originalDisks))
@@ -901,7 +908,7 @@ func revertExternalSnapshot(vmName, snapName string) error {
 		}
 	}
 
-	// 7. 清理 VM XML 中可能残留的 backingStore 自引用
+	// 8. 清理 VM XML 中可能残留的 backingStore 自引用
 	// 检查并移除 backingStore 中指向自己的情况
 	dumpResult := utils.ExecCommand("virsh", "dumpxml", vmName)
 	if dumpResult.Error == nil {
@@ -915,7 +922,7 @@ func revertExternalSnapshot(vmName, snapName string) error {
 		}
 	}
 
-	// 8. 启动前主动修复恢复后磁盘和快照 overlay 的访问权限。
+	// 9. 启动前主动修复恢复后磁盘和快照 overlay 的访问权限。
 	// 自定义存储池路径还需要 AppArmor 允许 virt-aa-helper 读取 backing chain。
 	restoredDiskPaths := make([]string, 0, len(originalDisks)+len(restoreDisks)+len(snapFiles))
 	for _, diskPath := range originalDisks {
@@ -929,14 +936,14 @@ func revertExternalSnapshot(vmName, snapName string) error {
 		return fmt.Errorf("修复快照磁盘访问权限失败: %w", err)
 	}
 
-	// 9. 恢复外部快照不自动清理快照元数据或 overlay 文件，避免恢复成功后快照列表被清空。
+	// 10. 恢复外部快照不自动清理快照元数据或 overlay 文件，避免恢复成功后快照列表被清空。
 	// 同步 libvirt 当前快照指针，否则从内部快照恢复到外部快照后，快照树仍会显示父级内部快照为当前。
 	currentResult := utils.ExecCommand("virsh", "snapshot-current", vmName, snapName)
 	if currentResult.Error != nil {
 		return fmt.Errorf("设置当前快照标记失败: %s", currentResult.Stderr)
 	}
 
-	// 10. 启动虚拟机
+	// 11. 启动虚拟机
 	if err := StartVM(vmName); err != nil {
 		return fmt.Errorf("恢复快照后启动虚拟机失败: %s，请检查虚拟机配置", err.Error())
 	}
@@ -1375,7 +1382,9 @@ func cleanupSnapshotResidualFiles(vmName, snapName string, allSnapshots bool) er
 				return nil
 			}
 			if err := os.Remove(filePath); err != nil {
-				removeErrors = append(removeErrors, fmt.Sprintf("%s: %v", cleanPath, err))
+				if !os.IsNotExist(err) {
+					removeErrors = append(removeErrors, fmt.Sprintf("%s: %v", cleanPath, err))
+				}
 				return nil
 			}
 			log.Printf("[快照残留清理] 已删除残留文件: %s", cleanPath)

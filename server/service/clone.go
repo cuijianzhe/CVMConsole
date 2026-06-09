@@ -27,14 +27,15 @@ var fnOSDeviceIDRegexp = regexp.MustCompile(`^[0-9a-fA-F]{32}([0-9a-fA-F]{8})?$`
 func checkCanceled(ctx context.Context, vmName, diskPath string) error {
 	select {
 	case <-ctx.Done():
-		// 任务被取消，清理资源
 		log.Printf("任务被取消，开始清理资源: vm=%s, disk=%s", vmName, diskPath)
 		if vmName != "" {
 			utils.ExecCommand("virsh", "destroy", vmName)
-			utils.ExecCommand("virsh", "undefine", vmName, "--remove-all-storage", "--nvram", "--snapshots-metadata")
+			utils.ExecCommand("virsh", "undefine", vmName, "--nvram", "--snapshots-metadata")
 		}
 		if diskPath != "" {
-			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(diskPath)))
+			if err := os.Remove(diskPath); err != nil && !os.IsNotExist(err) {
+				log.Printf("[警告] 取消任务时删除磁盘失败: %v", err)
+			}
 		}
 		return taskqueue.ErrTaskCanceled
 	default:
@@ -253,6 +254,11 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 	isWindows := tplType == "windows"
 	isFnOS := tplType == "fnos"
 	isOther := tplType == "other"
+
+	// 克隆前存储空间预检查
+	if err := CheckStorageSpace(filepath.Dir(cloneDisk), int64(params.DiskSize)*1024+1024); err != nil {
+		return nil, err
+	}
 
 	if isOther {
 		// ===== Other 类型：直接复制模板磁盘，不做任何初始化 =====
@@ -496,17 +502,14 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 			}
 		}
 		if err := WriteVMTemplateSource(params.Name, params.Template, params.CloneMode); err != nil {
-			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(cloneDisk)))
-			return nil, err
+			log.Printf("[警告] 写入VM模板源信息失败(VM已创建可用): %v", err)
 		}
 		if err := SetVMRemark(params.Name, params.Remark); err != nil {
-			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(cloneDisk)))
-			return nil, err
+			log.Printf("[警告] 设置VM备注失败(VM已创建可用): %v", err)
 		}
 
 		if err := SetVMFreeze(params.Name, params.Freeze); err != nil {
-			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(cloneDisk)))
-			return nil, err
+			log.Printf("[警告] 设置VM冻结配置失败(VM已创建可用): %v", err)
 		}
 
 		if err := StartVM(params.Name); err != nil {
@@ -571,7 +574,8 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 		}
 		progressFn(70, "SSH 初始化中...")
 		if err := initLinuxClone(params, ip, progressFn); err != nil {
-			return nil, err
+			log.Printf("[警告] Linux SSH初始化失败(VM已创建可用): %v", err)
+			// 不中断流程，VM可正常使用，用户可手动配置
 		}
 
 		if !params.LinuxIdentityPrepared {
@@ -951,14 +955,14 @@ func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ra
 		}
 	}
 	if err := WriteVMTemplateSource(params.Name, params.Template, "linked"); err != nil {
-		return err
+		log.Printf("[警告] 写入VM模板源信息失败(VM已创建可用): %v", err)
 	}
 	if err := SetVMRemark(params.Name, params.Remark); err != nil {
-		return err
+		log.Printf("[警告] 设置VM备注失败(VM已创建可用): %v", err)
 	}
 
 	if err := SetVMFreeze(params.Name, params.Freeze); err != nil {
-		return err
+		log.Printf("[警告] 设置VM冻结配置失败(VM已创建可用): %v", err)
 	}
 
 	startFn := StartVM
@@ -1940,7 +1944,7 @@ func ReinstallVM(ctx context.Context, params *ReinstallParams, progressFn func(i
 		return err
 	}
 
-	backupDiskPath := fmt.Sprintf("%s.reinstall-backup-%d", systemDisk.Path, time.Now().UnixNano())
+	backupDiskPath := fmt.Sprintf("%s.backup.%d", systemDisk.Path, time.Now().UnixNano())
 	if err := os.Rename(systemDisk.Path, backupDiskPath); err != nil {
 		return fmt.Errorf("备份原系统盘失败: %w", err)
 	}
@@ -2039,13 +2043,14 @@ func ReinstallVM(ctx context.Context, params *ReinstallParams, progressFn func(i
 		}
 		progressFn(70, "正在执行 Linux SSH 初始化...")
 		if err := initLinuxClone(cloneParams, ip, progressFn); err != nil {
-			return err
+			log.Printf("[警告] Linux SSH初始化失败(VM已创建可用): %v", err)
+			// 不中断流程，VM可正常使用，用户可手动配置
 		}
 	}
 
 	progressFn(95, "正在更新虚拟机模板与凭据记录...")
 	if err := WriteVMTemplateSource(params.Name, params.Template, "linked"); err != nil {
-		return err
+		log.Printf("[警告] 写入VM模板源信息失败(VM已创建可用): %v", err)
 	}
 	if err := SaveVMCredential(params.Name, cloneParams.User, cloneParams.Password, "reinstall", params.Operator, false); err != nil {
 		log.Printf("[警告] 保存虚拟机 %s 的重装凭据失败: %v", params.Name, err)
@@ -2074,12 +2079,15 @@ func DeleteVMWithDisks(name string, deleteDisks []string, transferDisks []string
 		return err
 	}
 
+	var warnings []string
+
 	// 检查虚拟机磁盘文件是否仍然存在，避免因磁盘丢失导致快照清理失败
 	diskFilesExist := vmHasDiskFiles(name)
 
 	if diskFilesExist {
 		if _, err := DeleteAllSnapshots(name, nil); err != nil {
-			return fmt.Errorf("删除虚拟机前清理快照失败: %w", err)
+			log.Printf("[警告] 删除虚拟机 %s 的快照失败(继续清理): %v", name, err)
+			warnings = append(warnings, fmt.Sprintf("清理快照失败: %v", err))
 		}
 	} else {
 		log.Printf("[警告] 虚拟机 %s 的磁盘文件已丢失，跳过快照清理，直接进行 undefine", name)
@@ -2128,25 +2136,26 @@ func DeleteVMWithDisks(name string, deleteDisks []string, transferDisks []string
 		// 尝试不带 --nvram
 		result = utils.ExecCommand("virsh", "undefine", name, "--snapshots-metadata")
 		if result.Error != nil {
-			// 如果虚拟机已不存在（domain not found），视为已删除成功
 			if strings.Contains(result.Stderr, "domain not found") || strings.Contains(result.Stderr, "Domain not found") {
 				log.Printf("[警告] 虚拟机 %s 已不存在，清理完成", name)
 			} else {
-				return fmt.Errorf("取消虚拟机定义失败: %s", result.Stderr)
+				log.Printf("[警告] 取消虚拟机 %s 定义失败(继续清理磁盘): %s", name, result.Stderr)
+				warnings = append(warnings, fmt.Sprintf("取消虚拟机定义失败: %s", result.Stderr))
 			}
 		}
 	}
 
-	// 处理磁盘：删除指定的磁盘（磁盘文件不存在的会被 rm -f 静默忽略）
-	if deleteDisks != nil {
-		for _, diskPath := range deleteDisks {
-			if diskPath != "" {
-				utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(diskPath)))
+	// 处理磁盘：删除指定的磁盘（尽力而为）
+	deleteDiskList := deleteDisks
+	if deleteDiskList == nil && len(allDiskPaths) > 0 {
+		deleteDiskList = allDiskPaths
+	}
+	for _, diskPath := range deleteDiskList {
+		if diskPath != "" {
+			if err := os.Remove(diskPath); err != nil && !os.IsNotExist(err) {
+				log.Printf("[警告] 删除磁盘文件 %s 失败(继续清理): %v", diskPath, err)
+				warnings = append(warnings, fmt.Sprintf("删除磁盘 %s 失败: %v", diskPath, err))
 			}
-		}
-	} else if len(allDiskPaths) > 0 {
-		for _, diskPath := range allDiskPaths {
-			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(diskPath)))
 		}
 	}
 
@@ -2183,13 +2192,19 @@ func DeleteVMWithDisks(name string, deleteDisks []string, transferDisks []string
 		}
 	}
 
-	// 清理资源历史记录
+	// 清理资源历史记录（尽力而为）
 	DeleteVMStatsRecords(name)
 	DeleteVMRuntimeRecord(name)
 	CleanupVMVPCBinding(name)
 	CleanupLightweightVMResources(name)
-	_ = DeleteVMSchedules(name)
+	if err := DeleteVMSchedules(name); err != nil {
+		log.Printf("[警告] 清理虚拟机 %s 定时任务失败: %v", name, err)
+		warnings = append(warnings, fmt.Sprintf("清理定时任务失败: %v", err))
+	}
 
+	if len(warnings) > 0 {
+		return fmt.Errorf("删除虚拟机 %s 部分步骤失败: %s", name, strings.Join(warnings, "; "))
+	}
 	return nil
 }
 

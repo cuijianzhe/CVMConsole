@@ -161,24 +161,21 @@ func ImportVM(ctx context.Context, params *ImportVMParams, progressFn func(int, 
 		}
 		progressFn(20, "磁盘文件复制完成")
 	} else {
-		// 不保留原文件，移动到 CloneDir
-		progressFn(12, fmt.Sprintf("检测到 %s 格式，正在移动磁盘文件到虚拟机目录（不保留原文件）...", format))
-		moveResult := utils.ExecCommandLongRunning("mv", srcDiskPath, destDiskPath)
-		if moveResult.Error != nil {
-			// 如果跨设备移动失败，回退到 cp + rm
-			log.Printf("mv 失败（可能跨设备），尝试 cp + rm: %s", moveResult.Stderr)
-			progressFn(15, "跨设备复制磁盘文件到虚拟机目录...")
-			cpResult := utils.ExecCommandLongRunning("cp", "--sparse=always", srcDiskPath, destDiskPath)
-			if cpResult.Error != nil {
-				return nil, fmt.Errorf("移动磁盘文件失败: %s", cpResult.Stderr)
-			}
-			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(srcDiskPath)))
+		// 不保留原文件，先复制到 CloneDir（define 成功后再删除源文件，避免 define 失败时源数据丢失）
+		progressFn(12, fmt.Sprintf("检测到 %s 格式，正在复制磁盘文件到虚拟机目录（不保留原文件）...", format))
+		cpResult := utils.ExecCommandLongRunning("cp", "--sparse=always", srcDiskPath, destDiskPath)
+		if cpResult.Error != nil {
+			return nil, fmt.Errorf("复制磁盘文件失败: %s", cpResult.Stderr)
 		}
-		progressFn(20, "磁盘文件移动完成")
+		progressFn(20, "磁盘文件复制完成")
 	}
 
 	// 设置权限
-	utils.ExecCommand("chown", "libvirt-qemu:kvm", destDiskPath)
+	chownResult := utils.ExecCommand("chown", "libvirt-qemu:kvm", destDiskPath)
+	if chownResult.Error != nil {
+		os.Remove(destDiskPath)
+		return nil, fmt.Errorf("设置磁盘权限失败: %s", chownResult.Stderr)
+	}
 
 	// 检查取消
 	select {
@@ -355,6 +352,10 @@ func ImportVM(ctx context.Context, params *ImportVMParams, progressFn func(int, 
 			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(destDiskPath)))
 			return nil, fmt.Errorf("定义虚拟机失败: %s", defineResult.Stderr)
 		}
+		// 移动模式下 define 成功，删除源磁盘文件
+		if !params.CopyDisk {
+			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(srcDiskPath)))
+		}
 		if memoryMeta != nil {
 			if err := writeVMMemoryMetadata(params.Name, memoryMeta); err != nil {
 				utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(destDiskPath)))
@@ -485,6 +486,10 @@ func ImportVM(ctx context.Context, params *ImportVMParams, progressFn func(int, 
 		if defineResult.Error != nil {
 			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(destDiskPath)))
 			return nil, fmt.Errorf("定义虚拟机失败: %s", defineResult.Stderr)
+		}
+		// 移动模式下 define 成功，删除源磁盘文件
+		if !params.CopyDisk {
+			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(srcDiskPath)))
 		}
 		if memoryMeta != nil {
 			if err := writeVMMemoryMetadata(params.Name, memoryMeta); err != nil {
@@ -745,18 +750,13 @@ func ImportDiskByPath(ctx context.Context, params *ImportDiskByPathParams, progr
 	needsConversion := srcFormat != "qcow2"
 
 	if needsConversion {
-		// 非 qcow2 格式，使用 qemu-img convert 转换
+		// 非 qcow2 格式，使用 qemu-img convert 转换（源文件在 define 成功后删除）
 		progressFn(12, fmt.Sprintf("检测到 %s 格式，正在转换为 qcow2（此过程可能需要较长时间）...", srcFormat))
 		convertCmd := fmt.Sprintf("qemu-img convert -f '%s' -O qcow2 '%s' '%s'",
 			srcFormat, mainDiskSrc, destDiskPath)
 		convertResult := utils.ExecCommandLongRunning("bash", "-c", convertCmd)
 		if convertResult.Error != nil {
 			return nil, fmt.Errorf("磁盘格式转换失败: %s", convertResult.Stderr)
-		}
-		// 如果不保留原磁盘，删除源文件
-		if !params.CopyDisk {
-			progressFn(18, "正在删除原磁盘文件...")
-			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(mainDiskSrc)))
 		}
 		progressFn(20, "磁盘格式转换完成")
 	} else {
@@ -769,24 +769,22 @@ func ImportDiskByPath(ctx context.Context, params *ImportDiskByPathParams, progr
 			}
 			progressFn(20, "磁盘文件复制完成")
 		} else {
-			progressFn(12, "检测到 qcow2 格式，正在移动磁盘文件到目标存储位置（不保留原文件）...")
-			moveResult := utils.ExecCommandLongRunning("mv", mainDiskSrc, destDiskPath)
-			if moveResult.Error != nil {
-				// 跨设备移动失败，回退到 cp + rm
-				log.Printf("mv 失败（可能跨设备），尝试 cp + rm: %s", moveResult.Stderr)
-				progressFn(15, "跨设备复制磁盘文件到目标存储位置...")
-				cpResult := utils.ExecCommandLongRunning("cp", "--sparse=always", mainDiskSrc, destDiskPath)
-				if cpResult.Error != nil {
-					return nil, fmt.Errorf("移动磁盘文件失败: %s", cpResult.Stderr)
-				}
-				utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(mainDiskSrc)))
+			// 不保留原文件，先复制（define 成功后再删除源文件，避免 define 失败时源数据丢失）
+			progressFn(12, "检测到 qcow2 格式，正在复制磁盘文件到目标存储位置（不保留原文件）...")
+			cpResult := utils.ExecCommandLongRunning("cp", "--sparse=always", mainDiskSrc, destDiskPath)
+			if cpResult.Error != nil {
+				return nil, fmt.Errorf("复制磁盘文件失败: %s", cpResult.Stderr)
 			}
-			progressFn(20, "磁盘文件移动完成")
+			progressFn(20, "磁盘文件复制完成")
 		}
 	}
 
 	// 设置权限
-	utils.ExecCommand("chown", "libvirt-qemu:kvm", destDiskPath)
+	chownResult := utils.ExecCommand("chown", "libvirt-qemu:kvm", destDiskPath)
+	if chownResult.Error != nil {
+		os.Remove(destDiskPath)
+		return nil, fmt.Errorf("设置磁盘权限失败: %s", chownResult.Stderr)
+	}
 
 	// 检查取消
 	select {
@@ -955,6 +953,10 @@ func ImportDiskByPath(ctx context.Context, params *ImportDiskByPathParams, progr
 			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(destDiskPath)))
 			return nil, fmt.Errorf("定义虚拟机失败: %s", defineResult.Stderr)
 		}
+		// 移动模式下 define 成功，删除源磁盘文件
+		if !params.CopyDisk {
+			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(mainDiskSrc)))
+		}
 		if memoryMeta != nil {
 			if err := writeVMMemoryMetadata(params.Name, memoryMeta); err != nil {
 				utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(destDiskPath)))
@@ -1089,6 +1091,10 @@ func ImportDiskByPath(ctx context.Context, params *ImportDiskByPathParams, progr
 		if defineResult.Error != nil {
 			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(destDiskPath)))
 			return nil, fmt.Errorf("定义虚拟机失败: %s", defineResult.Stderr)
+		}
+		// 移动模式下 define 成功，删除源磁盘文件
+		if !params.CopyDisk {
+			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(mainDiskSrc)))
 		}
 		if memoryMeta != nil {
 			if err := writeVMMemoryMetadata(params.Name, memoryMeta); err != nil {
@@ -1322,10 +1328,6 @@ func importSingleDiskToVM(ctx context.Context, vmName string, entry *ExtraImport
 		if convertResult.Error != nil {
 			return "", fmt.Errorf("磁盘格式转换失败: %s", convertResult.Stderr)
 		}
-		if !entry.CopyDisk {
-			progressFn(18, "正在删除原磁盘文件...")
-			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(srcDiskPath)))
-		}
 	} else {
 		if entry.CopyDisk {
 			progressFn(10, "正在复制磁盘文件（保留原文件）...")
@@ -1334,20 +1336,20 @@ func importSingleDiskToVM(ctx context.Context, vmName string, entry *ExtraImport
 				return "", fmt.Errorf("复制磁盘文件失败: %s", cpResult.Stderr)
 			}
 		} else {
-			progressFn(10, "正在移动磁盘文件（不保留原文件）...")
-			moveResult := utils.ExecCommandLongRunning("mv", srcDiskPath, destDiskPath)
-			if moveResult.Error != nil {
-				log.Printf("mv 失败（可能跨设备），尝试 cp + rm: %s", moveResult.Stderr)
-				cpResult := utils.ExecCommandLongRunning("cp", "--sparse=always", srcDiskPath, destDiskPath)
-				if cpResult.Error != nil {
-					return "", fmt.Errorf("移动磁盘文件失败: %s", cpResult.Stderr)
-				}
-				utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(srcDiskPath)))
+			// 不保留原文件，先复制（挂载成功后再删除源文件，避免挂载失败时源数据丢失）
+			progressFn(10, "正在复制磁盘文件（不保留原文件）...")
+			cpResult := utils.ExecCommandLongRunning("cp", "--sparse=always", srcDiskPath, destDiskPath)
+			if cpResult.Error != nil {
+				return "", fmt.Errorf("复制磁盘文件失败: %s", cpResult.Stderr)
 			}
 		}
 	}
 
-	utils.ExecCommand("chown", "libvirt-qemu:kvm", destDiskPath)
+	chownResult := utils.ExecCommand("chown", "libvirt-qemu:kvm", destDiskPath)
+	if chownResult.Error != nil {
+		os.Remove(destDiskPath)
+		return "", fmt.Errorf("设置磁盘权限失败: %s", chownResult.Stderr)
+	}
 
 	progressFn(80, "挂载磁盘到虚拟机...")
 	if _, attachErr := AttachExistingDisk(vmName, destDiskPath, entry.Bus); attachErr != nil {
@@ -1355,6 +1357,10 @@ func importSingleDiskToVM(ctx context.Context, vmName string, entry *ExtraImport
 		return "", fmt.Errorf("挂载磁盘失败: %w", attachErr)
 	}
 
+	// 移动模式下挂载成功，删除源磁盘文件
+	if !entry.CopyDisk {
+		utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(srcDiskPath)))
+	}
 	progressFn(100, "磁盘导入完成")
 	return nextDev, nil
 }

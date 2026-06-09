@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"kvm_console/utils"
@@ -123,14 +124,26 @@ func EnableVnc(vmName, password string) error {
 
 	// 应用配置
 	if state == "running" {
-		utils.ExecCommand("virsh", "destroy", vmName)
-		utils.ExecCommand("virsh", "define", tmpXML)
+		destroyResult := utils.ExecCommand("virsh", "destroy", vmName)
+		if destroyResult.Error != nil {
+			log.Printf("[警告] VNC配置: 关闭虚拟机失败(可能已关闭): %s", destroyResult.Stderr)
+		}
+
+		defineResult := utils.ExecCommand("virsh", "define", tmpXML)
+		if defineResult.Error != nil {
+			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(tmpXML)))
+			return fmt.Errorf("VNC配置: 应用XML定义失败: %s", defineResult.Stderr)
+		}
 		if err := StartVM(vmName); err != nil {
 			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(tmpXML)))
 			return err
 		}
 	} else {
-		utils.ExecCommand("virsh", "define", tmpXML)
+		defineResult := utils.ExecCommand("virsh", "define", tmpXML)
+		if defineResult.Error != nil {
+			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(tmpXML)))
+			return fmt.Errorf("VNC配置: 应用XML定义失败: %s", defineResult.Stderr)
+		}
 	}
 
 	utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(tmpXML)))
@@ -161,14 +174,26 @@ func DisableVnc(vmName string) error {
 		newGraphics, utils.ShellSingleQuote(tmpXML)))
 
 	if state == "running" {
-		utils.ExecCommand("virsh", "destroy", vmName)
-		utils.ExecCommand("virsh", "define", tmpXML)
+		destroyResult := utils.ExecCommand("virsh", "destroy", vmName)
+		if destroyResult.Error != nil {
+			log.Printf("[警告] VNC配置: 关闭虚拟机失败(可能已关闭): %s", destroyResult.Stderr)
+		}
+
+		defineResult := utils.ExecCommand("virsh", "define", tmpXML)
+		if defineResult.Error != nil {
+			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(tmpXML)))
+			return fmt.Errorf("VNC配置: 应用XML定义失败: %s", defineResult.Stderr)
+		}
 		if err := StartVM(vmName); err != nil {
 			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(tmpXML)))
 			return err
 		}
 	} else {
-		utils.ExecCommand("virsh", "define", tmpXML)
+		defineResult := utils.ExecCommand("virsh", "define", tmpXML)
+		if defineResult.Error != nil {
+			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(tmpXML)))
+			return fmt.Errorf("VNC配置: 应用XML定义失败: %s", defineResult.Stderr)
+		}
 	}
 
 	utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(tmpXML)))
@@ -204,7 +229,10 @@ func ChangeVncPassword(vmName, newPassword string) error {
 		utils.ExecShell(fmt.Sprintf(
 			`sed -i "s|passwd='[^']*'|passwd='%s'|" %s`,
 			newPassword, utils.ShellSingleQuote(tmpXML)))
-		utils.ExecCommand("virsh", "define", tmpXML)
+		defineResult := utils.ExecCommand("virsh", "define", tmpXML)
+		if defineResult.Error != nil {
+			log.Printf("[警告] VNC配置: 持久化密码到XML定义失败: %s", defineResult.Stderr)
+		}
 		utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(tmpXML)))
 	}
 
@@ -306,14 +334,26 @@ func ExposeVnc(vmName string, expose bool) error {
 
 	// 应用配置
 	if state == "running" {
-		utils.ExecCommand("virsh", "destroy", vmName)
-		utils.ExecCommand("virsh", "define", tmpXML)
+		destroyResult := utils.ExecCommand("virsh", "destroy", vmName)
+		if destroyResult.Error != nil {
+			log.Printf("[警告] VNC配置: 关闭虚拟机失败(可能已关闭): %s", destroyResult.Stderr)
+		}
+
+		defineResult := utils.ExecCommand("virsh", "define", tmpXML)
+		if defineResult.Error != nil {
+			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(tmpXML)))
+			return fmt.Errorf("VNC配置: 应用XML定义失败: %s", defineResult.Stderr)
+		}
 		if err := StartVM(vmName); err != nil {
 			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(tmpXML)))
 			return err
 		}
 	} else {
-		utils.ExecCommand("virsh", "define", tmpXML)
+		defineResult := utils.ExecCommand("virsh", "define", tmpXML)
+		if defineResult.Error != nil {
+			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(tmpXML)))
+			return fmt.Errorf("VNC配置: 应用XML定义失败: %s", defineResult.Stderr)
+		}
 	}
 
 	utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(tmpXML)))

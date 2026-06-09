@@ -209,6 +209,9 @@ func DeleteNetworkBridge(id uint) error {
 	if count > 0 {
 		return fmt.Errorf("该网桥仍有交换机使用，不能删除")
 	}
+	if err := EnsureOVSBridgeExists(row.Name); err != nil {
+		return fmt.Errorf("网桥 %s 不存在或 OVS 服务异常: %w", row.Name, err)
+	}
 	_ = os.Remove(bridgeRestoreScriptPath(row.Name))
 	if row.MigrateHostIP {
 		migrateBridgeIPv4ToInterface(row.Name, row.UplinkIF)

@@ -127,6 +127,12 @@ func ensureFirewallDir() error {
 	if err := os.MkdirAll(filepath.Join(firewallDir, "backups"), 0755); err != nil {
 		return fmt.Errorf("创建防火墙目录失败: %w", err)
 	}
+	// 测试目录可写性
+	testFile := filepath.Join(firewallDir, ".writetest")
+	if err := os.WriteFile(testFile, []byte(""), 0600); err != nil {
+		return fmt.Errorf("防火墙目录不可写: %w", err)
+	}
+	os.Remove(testFile)
 	return nil
 }
 

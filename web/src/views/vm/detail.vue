@@ -44,6 +44,9 @@
             <span class="meta-divider"></span>
             <span class="meta-item">
               <el-icon><Coin /></el-icon> {{ vmInfo.disk_size || '-' }}
+              <el-tooltip v-if="vmInfo.disk_healthy === false" content="系统磁盘文件缺失，虚拟机可能无法正常启动" placement="top" effect="dark">
+                <el-tag size="small" type="danger" effect="dark" round style="margin-left: 6px;">磁盘异常</el-tag>
+              </el-tooltip>
             </span>
             <span class="meta-divider"></span>
             <span class="meta-item">
@@ -287,7 +290,12 @@
                 </div>
                 <div class="info-row">
                   <span class="info-label">系统磁盘</span>
-                  <span class="info-value mono">{{ vmInfo.disk_size || '-' }}</span>
+                  <span class="info-value mono">
+                    {{ vmInfo.disk_size || '-' }}
+                    <el-tooltip v-if="vmInfo.disk_healthy === false" content="系统磁盘文件缺失，虚拟机可能无法正常启动" placement="top" effect="dark">
+                      <el-tag size="small" type="danger" effect="plain" style="margin-left: 6px;">磁盘缺失</el-tag>
+                    </el-tooltip>
+                  </span>
                 </div>
                 <div class="info-row">
                   <span class="info-label">操作系统</span>
@@ -804,6 +812,7 @@ const vmInfo = reactive({
   ip: '',
   template: '',
   disk_size: '',
+  disk_healthy: null,
   os_type: '',
   video_model: '',
   cpu_limit_percent: 0,

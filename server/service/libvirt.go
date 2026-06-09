@@ -3,6 +3,8 @@ package service
 import (
 	"encoding/xml"
 	"fmt"
+	"log"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -80,6 +82,7 @@ type BootDevice struct {
 type VmDetail struct {
 	VmInfo
 	DiskPath               string                    `json:"disk_path"`    // 磁盘路径
+	DiskHealthy            *bool                     `json:"disk_healthy"`  // 磁盘完整性标记: nil=未检查, true=正常, false=磁盘文件缺失
 	UUID                   string                    `json:"uuid"`         // 虚拟机 UUID
 	VNCPort                string                    `json:"vnc_port"`     // VNC 端口
 	Snapshots              []string                  `json:"snapshots"`    // 快照列表
@@ -401,9 +404,21 @@ func GetVM(name string) (*VmDetail, error) {
 
 	// 磁盘
 	diskInfo := getVMDiskInfo(name)
-	vm.DiskSize = diskInfo.size
 	vm.DiskPath = diskInfo.path
+	vm.DiskSize = diskInfo.size
 	vm.Template = diskInfo.template
+
+	// 检查系统盘完整性（仅检查第一块非 cdrom 磁盘）
+	if diskInfo.path != "" {
+		if _, err := os.Stat(diskInfo.path); err != nil {
+			unhealthy := false
+			vm.DiskHealthy = &unhealthy
+			log.Printf("[警告] 虚拟机 %s 磁盘文件缺失: %s", name, diskInfo.path)
+		} else {
+			healthy := true
+			vm.DiskHealthy = &healthy
+		}
+	}
 
 	// 网络
 	netInfo := getVMNetworkInfo(name)
@@ -639,21 +654,30 @@ func startVM(name string, fixOnReboot bool) error {
 		FixOnReboot(name)
 	}
 
-	// 检测当前状态，暂停状态使用 resume 而不是 start
+	// 检测当前状态
 	stateResult := utils.ExecCommand("virsh", "domstate", name)
-	if stateResult.Error == nil && strings.TrimSpace(stateResult.Stdout) == "paused" {
-		if isQEMUInternalErrorPaused(name) {
-			return fmt.Errorf("虚拟机处于 QEMU 内部错误暂停，当前状态不能继续启动；请先执行重置或强制断电后重新开机。如果重置后仍反复进入该状态，请检查宿主机 KVM/嵌套虚拟化能力和 QEMU 日志")
+	if stateResult.Error == nil {
+		state := strings.TrimSpace(stateResult.Stdout)
+		switch state {
+		case "running":
+			return fmt.Errorf("虚拟机 %s 已在运行中", name)
+		case "paused":
+			if isQEMUInternalErrorPaused(name) {
+				return fmt.Errorf("虚拟机处于 QEMU 内部错误暂停，当前状态不能继续启动；请先执行重置或强制断电后重新开机。如果重置后仍反复进入该状态，请检查宿主机 KVM/嵌套虚拟化能力和 QEMU 日志")
+			}
+			result := utils.ExecCommand("virsh", "resume", name)
+			if result.Error != nil {
+				return formatResumeError(name, result.Stderr)
+			}
+			UpdateVMRuntimeState(name, "running", time.Now())
+			if err := applyVMRuntimeNetworkState(name); err != nil {
+				return fmt.Errorf("恢复运行成功，但%w", err)
+			}
+			return nil
+		case "crashed", "pmsuspended":
+			log.Printf("[警告] 虚拟机 %s 处于异常状态(%s)，尝试强制关闭后重启", name, state)
+			utils.ExecCommand("virsh", "destroy", name)
 		}
-		result := utils.ExecCommand("virsh", "resume", name)
-		if result.Error != nil {
-			return formatResumeError(name, result.Stderr)
-		}
-		UpdateVMRuntimeState(name, "running", time.Now())
-		if err := applyVMRuntimeNetworkState(name); err != nil {
-			return fmt.Errorf("恢复运行成功，但%w", err)
-		}
-		return nil
 	}
 
 	// 启动前清理不完整的 backingStore XML（防止 AppArmor 拦截 backing chain 访问）

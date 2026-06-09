@@ -491,6 +491,10 @@ WantedBy=multi-user.target
 }
 
 func ReloadOVSDNSMasq() {
+	if err := EnsureOVSBridgeExists(ovsBridgeName()); err != nil {
+		fmt.Printf("[警告] OVS 网桥不存在，跳过 dnsmasq 重载: %v\n", err)
+		return
+	}
 	result := utils.ExecCommand("systemctl", "reload", ovsDNSMasqUnit)
 	if result.Error != nil {
 		utils.ExecCommand("systemctl", "restart", ovsDNSMasqUnit)

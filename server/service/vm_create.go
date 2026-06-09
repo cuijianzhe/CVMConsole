@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -207,6 +208,15 @@ func CreateVM(params *CreateVMParams, progressFn func(int, string)) (string, err
 	}
 
 	progressFn(10, "创建磁盘...")
+
+	// 检查目录存在性和可写性
+	if err := CheckDirWritable(cloneDir); err != nil {
+		return "", fmt.Errorf("磁盘存储目录不可用: %w", err)
+	}
+	// 检查存储空间（预留额外1GB缓冲）
+	if err := CheckStorageSpace(cloneDir, int64(params.DiskSize)*1024+1024); err != nil {
+		return "", err
+	}
 
 	// 创建磁盘
 	diskPath := filepath.Join(cloneDir, fmt.Sprintf("%s.%s", params.Name, params.DiskFormat))
@@ -489,8 +499,10 @@ func CreateVM(params *CreateVMParams, progressFn func(int, string)) (string, err
 		return "", err
 	}
 	if err := StartVM(params.Name); err != nil {
+		// 先 undefine VM 定义，再删除磁盘
+		utils.ExecCommand("virsh", "undefine", params.Name, "--nvram", "--snapshots-metadata")
 		utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(diskPath)))
-		return "", err
+		return "", fmt.Errorf("启动虚拟机失败(已清理资源): %w", err)
 	}
 
 	progressFn(70, "配置虚拟机...")
@@ -506,6 +518,7 @@ func CreateVM(params *CreateVMParams, progressFn func(int, string)) (string, err
 	// 额外磁盘
 	if len(params.ExtraDisks) > 0 {
 		progressFn(85, "挂载额外磁盘...")
+		var extraDiskFailures []string
 		for i, ed := range params.ExtraDisks {
 			format := ed.Format
 			if format == "" {
@@ -519,6 +532,7 @@ func CreateVM(params *CreateVMParams, progressFn func(int, string)) (string, err
 			if strings.TrimSpace(ed.StoragePoolID) != "" {
 				resolvedDir, _, resolveErr := ResolveVMStorageDir(ed.StoragePoolID, params.IsAdmin)
 				if resolveErr != nil {
+					extraDiskFailures = append(extraDiskFailures, fmt.Sprintf("磁盘%d: 解析存储位置失败: %s", i+1, resolveErr.Error()))
 					progressFn(85, fmt.Sprintf("解析额外磁盘 %d 存储位置失败: %s", i+1, resolveErr.Error()))
 					continue
 				}
@@ -526,8 +540,12 @@ func CreateVM(params *CreateVMParams, progressFn func(int, string)) (string, err
 			}
 			_, err := AddDiskWithBusInDir(params.Name, ed.Size, format, bus, diskDir)
 			if err != nil {
+				extraDiskFailures = append(extraDiskFailures, fmt.Sprintf("磁盘%d: 挂载失败: %s", i+1, err.Error()))
 				progressFn(85, fmt.Sprintf("挂载额外磁盘 %d 失败: %s", i+1, err.Error()))
 			}
+		}
+		if len(extraDiskFailures) > 0 {
+			log.Printf("[CreateVM] 虚拟机 %s 额外磁盘部分失败: %s", params.Name, strings.Join(extraDiskFailures, "; "))
 		}
 	}
 

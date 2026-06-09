@@ -235,6 +235,12 @@ func AttachExistingDisk(vmName, diskPath, bus string) (string, error) {
 		return "", fmt.Errorf("磁盘文件不存在: %s", diskPath)
 	}
 
+	// 检查文件可读性（确保 libvirt 有权限）
+	readResult := utils.ExecShell(fmt.Sprintf("test -r %s && echo ok", utils.ShellSingleQuote(diskPath)))
+	if strings.TrimSpace(readResult.Stdout) != "ok" {
+		return "", fmt.Errorf("磁盘文件不可读（权限不足）: %s，请确保文件归 libvirt-qemu:kvm 所有", diskPath)
+	}
+
 	// 如果文件在用户存储目录中，移动到默认磁盘目录
 	storageMountPoint := GetStorageMountPoint()
 	if storageMountPoint != "" && strings.HasPrefix(diskPath, storageMountPoint) {

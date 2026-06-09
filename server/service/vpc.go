@@ -862,6 +862,11 @@ func applyVPCSwitchBandwidth(sw model.VPCSwitch) error {
 	unlock := lockVPCSwitchBandwidth(sw.ID)
 	defer unlock()
 
+	bridge := BridgeNameForSwitch(sw)
+	if err := EnsureOVSBridgeExists(bridge); err != nil {
+		return fmt.Errorf("配置 VPC 交换机带宽失败: %w", err)
+	}
+
 	normalizeVPCSwitchBandwidthForResponse(&sw)
 	downMbps, upMbps := effectiveVPCSwitchBandwidth(sw)
 	downRateKbit := downMbps * 1000
@@ -870,7 +875,6 @@ func applyVPCSwitchBandwidth(sw model.VPCSwitch) error {
 		clearVPCSwitchBandwidth(sw)
 		return nil
 	}
-	bridge := BridgeNameForSwitch(sw)
 	gatewayOfport := ""
 	if downRateKbit > 0 && !SwitchUsesDirectBridge(sw) {
 		gatewayOfport = getOVSInterfaceOfPort(vpcGatewayPortName(sw.ID))
@@ -1092,6 +1096,9 @@ func applyDirectBridgePortSecurity(bridge string, vmPorts []vpcSwitchVMPortMatch
 	if strings.TrimSpace(bridge) == "" {
 		return nil
 	}
+	if err := EnsureOVSBridgeExists(bridge); err != nil {
+		return fmt.Errorf("配置桥接端口安全策略失败: %w", err)
+	}
 	mode := "no-flood"
 	if allowPromiscuous {
 		mode = "flood"
@@ -1164,7 +1171,15 @@ log-dhcp
 
 func startVPCDNSMasq(id uint) {
 	stopVPCDNSMasq(id)
-	utils.ExecCommand("dnsmasq", "--conf-file="+vpcDNSMasqConfigPath(id))
+	configPath := vpcDNSMasqConfigPath(id)
+	if _, err := os.Stat(configPath); err != nil {
+		log.Printf("[警告] dnsmasq 配置文件不存在: %s", configPath)
+		return
+	}
+	result := utils.ExecCommand("dnsmasq", "--conf-file="+configPath)
+	if result.Error != nil {
+		log.Printf("[警告] 启动 dnsmasq 失败: %s", result.Stderr)
+	}
 }
 
 func ensureVPCDNSMasq(id uint, configChanged bool) {
@@ -1779,6 +1794,12 @@ func applyVPCSwitchRuntime(vmName string, sw model.VPCSwitch, ensureSwitch bool)
 	}
 	vnetIF := getVMVnetIF(vmName)
 	if vnetIF == "" {
+		log.Printf("[警告] 无法获取 VM %s 的 vnet 接口，跳过 VLAN tag 设置", vmName)
+		return nil
+	}
+	// 检查端口是否实际存在于 OVS
+	if !ovsPortExists(vnetIF) {
+		log.Printf("[警告] OVS 端口 %s 不存在，跳过 VLAN tag 设置", vnetIF)
 		return nil
 	}
 	targetTag := strconv.Itoa(sw.VLANID)
@@ -1794,6 +1815,15 @@ func applyVPCSwitchRuntime(vmName string, sw model.VPCSwitch, ensureSwitch bool)
 		}
 	}
 	return nil
+}
+
+// ovsPortExists 检查指定端口是否存在于 OVS 网桥上
+func ovsPortExists(port string) bool {
+	if strings.TrimSpace(port) == "" {
+		return false
+	}
+	result := utils.ExecCommand("ovs-vsctl", "--if-exists", "get", "Port", port, "name")
+	return result.Error == nil
 }
 
 func getOVSPortTag(port string) (string, bool) {
@@ -2292,6 +2322,12 @@ func ensureVMBridgeInterfaceConfig(vmName, bridge string, vlanID int) error {
 func ensureVMDirectBridgeRuntimeVLAN(vmName string, vlanID int) error {
 	vnetIF := getVMVnetIF(vmName)
 	if vnetIF == "" {
+		log.Printf("[警告] 无法获取桥接 VM %s 的 vnet 接口，跳过 VLAN tag 设置", vmName)
+		return nil
+	}
+	// 检查端口是否实际存在于 OVS
+	if !ovsPortExists(vnetIF) {
+		log.Printf("[警告] OVS 端口 %s 不存在，跳过桥接 VLAN tag 设置", vnetIF)
 		return nil
 	}
 	if vlanID > 0 {
@@ -3476,10 +3512,15 @@ func applyNewInterfaceRuntime(vmName string, sw model.VPCSwitch, interfaceOrder 
 	}
 
 	if !SwitchUsesDirectBridge(sw) && sw.VLANID > 0 {
-		targetTag := strconv.Itoa(sw.VLANID)
-		result := utils.ExecCommand("ovs-vsctl", "set", "Port", vnetIF, "tag="+targetTag)
-		if result.Error != nil {
-			return fmt.Errorf("设置新网口 OVS VLAN tag 失败: %s", result.Stderr)
+		// 检查端口是否实际存在于 OVS
+		if !ovsPortExists(vnetIF) {
+			log.Printf("[警告] OVS 端口 %s 不存在，跳过新网口 VLAN tag 设置", vnetIF)
+		} else {
+			targetTag := strconv.Itoa(sw.VLANID)
+			result := utils.ExecCommand("ovs-vsctl", "set", "Port", vnetIF, "tag="+targetTag)
+			if result.Error != nil {
+				return fmt.Errorf("设置新网口 OVS VLAN tag 失败: %s", result.Stderr)
+			}
 		}
 	}
 	// 清理该接口的旧 DHCP 租约

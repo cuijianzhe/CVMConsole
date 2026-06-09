@@ -1056,6 +1056,34 @@ func migrationURIHost(host string) string {
 
 func prepareLiveMigrationTargets(ctx context.Context, node model.HostNode, preview *VMMigrationPreview) ([]string, error) {
 	var created []string
+
+	// 在创建目标磁盘前，按目录校验远程节点剩余空间
+	requiredByDir := map[string]int64{}
+	for _, disk := range preview.Disks {
+		if strings.TrimSpace(disk.TargetPath) == "" || disk.VirtualSize <= 0 {
+			continue
+		}
+		dir := filepath.Dir(disk.TargetPath)
+		requiredByDir[dir] += disk.VirtualSize / (1024 * 1024) // bytes → MB
+	}
+	for dir, requiredMB := range requiredByDir {
+		if requiredMB <= 0 {
+			continue
+		}
+		checkCmd := fmt.Sprintf("df -BM --output=avail %s | tail -1 | tr -d ' M'", utils.ShellSingleQuote(dir))
+		out, err := remoteSSHCommand(ctx, node, checkCmd, 30*time.Second)
+		if err != nil {
+			return created, fmt.Errorf("检查目标目录 %s 磁盘空间失败: %w", dir, err)
+		}
+		availMB, parseErr := strconv.ParseInt(strings.TrimSpace(out), 10, 64)
+		if parseErr != nil {
+			return created, fmt.Errorf("解析目标目录 %s 可用空间失败: %w", dir, parseErr)
+		}
+		if availMB < requiredMB {
+			return created, fmt.Errorf("目标目录 %s 可用空间不足，需要 %d MB，当前可用 %d MB", dir, requiredMB, availMB)
+		}
+	}
+
 	for _, disk := range preview.Disks {
 		if strings.TrimSpace(disk.TargetPath) == "" {
 			return created, fmt.Errorf("目标磁盘路径为空: %s", disk.Target)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -152,6 +153,15 @@ func LinkedCloneVM(ctx context.Context, params *LinkedCloneParams, progressFn fu
 	params.BootType = bootType
 
 	cloneDisk := filepath.Join(cloneDir, params.Name+".qcow2")
+
+	// 预检查：目录可写性和存储空间
+	if err := CheckDirWritable(filepath.Dir(cloneDisk)); err != nil {
+		return nil, fmt.Errorf("克隆磁盘存储目录不可用: %w", err)
+	}
+	// 链式克隆空间需求较小（仅差异数据），预留2GB
+	if err := CheckStorageSpace(filepath.Dir(cloneDisk), 2048); err != nil {
+		return nil, err
+	}
 
 	if params.CloneMode == "full" {
 		progressFn(10, "创建原生完整克隆磁盘（脱离链式条件）...")
@@ -396,11 +406,27 @@ func LinkedCloneVM(ctx context.Context, params *LinkedCloneParams, progressFn fu
 }
 
 func cleanupLinkedCloneArtifacts(vmName, diskPath string) {
+	// 如果提供了 VM 名称，尝试清理 libvirt 定义
 	if strings.TrimSpace(vmName) != "" {
-		utils.ExecCommand("virsh", "destroy", vmName)
-		utils.ExecCommand("virsh", "undefine", vmName, "--nvram", "--snapshots-metadata")
+		// 尝试销毁（如果 VM 正在运行）
+		if result := utils.ExecCommand("virsh", "destroy", vmName); result.Error != nil {
+			log.Printf("[LinkedClone] 销毁虚拟机 %s 失败（可能未运行）: %s", vmName, strings.TrimSpace(result.Stderr))
+		} else {
+			log.Printf("[LinkedClone] 已销毁虚拟机 %s", vmName)
+		}
+		// 尝试取消定义
+		if result := utils.ExecCommand("virsh", "undefine", vmName, "--nvram", "--snapshots-metadata"); result.Error != nil {
+			log.Printf("[LinkedClone] 取消定义虚拟机 %s 失败: %s", vmName, strings.TrimSpace(result.Stderr))
+		} else {
+			log.Printf("[LinkedClone] 已取消定义虚拟机 %s", vmName)
+		}
 	}
+	// 删除磁盘文件
 	if strings.TrimSpace(diskPath) != "" {
-		utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(diskPath)))
+		if err := os.Remove(diskPath); err != nil && !os.IsNotExist(err) {
+			log.Printf("[LinkedClone] 删除磁盘文件 %s 失败: %v", diskPath, err)
+		} else if err == nil {
+			log.Printf("[LinkedClone] 已删除磁盘文件 %s", diskPath)
+		}
 	}
 }
