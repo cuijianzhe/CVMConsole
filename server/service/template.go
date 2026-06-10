@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	libvirt "github.com/digitalocean/go-libvirt"
+
 	"kvm_console/config"
 	"kvm_console/logger"
 	"kvm_console/utils"
@@ -388,13 +390,13 @@ func getVMVideoModel(vmName string) string {
 	if vmName == "" {
 		return ""
 	}
-	if xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName, "--inactive"); xmlResult.Error == nil {
-		if videoModel := ParseVMVideoModelFromDomainXML(xmlResult.Stdout); videoModel != "" {
+	if xmlStr, err := getDomainXMLRPC(vmName, 2); err == nil {
+		if videoModel := ParseVMVideoModelFromDomainXML(xmlStr); videoModel != "" {
 			return videoModel
 		}
 	}
-	if xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName); xmlResult.Error == nil {
-		return ParseVMVideoModelFromDomainXML(xmlResult.Stdout)
+	if xmlStr, err := getDomainXMLRPC(vmName, 0); err == nil {
+		return ParseVMVideoModelFromDomainXML(xmlStr)
 	}
 	return ""
 }
@@ -404,11 +406,13 @@ func getVMCPUTopologyMode(vmName string) string {
 	if vmName == "" {
 		return ""
 	}
-	if xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName, "--inactive"); xmlResult.Error == nil {
-		return ParseVMCPUTopologyModeFromDomainXML(xmlResult.Stdout)
+	if xmlStr, err := getDomainXMLRPC(vmName, 2); err == nil {
+		if mode := ParseVMCPUTopologyModeFromDomainXML(xmlStr); mode != "" {
+			return mode
+		}
 	}
-	if xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName); xmlResult.Error == nil {
-		return ParseVMCPUTopologyModeFromDomainXML(xmlResult.Stdout)
+	if xmlStr, err := getDomainXMLRPC(vmName, 0); err == nil {
+		return ParseVMCPUTopologyModeFromDomainXML(xmlStr)
 	}
 	return ""
 }
@@ -468,12 +472,12 @@ func parseSizeValueToGB(value string) int {
 func collectVMTemplateDefaultConfig(vmName string) *TemplateDefaultConfig {
 	config := &TemplateDefaultConfig{}
 
-	infoResult := utils.ExecCommand("virsh", "dominfo", vmName)
-	if infoResult.Error == nil {
-		config.VCPU = parseInfoInt(infoResult.Stdout, "CPU(s):")
-		memoryMB := parseInfoInt(infoResult.Stdout, "Max memory:") / 1024
+	vcpu, maxMemKB, usedMemKB, _, err := getDomainInfoRPC(vmName)
+	if err == nil {
+		config.VCPU = vcpu
+		memoryMB := int(maxMemKB) / 1024
 		if memoryMB <= 0 {
-			memoryMB = parseInfoInt(infoResult.Stdout, "Used memory:") / 1024
+			memoryMB = int(usedMemKB) / 1024
 		}
 		if memoryMB > 0 {
 			config.RAM = int(math.Round(float64(memoryMB) / 1024.0))
@@ -577,15 +581,12 @@ func detectBootTypeFromDomainXML(xmlContent string) string {
 }
 
 func DetectVMBootType(vmName string) string {
-	for _, args := range [][]string{
-		{"dumpxml", vmName, "--inactive"},
-		{"dumpxml", vmName},
-	} {
-		result := utils.ExecCommand("virsh", args...)
-		if result.Error != nil {
+	for _, flags := range []uint32{2, 0} {
+		xmlStr, err := getDomainXMLRPC(vmName, libvirt.DomainXMLFlags(flags))
+		if err != nil {
 			continue
 		}
-		bootType := detectBootTypeFromDomainXML(result.Stdout)
+		bootType := detectBootTypeFromDomainXML(xmlStr)
 		if bootType != "" {
 			return bootType
 		}
@@ -594,15 +595,12 @@ func DetectVMBootType(vmName string) string {
 }
 
 func DetectVMNVRAMPath(vmName string) string {
-	for _, args := range [][]string{
-		{"dumpxml", vmName, "--inactive"},
-		{"dumpxml", vmName},
-	} {
-		result := utils.ExecCommand("virsh", args...)
-		if result.Error != nil {
+	for _, flags := range []uint32{2, 0} {
+		xmlStr, err := getDomainXMLRPC(vmName, libvirt.DomainXMLFlags(flags))
+		if err != nil {
 			continue
 		}
-		if path := extractDomainNVRAMPath(result.Stdout); path != "" {
+		if path := extractDomainNVRAMPath(xmlStr); path != "" {
 			return path
 		}
 	}
@@ -1111,11 +1109,11 @@ func PrepareTemplate(params *PrepareTemplateParams) error {
 		return fmt.Errorf("无法获取虚拟机 %s 的磁盘路径", params.VMName)
 	}
 
-	stateResult := utils.ExecCommand("virsh", "domstate", params.VMName)
-	if stateResult.Error != nil {
-		return fmt.Errorf("获取虚拟机状态失败: %s", stateResult.Stderr)
+	state, err := getDomainStateRPC(params.VMName)
+	if err != nil {
+		return fmt.Errorf("获取虚拟机状态失败: %w", err)
 	}
-	if strings.TrimSpace(stateResult.Stdout) == "running" {
+	if state == "running" {
 		return fmt.Errorf("虚拟机正在运行，请先关机再制作模板")
 	}
 

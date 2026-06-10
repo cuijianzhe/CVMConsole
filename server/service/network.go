@@ -135,21 +135,21 @@ func ListStaticIPs() (*IPListInfo, error) {
 
 	// 构建 MAC -> VM名称 的映射（通过遍历所有虚拟机的网卡）
 	macToVMName := make(map[string]string)
-	listResult := utils.ExecCommand("virsh", "list", "--all", "--name")
-	if listResult.Error == nil {
-		for _, vmName := range strings.Split(listResult.Stdout, "\n") {
-			vmName = strings.TrimSpace(vmName)
+	domains, err := listAllDomainsRPC()
+	if err == nil {
+		for _, dom := range domains {
+			vmName := dom.Name
 			if vmName == "" {
 				continue
 			}
-			ifResult := utils.ExecCommand("virsh", "domiflist", vmName)
-			if ifResult.Error == nil {
-				for _, ifLine := range strings.Split(ifResult.Stdout, "\n") {
-					ifFields := strings.Fields(ifLine)
-					if len(ifFields) >= 5 && ifFields[0] != "Interface" && !strings.HasPrefix(ifLine, "-") {
-						mac := strings.ToLower(ifFields[4])
-						macToVMName[mac] = vmName
-					}
+			domXML, xmlErr := getDomainXMLRPC(vmName, 0)
+			if xmlErr != nil {
+				continue
+			}
+			ifaces := parseInterfacesFromDomainXML(domXML)
+			for _, iface := range ifaces {
+				if iface.MAC != "" {
+					macToVMName[strings.ToLower(iface.MAC)] = vmName
 				}
 			}
 		}
@@ -533,52 +533,43 @@ func BindStaticIP(vmName, ipAddr string) (string, error) {
 
 // refreshNIC 拔插网卡以强制刷新 DHCP（仅运行中的虚拟机）
 func refreshNIC(vmName, mac, network string) {
-	stateResult := utils.ExecCommand("virsh", "domstate", vmName)
-	if stateResult.Error != nil || strings.TrimSpace(stateResult.Stdout) != "running" {
+	state, err := getDomainStateRPC(vmName)
+	if err != nil || state != "running" {
 		return
 	}
 
 	// 获取网卡模型
-	nicModel := "virtio"
-	ifListResult := utils.ExecCommand("virsh", "domiflist", vmName)
-	if ifListResult.Error == nil {
-		for _, line := range strings.Split(ifListResult.Stdout, "\n") {
-			fields := strings.Fields(line)
-			if len(fields) >= 5 && fields[0] != "Interface" && !strings.HasPrefix(line, "-") {
-				nicModel = fields[3]
-				break
-			}
-		}
-	}
+	nicModel := getFirstVMInterfaceModelFromXML(vmName)
 
 	if useOVSNetwork() {
-		xmlPath := fmt.Sprintf("/tmp/_ovs-if-%s.xml", vmName)
+		var ifaceXML string
 		if sw, ok := getVPCSwitchForVM(vmName); ok {
-			_ = os.WriteFile(xmlPath, []byte(BuildOVSInterfaceXMLWithVLAN(mac, nicModel, sw.VLANID)), 0644)
-			detachResult := utils.ExecCommand("virsh", "detach-device", vmName, xmlPath, "--live")
-			if detachResult.Error == nil {
+			ifaceXML = BuildOVSInterfaceXMLWithVLAN(mac, nicModel, sw.VLANID)
+			if err := detachDeviceFlagsRPC(vmName, ifaceXML, 1); err == nil { // VIR_DOMAIN_DEVICE_MODIFY_LIVE
 				time.Sleep(1 * time.Second)
-				if attachResult := utils.ExecCommand("virsh", "attach-device", vmName, xmlPath, "--live"); attachResult.Error == nil {
+				if err := attachDeviceFlagsRPC(vmName, ifaceXML, 1); err == nil {
 					_ = ApplyVPCSwitchRuntime(vmName, *sw)
 				}
 			}
-			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(xmlPath)))
 			return
 		}
-		_ = os.WriteFile(xmlPath, []byte(BuildOVSInterfaceXML(mac, nicModel)), 0644)
-		detachResult := utils.ExecCommand("virsh", "detach-device", vmName, xmlPath, "--live")
-		if detachResult.Error == nil {
+		ifaceXML = BuildOVSInterfaceXML(mac, nicModel)
+		if err := detachDeviceFlagsRPC(vmName, ifaceXML, 1); err == nil { // VIR_DOMAIN_DEVICE_MODIFY_LIVE
 			time.Sleep(1 * time.Second)
-			utils.ExecCommand("virsh", "attach-device", vmName, xmlPath, "--live")
+			attachDeviceFlagsRPC(vmName, ifaceXML, 1)
 		}
-		utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(xmlPath)))
 		return
 	}
 
-	detachResult := utils.ExecCommand("virsh", "detach-interface", vmName, "network", "--mac", mac, "--live")
-	if detachResult.Error == nil {
+	// 非 OVS 环境：通过 detach/attach XML 方式拔插网卡
+	detachXML := fmt.Sprintf("<interface type='network'>\n"+
+		"  <mac address='%s'/>\n"+
+		"  <source network='%s'/>\n"+
+		"  <model type='%s'/>\n"+
+		"</interface>", mac, network, nicModel)
+	if err := detachDeviceFlagsRPC(vmName, detachXML, 1); err == nil { // VIR_DOMAIN_DEVICE_MODIFY_LIVE
 		time.Sleep(1 * time.Second)
-		utils.ExecCommand("virsh", "attach-interface", vmName, "network", network, "--model", nicModel, "--mac", mac, "--live")
+		attachDeviceFlagsRPC(vmName, detachXML, 1)
 	}
 }
 

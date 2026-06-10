@@ -3,10 +3,11 @@ package service
 import (
 	"fmt"
 	"hash/fnv"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/digitalocean/go-libvirt"
 
 	"kvm_console/config"
 	"kvm_console/logger"
@@ -58,22 +59,12 @@ func KBpsToMbps(kbps int) int {
 
 // getVMMAC 获取 VM 的第一个网卡 MAC 地址
 func getVMMAC(vmName string) string {
-	result := utils.ExecShell(fmt.Sprintf(
-		"virsh domiflist %s 2>/dev/null | grep -oP '([0-9a-f]{2}:){5}[0-9a-f]{2}' | head -1", utils.ShellSingleQuote(vmName)))
-	if result.Error != nil {
-		return ""
-	}
-	return strings.TrimSpace(result.Stdout)
+	return getFirstVMMACFromXML(vmName)
 }
 
 // getVMVnetIF 获取运行中 VM 的 vnet 接口名称
 func getVMVnetIF(vmName string) string {
-	result := utils.ExecShell(fmt.Sprintf(
-		"virsh domiflist %s 2>/dev/null | awk 'NR>2 && $1 ~ /^vnet/ {print $1; exit}'", utils.ShellSingleQuote(vmName)))
-	if result.Error != nil || strings.TrimSpace(result.Stdout) == "" || strings.TrimSpace(result.Stdout) == "-" {
-		return ""
-	}
-	return strings.TrimSpace(result.Stdout)
+	return getFirstVMVnetIFFromXML(vmName)
 }
 
 func clearTCBandwidthLimit(vnetIF string) {
@@ -373,44 +364,44 @@ func ovsBandwidthRateKbit(avgKBps int) int {
 	return avgKBps * 8
 }
 
-func domiftuneBandwidthArg(avg, peak, burst int) string {
-	if avg <= 0 && peak <= 0 && burst <= 0 {
-		return "0,0,0"
+// buildBandwidthParams 构建 inbound/outbound 带宽参数的 TypedParam 列表
+// average 始终包含（值为 0 表示不限制），peak/burst 仅当值 > 0 时添加
+func buildBandwidthParams(downAvg, downPeak, downBurst, upAvg, upPeak, upBurst int) []libvirt.TypedParam {
+	var params []libvirt.TypedParam
+	// 始终包含 average 参数（值为 0 表示不限制），避免空参数传给 libvirt 导致 "params must not be NULL" 错误
+	params = append(params, libvirt.TypedParam{
+		Field: libvirt.DomainBandwidthInAverage,
+		Value: *libvirt.NewTypedParamValueUint(uint32(downAvg)),
+	})
+	if downPeak > 0 {
+		params = append(params, libvirt.TypedParam{
+			Field: libvirt.DomainBandwidthInPeak,
+			Value: *libvirt.NewTypedParamValueUint(uint32(downPeak)),
+		})
 	}
-	return fmt.Sprintf("%d,%d,%d", avg, peak, burst)
-}
-
-func parseVMBandwidthConfigRaw(output string) vmBandwidthConfigRaw {
-	config := vmBandwidthConfigRaw{}
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		val, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
-
-		switch key {
-		case "inbound.average":
-			config.InboundAvg = val
-		case "inbound.peak":
-			config.InboundPeak = val
-		case "inbound.burst":
-			config.InboundBurst = val
-		case "outbound.average":
-			config.OutboundAvg = val
-		case "outbound.peak":
-			config.OutboundPeak = val
-		case "outbound.burst":
-			config.OutboundBurst = val
-		}
+	if downBurst > 0 {
+		params = append(params, libvirt.TypedParam{
+			Field: libvirt.DomainBandwidthInBurst,
+			Value: *libvirt.NewTypedParamValueUint(uint32(downBurst)),
+		})
 	}
-	return config
+	params = append(params, libvirt.TypedParam{
+		Field: libvirt.DomainBandwidthOutAverage,
+		Value: *libvirt.NewTypedParamValueUint(uint32(upAvg)),
+	})
+	if upPeak > 0 {
+		params = append(params, libvirt.TypedParam{
+			Field: libvirt.DomainBandwidthOutPeak,
+			Value: *libvirt.NewTypedParamValueUint(uint32(upPeak)),
+		})
+	}
+	if upBurst > 0 {
+		params = append(params, libvirt.TypedParam{
+			Field: libvirt.DomainBandwidthOutBurst,
+			Value: *libvirt.NewTypedParamValueUint(uint32(upBurst)),
+		})
+	}
+	return params
 }
 
 func getVMBandwidthConfigRaw(vmName string) (vmBandwidthConfigRaw, error) {
@@ -419,11 +410,64 @@ func getVMBandwidthConfigRaw(vmName string) (vmBandwidthConfigRaw, error) {
 		return vmBandwidthConfigRaw{}, fmt.Errorf("无法获取虚拟机 %s 的网卡 MAC 地址", vmName)
 	}
 
-	result := utils.ExecCommand("virsh", "domiftune", vmName, mac, "--config")
-	if result.Error != nil {
-		return vmBandwidthConfigRaw{}, fmt.Errorf("获取速率限制失败: %s", result.Stderr)
+	params, err := getInterfaceParametersRPC(vmName, mac, uint32(libvirt.DomainAffectConfig))
+	if err != nil {
+		return vmBandwidthConfigRaw{}, fmt.Errorf("获取速率限制失败: %w", err)
 	}
-	return parseVMBandwidthConfigRaw(result.Stdout), nil
+	cfg := vmBandwidthConfigRaw{}
+	for _, p := range params {
+		switch p.Field {
+		case libvirt.DomainBandwidthInAverage:
+			if v, ok := p.Value.I.(int64); ok {
+				cfg.InboundAvg = int(v)
+			} else if v, ok := p.Value.I.(uint64); ok {
+				cfg.InboundAvg = int(v)
+			} else if v, ok := p.Value.I.(uint32); ok {
+				cfg.InboundAvg = int(v)
+			}
+		case libvirt.DomainBandwidthInPeak:
+			if v, ok := p.Value.I.(int64); ok {
+				cfg.InboundPeak = int(v)
+			} else if v, ok := p.Value.I.(uint64); ok {
+				cfg.InboundPeak = int(v)
+			} else if v, ok := p.Value.I.(uint32); ok {
+				cfg.InboundPeak = int(v)
+			}
+		case libvirt.DomainBandwidthInBurst:
+			if v, ok := p.Value.I.(int64); ok {
+				cfg.InboundBurst = int(v)
+			} else if v, ok := p.Value.I.(uint64); ok {
+				cfg.InboundBurst = int(v)
+			} else if v, ok := p.Value.I.(uint32); ok {
+				cfg.InboundBurst = int(v)
+			}
+		case libvirt.DomainBandwidthOutAverage:
+			if v, ok := p.Value.I.(int64); ok {
+				cfg.OutboundAvg = int(v)
+			} else if v, ok := p.Value.I.(uint64); ok {
+				cfg.OutboundAvg = int(v)
+			} else if v, ok := p.Value.I.(uint32); ok {
+				cfg.OutboundAvg = int(v)
+			}
+		case libvirt.DomainBandwidthOutPeak:
+			if v, ok := p.Value.I.(int64); ok {
+				cfg.OutboundPeak = int(v)
+			} else if v, ok := p.Value.I.(uint64); ok {
+				cfg.OutboundPeak = int(v)
+			} else if v, ok := p.Value.I.(uint32); ok {
+				cfg.OutboundPeak = int(v)
+			}
+		case libvirt.DomainBandwidthOutBurst:
+			if v, ok := p.Value.I.(int64); ok {
+				cfg.OutboundBurst = int(v)
+			} else if v, ok := p.Value.I.(uint64); ok {
+				cfg.OutboundBurst = int(v)
+			} else if v, ok := p.Value.I.(uint32); ok {
+				cfg.OutboundBurst = int(v)
+			}
+		}
+	}
+	return cfg, nil
 }
 
 // ReapplyConfiguredVMBandwidth 按持久化配置重刷运行态带宽规则。
@@ -634,27 +678,23 @@ func ApplyVMBandwidth(vmName string, downAvg, downPeak, downBurst, upAvg, upPeak
 		return fmt.Errorf("无法获取虚拟机 %s 的网卡 MAC 地址", vmName)
 	}
 
-	inboundArg := domiftuneBandwidthArg(downAvg, downPeak, downBurst)
-	outboundArg := domiftuneBandwidthArg(upAvg, upPeak, upBurst)
+	// 构建 inbound/outbound TypedParam 列表
+	configParams := buildBandwidthParams(downAvg, downPeak, downBurst, upAvg, upPeak, upBurst)
 
 	// 应用到 config（持久化）
-	result := utils.ExecCommand("virsh", "domiftune", vmName, mac,
-		"--inbound", inboundArg, "--outbound", outboundArg, "--config")
-	if result.Error != nil {
-		return fmt.Errorf("设置速率限制失败(config): %s", result.Stderr)
+	if err := setInterfaceParametersRPC(vmName, mac, configParams, uint32(libvirt.DomainAffectConfig)); err != nil {
+		return fmt.Errorf("设置速率限制失败(config): %w", err)
 	}
 
 	// 如果 VM 正在运行，同时应用到 live
-	stateResult := utils.ExecCommand("virsh", "domstate", vmName)
-	if stateResult.Error == nil && strings.TrimSpace(stateResult.Stdout) == "running" {
-		zeroArg := domiftuneBandwidthArg(0, 0, 0)
+	state, _ := getDomainStateRPC(vmName)
+	if state == "running" {
 		vnetIF := getVMVnetIF(vmName)
 		if useOVSNetwork() {
 			// OVS 运行态由 queue/meter 接管；保留 live domiftune 会把上传变成端口 policing，导致低速率时抖动明显。
-			liveResult := utils.ExecCommand("virsh", "domiftune", vmName, mac,
-				"--inbound", zeroArg, "--outbound", zeroArg, "--live")
-			if liveResult.Error != nil {
-				logger.App.Warn("清理实时domiftune速率限制失败", "vm", vmName, "stderr", liveResult.Stderr)
+			zeroParams := buildBandwidthParams(0, 0, 0, 0, 0, 0)
+			if err := setInterfaceParametersRPC(vmName, mac, zeroParams, uint32(libvirt.DomainAffectLive)); err != nil {
+				logger.App.Warn("清理实时domiftune速率限制失败", "vm", vmName, "error", err)
 			}
 			if vnetIF != "" {
 				if err := applyOVSBandwidthLimit(vmName, mac, vnetIF, downAvg, upAvg); err != nil {
@@ -662,10 +702,8 @@ func ApplyVMBandwidth(vmName string, downAvg, downPeak, downBurst, upAvg, upPeak
 				}
 			}
 		} else {
-			liveResult := utils.ExecCommand("virsh", "domiftune", vmName, mac,
-				"--inbound", inboundArg, "--outbound", outboundArg, "--live")
-			if liveResult.Error != nil {
-				logger.App.Warn("实时应用速率限制失败", "vm", vmName, "stderr", liveResult.Stderr)
+			if err := setInterfaceParametersRPC(vmName, mac, configParams, uint32(libvirt.DomainAffectLive)); err != nil {
+				logger.App.Warn("实时应用速率限制失败", "vm", vmName, "error", err)
 			}
 			if vnetIF != "" {
 				// 非 OVS 环境保留旧的下行 tc 兜底。
@@ -686,22 +724,17 @@ func ApplyVMNICBandwidth(vmName string, downAvg, downPeak, downBurst, upAvg, upP
 		return fmt.Errorf("无法获取虚拟机 %s 的网卡 MAC 地址", vmName)
 	}
 
-	inboundArg := domiftuneBandwidthArg(downAvg, downPeak, downBurst)
-	outboundArg := domiftuneBandwidthArg(upAvg, upPeak, upBurst)
+	configParams := buildBandwidthParams(downAvg, downPeak, downBurst, upAvg, upPeak, upBurst)
 
-	result := utils.ExecCommand("virsh", "domiftune", vmName, mac,
-		"--inbound", inboundArg, "--outbound", outboundArg, "--config")
-	if result.Error != nil {
-		return fmt.Errorf("设置速率限制失败(config): %s", result.Stderr)
+	if err := setInterfaceParametersRPC(vmName, mac, configParams, uint32(libvirt.DomainAffectConfig)); err != nil {
+		return fmt.Errorf("设置速率限制失败(config): %w", err)
 	}
 
-	stateResult := utils.ExecCommand("virsh", "domstate", vmName)
-	if stateResult.Error == nil && strings.TrimSpace(stateResult.Stdout) == "running" {
-		zeroArg := domiftuneBandwidthArg(0, 0, 0)
-		liveResult := utils.ExecCommand("virsh", "domiftune", vmName, mac,
-			"--inbound", zeroArg, "--outbound", zeroArg, "--live")
-		if liveResult.Error != nil {
-			logger.App.Warn("清理实时domiftune速率限制失败", "vm", vmName, "stderr", liveResult.Stderr)
+	state, _ := getDomainStateRPC(vmName)
+	if state == "running" {
+		zeroParams := buildBandwidthParams(0, 0, 0, 0, 0, 0)
+		if err := setInterfaceParametersRPC(vmName, mac, zeroParams, uint32(libvirt.DomainAffectLive)); err != nil {
+			logger.App.Warn("清理实时domiftune速率限制失败", "vm", vmName, "error", err)
 		}
 
 		vnetIF := getVMVnetIF(vmName)
@@ -983,21 +1016,23 @@ func GetVMBandwidthMbps(vmName string) (inAvg, outAvg int) {
 		return 0, 0
 	}
 
-	result := utils.ExecCommand("virsh", "domiftune", vmName, mac, "--config")
-	if result.Error != nil {
+	params, err := getInterfaceParametersRPC(vmName, mac, uint32(libvirt.DomainAffectConfig))
+	if err != nil {
 		return 0, 0
 	}
-
-	re := regexp.MustCompile(`(\w+\.average)\s*:\s*(\d+)`)
-	matches := re.FindAllStringSubmatch(result.Stdout, -1)
-	for _, m := range matches {
-		if len(m) >= 3 {
-			val, _ := strconv.Atoi(m[2])
-			switch m[1] {
-			case "inbound.average":
-				inAvg = KBpsToMbps(val) // inbound = VM 下行
-			case "outbound.average":
-				outAvg = KBpsToMbps(val) // outbound = VM 上行
+	for _, p := range params {
+		switch p.Field {
+		case libvirt.DomainBandwidthInAverage:
+			if v, ok := p.Value.I.(int64); ok {
+				inAvg = KBpsToMbps(int(v)) // inbound = VM 下行
+			} else if v, ok := p.Value.I.(uint64); ok {
+				inAvg = KBpsToMbps(int(v))
+			}
+		case libvirt.DomainBandwidthOutAverage:
+			if v, ok := p.Value.I.(int64); ok {
+				outAvg = KBpsToMbps(int(v)) // outbound = VM 上行
+			} else if v, ok := p.Value.I.(uint64); ok {
+				outAvg = KBpsToMbps(int(v))
 			}
 		}
 	}
@@ -1008,15 +1043,25 @@ func GetVMBandwidthMbps(vmName string) (inAvg, outAvg int) {
 
 // getRunningVMNames 获取宿主机所有运行中的VM名称列表
 func getRunningVMNames() []string {
-	result := utils.ExecCommand("virsh", "list", "--state-running", "--name")
-	if result.Error != nil {
+	domains, err := listAllDomainsRPC()
+	if err != nil {
 		return nil
 	}
 	var names []string
-	for _, line := range strings.Split(result.Stdout, "\n") {
-		name := strings.TrimSpace(line)
-		if name != "" {
-			names = append(names, name)
+	for _, dom := range domains {
+		l, libErr := GetLibvirt()
+		if libErr != nil {
+			continue
+		}
+		state, _, _, _, _, infoErr := l.DomainGetInfo(dom)
+		if infoErr != nil {
+			continue
+		}
+		if libvirt.DomainState(state) == libvirt.DomainRunning {
+			name := dom.Name
+			if name != "" {
+				names = append(names, name)
+			}
 		}
 	}
 	sort.Strings(names)

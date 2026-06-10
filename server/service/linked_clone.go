@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"kvm_console/logger"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/digitalocean/go-libvirt"
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/utils"
 )
 
@@ -104,8 +105,8 @@ func LinkedCloneVM(ctx context.Context, params *LinkedCloneParams, progressFn fu
 		return nil, fmt.Errorf("模板不存在: %s", params.Template)
 	}
 
-	checkVM := utils.ExecCommand("virsh", "dominfo", params.Name)
-	if checkVM.ExitCode == 0 {
+	// 检查虚拟机是否已存在
+	if _, _, _, _, err := getDomainInfoRPC(params.Name); err == nil {
 		return nil, fmt.Errorf("虚拟机 '%s' 已存在", params.Name)
 	}
 
@@ -333,17 +334,10 @@ func LinkedCloneVM(ctx context.Context, params *LinkedCloneParams, progressFn fu
 		return nil, err
 	}
 
-	xmlPath := fmt.Sprintf("/tmp/_vm-linked-clone-%s.xml", params.Name)
-	if err := os.WriteFile(xmlPath, []byte(vmXML), 0644); err != nil {
+	// 定义虚拟机（直接通过 RPC，无需临时文件）
+	if _, err := defineDomainXMLRPC(vmXML); err != nil {
 		cleanupLinkedCloneArtifacts("", cloneDisk)
-		return nil, fmt.Errorf("写入虚拟机 XML 失败: %w", err)
-	}
-
-	defineResult := utils.ExecCommand("virsh", "define", xmlPath)
-	utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(xmlPath)))
-	if defineResult.Error != nil {
-		cleanupLinkedCloneArtifacts("", cloneDisk)
-		return nil, fmt.Errorf("定义虚拟机失败: %s", defineResult.Stderr)
+		return nil, fmt.Errorf("定义虚拟机失败: %w", err)
 	}
 
 	if memoryMeta != nil {
@@ -385,7 +379,9 @@ func LinkedCloneVM(ctx context.Context, params *LinkedCloneParams, progressFn fu
 	}
 
 	if params.Autostart {
-		utils.ExecCommand("virsh", "autostart", params.Name)
+		if err := setDomainAutostartRPC(params.Name, true); err != nil {
+			logger.App.Warn("设置虚拟机自动启动失败", "vm", params.Name, "error", err)
+		}
 	}
 	FixOnReboot(params.Name)
 	if len(params.ExtraDisks) > 0 {
@@ -409,16 +405,16 @@ func cleanupLinkedCloneArtifacts(vmName, diskPath string) {
 	// 如果提供了 VM 名称，尝试清理 libvirt 定义
 	if strings.TrimSpace(vmName) != "" {
 		// 尝试销毁（如果 VM 正在运行）
-		if result := utils.ExecCommand("virsh", "destroy", vmName); result.Error != nil {
-			logger.App.Warn("销毁虚拟机失败", "vm", vmName, "stderr", strings.TrimSpace(result.Stderr))
+		if err := destroyDomainRPC(vmName); err != nil {
+			logger.Libvirt.Warn("销毁虚拟机失败", "vm", vmName, "error", err)
 		} else {
-			logger.App.Info("已销毁虚拟机", "vm", vmName)
+			logger.Libvirt.Info("已销毁虚拟机", "vm", vmName)
 		}
-		// 尝试取消定义
-		if result := utils.ExecCommand("virsh", "undefine", vmName, "--nvram", "--snapshots-metadata"); result.Error != nil {
-			logger.App.Warn("取消定义虚拟机失败", "vm", vmName, "stderr", strings.TrimSpace(result.Stderr))
+		// 尝试取消定义（含 NVRAM 和快照元数据）
+		if err := undefineDomainRPC(vmName, libvirt.DomainUndefineNvram|libvirt.DomainUndefineSnapshotsMetadata); err != nil {
+			logger.Libvirt.Warn("取消定义虚拟机失败", "vm", vmName, "error", err)
 		} else {
-			logger.App.Info("已取消定义虚拟机", "vm", vmName)
+			logger.Libvirt.Info("已取消定义虚拟机", "vm", vmName)
 		}
 	}
 	// 删除磁盘文件

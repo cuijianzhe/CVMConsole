@@ -6,13 +6,13 @@ import (
 	"encoding/xml"
 	"fmt"
 	"kvm_console/logger"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/digitalocean/go-libvirt"
 	"kvm_console/config"
 	"kvm_console/model"
 	"kvm_console/utils"
@@ -313,15 +313,15 @@ func resolveBalloonStatus(name, state string, supported, pending bool) string {
 }
 
 func readVMMemoryMetadata(name string) (*vmMemoryMetadata, error) {
-	result := utils.ExecCommand("virsh", "metadata", name, vmMemoryMetadataURI, "--config")
-	if result.Error != nil {
-		text := strings.ToLower(strings.TrimSpace(result.Stderr + "\n" + result.Stdout))
+	result, err := getDomainMetadataRPC(name, 2, vmMemoryMetadataURI, 2) // metadataType=2(VIR_DOMAIN_METADATA_ELEMENT), flags=2(VIR_DOMAIN_AFFECT_CONFIG)
+	if err != nil {
+		text := strings.ToLower(strings.TrimSpace(err.Error()))
 		if strings.Contains(text, "metadata not found") || strings.Contains(text, "no metadata") {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("读取动态内存配置失败: %s", result.Stderr)
+		return nil, fmt.Errorf("读取动态内存配置失败: %w", err)
 	}
-	return parseVMMemoryMetadataOutput(result.Stdout)
+	return parseVMMemoryMetadataOutput(result)
 }
 
 func parseVMMemoryMetadataOutput(output string) (*vmMemoryMetadata, error) {
@@ -359,12 +359,8 @@ func writeVMMemoryMetadata(name string, meta *vmMemoryMetadata) error {
 	if err != nil {
 		return err
 	}
-	result := utils.ExecCommand(
-		"virsh", "metadata", name, vmMemoryMetadataURI,
-		"--config", "--key", vmMemoryMetadataKey, "--set", string(xmlBytes),
-	)
-	if result.Error != nil {
-		return fmt.Errorf("写入动态内存配置失败: %s", result.Stderr)
+	if err := setDomainMetadataRPC(name, 2, string(xmlBytes), vmMemoryMetadataKey, vmMemoryMetadataURI, 2); err != nil {
+		return fmt.Errorf("写入动态内存配置失败: %w", err)
 	}
 	return nil
 }
@@ -375,12 +371,12 @@ func SetVMMemoryDynamicConfig(name string, req *VMMemoryDynamicRequest) (string,
 		return "", nil
 	}
 
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", name, "--inactive")
-	if xmlResult.Error != nil {
-		return "", fmt.Errorf("获取虚拟机 XML 失败: %s", xmlResult.Stderr)
+	xmlResult, err := getDomainXMLRPC(name, libvirt.DomainXMLInactive)
+	if err != nil {
+		return "", fmt.Errorf("获取虚拟机 XML 失败: %w", err)
 	}
-	state := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", name).Stdout)
-	values := parseDomainMemoryXML(xmlResult.Stdout)
+	state, _ := getDomainStateRPC(name)
+	values := parseDomainMemoryXML(xmlResult)
 	if values.CurrentMemoryMB <= 0 {
 		values.CurrentMemoryMB = values.MemoryMB
 	}
@@ -465,7 +461,7 @@ func SetVMMemoryDynamicConfig(name string, req *VMMemoryDynamicRequest) (string,
 	}
 
 	if state == "running" {
-		if !hasUsableMemballoon(xmlResult.Stdout) {
+		if !hasUsableMemballoon(xmlResult) {
 			return "", fmt.Errorf("运行中的虚拟机未配置 virtio-balloon，请先关机后再启用动态内存")
 		}
 		if err := writeVMMemoryMetadata(name, meta); err != nil {
@@ -485,22 +481,16 @@ func SetVMMemoryDynamicConfig(name string, req *VMMemoryDynamicRequest) (string,
 }
 
 func applyStaticVMMemoryToInactiveXML(name string, memoryMB int) error {
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", name, "--inactive")
-	if xmlResult.Error != nil {
-		return fmt.Errorf("获取虚拟机 XML 失败: %s", xmlResult.Stderr)
+	xmlResult, err := getDomainXMLRPC(name, libvirt.DomainXMLInactive)
+	if err != nil {
+		return fmt.Errorf("获取虚拟机 XML 失败: %w", err)
 	}
-	xmlStr, err := ApplyStaticMemoryConfigToDomainXML(xmlResult.Stdout, memoryMB)
+	xmlStr, err := ApplyStaticMemoryConfigToDomainXML(xmlResult, memoryMB)
 	if err != nil {
 		return err
 	}
-	xmlPath := fmt.Sprintf("/tmp/_memory-static-%s.xml", name)
-	if err := os.WriteFile(xmlPath, []byte(xmlStr), 0644); err != nil {
-		return fmt.Errorf("写入静态内存 XML 失败: %w", err)
-	}
-	defineResult := utils.ExecCommand("virsh", "define", xmlPath)
-	_ = os.Remove(xmlPath)
-	if defineResult.Error != nil {
-		return fmt.Errorf("恢复静态内存配置失败: %s", defineResult.Stderr)
+	if _, err := defineDomainXMLRPC(xmlStr); err != nil {
+		return fmt.Errorf("恢复静态内存配置失败: %w", err)
 	}
 	return nil
 }
@@ -537,9 +527,9 @@ func SetVMMemoryCurrent(name string, targetMB int, pauseAuto bool) error {
 			_ = writeVMMemoryMetadata(name, meta)
 		}
 	}
-	result := utils.ExecCommand("virsh", "setmem", name, strconv.Itoa(targetMB*1024), "--live")
-	if result.Error != nil {
-		return fmt.Errorf("调整当前内存失败: %s", result.Stderr)
+	err := setDomainMemoryFlagsRPC(name, uint64(targetMB*1024), libvirt.DomainMemoryModFlags(1)) // 1=VIR_DOMAIN_AFFECT_LIVE
+	if err != nil {
+		return fmt.Errorf("调整当前内存失败: %w", err)
 	}
 	return nil
 }
@@ -558,28 +548,21 @@ func ApplyPendingVMMemoryConfig(name string) error {
 }
 
 func applyVMMemoryMetadataToInactiveXML(name string, meta *vmMemoryMetadata) error {
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", name, "--inactive")
-	if xmlResult.Error != nil {
-		return fmt.Errorf("获取虚拟机 XML 失败: %s", xmlResult.Stderr)
+	xmlResult, err := getDomainXMLRPC(name, libvirt.DomainXMLInactive)
+	if err != nil {
+		return fmt.Errorf("获取虚拟机 XML 失败: %w", err)
 	}
 	var xmlStr string
-	var err error
 	if normalizeMemoryBackend(meta.MemoryBackend) == memoryBackendVirtioMem {
-		xmlStr, err = ApplyVirtioMemConfigToDomainXML(xmlResult.Stdout, meta.MemoryInitialMB, meta.MemoryMaxMB)
+		xmlStr, err = ApplyVirtioMemConfigToDomainXML(xmlResult, meta.MemoryInitialMB, meta.MemoryMaxMB)
 	} else {
-		xmlStr, err = ApplyDynamicMemoryConfigToDomainXML(xmlResult.Stdout, meta.MemoryInitialMB, meta.MemoryMaxMB, true)
+		xmlStr, err = ApplyDynamicMemoryConfigToDomainXML(xmlResult, meta.MemoryInitialMB, meta.MemoryMaxMB, true)
 	}
 	if err != nil {
 		return err
 	}
-	xmlPath := fmt.Sprintf("/tmp/_memory-%s.xml", name)
-	if err := os.WriteFile(xmlPath, []byte(xmlStr), 0644); err != nil {
-		return fmt.Errorf("写入动态内存 XML 失败: %w", err)
-	}
-	defineResult := utils.ExecCommand("virsh", "define", xmlPath)
-	_ = os.Remove(xmlPath)
-	if defineResult.Error != nil {
-		return fmt.Errorf("应用动态内存配置失败: %s", defineResult.Stderr)
+	if _, err := defineDomainXMLRPC(xmlStr); err != nil {
+		return fmt.Errorf("应用动态内存配置失败: %w", err)
 	}
 	return nil
 }
@@ -792,16 +775,16 @@ func hasUsableMemballoon(xmlStr string) bool {
 }
 
 func getVMMemoryStats(name string) (*vmMemoryStatsValues, error) {
-	result := utils.ExecCommand("virsh", "dommemstat", name)
-	if result.Error != nil {
-		return nil, result.Error
+	statsMap, err := getDomainMemoryStatsRPC(name)
+	if err != nil {
+		return nil, err
 	}
 	stats := &vmMemoryStatsValues{
-		ActualKB:    parseMemStat(result.Stdout, "actual"),
-		UnusedKB:    parseMemStat(result.Stdout, "unused"),
-		UsableKB:    parseMemStat(result.Stdout, "usable"),
-		AvailableKB: parseMemStat(result.Stdout, "available"),
-		RSSKB:       parseMemStat(result.Stdout, "rss"),
+		ActualKB:    int64(statsMap["actual"]),
+		UnusedKB:    int64(statsMap["unused"]),
+		UsableKB:    int64(statsMap["usable"]),
+		AvailableKB: int64(statsMap["available"]),
+		RSSKB:       int64(statsMap["rss"]),
 	}
 	return stats, nil
 }
@@ -852,13 +835,21 @@ func StartMemoryBalloonScheduler() {
 }
 
 func runMemoryBalloonScheduleOnce() {
-	result := utils.ExecShell("virsh list --name --state-running 2>/dev/null | grep -v '^$'")
-	if result.Error != nil || strings.TrimSpace(result.Stdout) == "" {
+	domains, err := listAllDomainsRPC()
+	if err != nil {
 		return
 	}
 	host := getHostMemoryPressure()
-	for _, name := range strings.Split(strings.TrimSpace(result.Stdout), "\n") {
-		name = strings.TrimSpace(name)
+	for _, dom := range domains {
+		l, _ := GetLibvirt()
+		if l == nil {
+			continue
+		}
+		state, _, _, _, _, infoErr := l.DomainGetInfo(dom)
+		if infoErr != nil || libvirt.DomainState(state) != libvirt.DomainRunning {
+			continue
+		}
+		name := dom.Name
 		if name == "" {
 			continue
 		}
@@ -1103,9 +1094,9 @@ func scheduleVMVirtioMem(name string, meta *vmMemoryMetadata, host hostMemoryPre
 	}
 
 	requestedMB := maxInt(actualMB-meta.MemoryInitialMB, 0)
-	if xmlResult := utils.ExecCommand("virsh", "dumpxml", name); xmlResult.Error == nil {
-		currentVirtioMemMB := parseVirtioMemCurrentMB(xmlResult.Stdout)
-		requestedMB = parseVirtioMemRequestedMB(xmlResult.Stdout)
+	if xmlResult, err := getDomainXMLRPC(name, 0); err == nil {
+		currentVirtioMemMB := parseVirtioMemCurrentMB(xmlResult)
+		requestedMB = parseVirtioMemRequestedMB(xmlResult)
 		actualMB = maxInt(actualMB, meta.MemoryInitialMB+currentVirtioMemMB)
 	}
 	actualMB = maxInt(actualMB, meta.MemoryInitialMB)
@@ -1200,14 +1191,10 @@ func percentConfig(value int, fallback int) float64 {
 }
 
 func setVMMemoryLive(name string, targetMB int) error {
-	result := utils.ExecCommand("virsh", "setmem", name, strconv.Itoa(targetMB*1024), "--live")
-	if result.Error != nil {
-		errText := strings.TrimSpace(result.Stderr)
-		if errText == "" {
-			errText = result.Error.Error()
-		}
-		logger.App.Warn("动态内存调整当前内存失败", "vm", name, "targetMB", targetMB, "error", errText)
-		return fmt.Errorf("调整当前内存失败: %s", errText)
+	err := setDomainMemoryFlagsRPC(name, uint64(targetMB*1024), libvirt.DomainMemoryModFlags(1)) // 1=VIR_DOMAIN_AFFECT_LIVE
+	if err != nil {
+		logger.App.Warn("动态内存调整当前内存失败", "vm", name, "targetMB", targetMB, "error", err)
+		return fmt.Errorf("调整当前内存失败: %w", err)
 	}
 	logger.App.Info("动态内存已调整当前内存", "vm", name, "targetMB", targetMB)
 	return nil
@@ -1217,18 +1204,19 @@ func setVirtioMemRequestedLive(name string, requestedMB int) error {
 	if requestedMB < 0 {
 		requestedMB = 0
 	}
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", name)
-	if xmlResult.Error != nil {
-		return fmt.Errorf("读取运行中虚拟机 XML 失败: %s", xmlResult.Stderr)
+	xmlResult, err := getDomainXMLRPC(name, 0)
+	if err != nil {
+		return fmt.Errorf("读取运行中虚拟机 XML 失败: %w", err)
 	}
-	alias := findVirtioMemAlias(xmlResult.Stdout)
+	alias := findVirtioMemAlias(xmlResult)
 	if alias == "" {
 		return fmt.Errorf("未找到 virtio-mem 设备，请确认 Windows 弹性内存已在关机状态下启用")
 	}
-	result := utils.ExecCommand("virsh", "update-memory-device", name, "--alias", alias, "--requested-size", strconv.Itoa(requestedMB*1024), "--live")
-	if result.Error != nil {
-		return fmt.Errorf("调整 Windows 弹性内存失败: %s", result.Stderr)
+	result, err := qemuMonitorCommandRPC(name, fmt.Sprintf("setvmstate virtio-mem %s requested-size %d", alias, requestedMB*1024), domainQemuMonitorCommandHmp)
+	if err != nil {
+		return fmt.Errorf("调整 Windows 弹性内存失败: %w", err)
 	}
+	_ = result
 	logger.App.Info("动态内存已调整virtio-mem requested", "vm", name, "requestedMB", requestedMB)
 	return nil
 }

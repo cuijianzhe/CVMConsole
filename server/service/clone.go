@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/digitalocean/go-libvirt"
 	"kvm_console/config"
 	"kvm_console/logger"
 	"kvm_console/taskqueue"
@@ -29,8 +30,8 @@ func checkCanceled(ctx context.Context, vmName, diskPath string) error {
 	case <-ctx.Done():
 		logger.App.Info("任务被取消，开始清理资源", "vm", vmName, "disk", diskPath)
 		if vmName != "" {
-			utils.ExecCommand("virsh", "destroy", vmName)
-			utils.ExecCommand("virsh", "undefine", vmName, "--nvram", "--snapshots-metadata")
+			_ = destroyDomainRPC(vmName)
+			_ = undefineDomainRPC(vmName, libvirt.DomainUndefineNvram|libvirt.DomainUndefineSnapshotsMetadata)
 		}
 		if diskPath != "" {
 			if err := os.Remove(diskPath); err != nil && !os.IsNotExist(err) {
@@ -191,8 +192,7 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 	}
 
 	// 检查虚拟机是否已存在
-	checkVM := utils.ExecCommand("virsh", "dominfo", params.Name)
-	if checkVM.ExitCode == 0 {
+	if _, _, _, _, err := getDomainInfoRPC(params.Name); err == nil {
 		return nil, fmt.Errorf("虚拟机 '%s' 已存在", params.Name)
 	}
 
@@ -485,15 +485,10 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 			return nil, err
 		}
 
-		// 写入临时文件并定义虚拟机
-		xmlPath := fmt.Sprintf("/tmp/_vm-%s.xml", params.Name)
-		utils.ExecShell(fmt.Sprintf("cat > %s << 'XMLEOF'\n%s\nXMLEOF", utils.ShellSingleQuote(xmlPath), vmXML))
-
-		defineResult := utils.ExecCommand("virsh", "define", xmlPath)
-		utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(xmlPath)))
-		if defineResult.Error != nil {
+		// 定义虚拟机（直接通过 RPC，无需临时文件）
+		if _, err := defineDomainXMLRPC(vmXML); err != nil {
 			utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(cloneDisk)))
-			return nil, fmt.Errorf("定义虚拟机失败: %s", defineResult.Stderr)
+			return nil, fmt.Errorf("定义虚拟机失败: %w", err)
 		}
 		if memoryMeta != nil {
 			if err := writeVMMemoryMetadata(params.Name, memoryMeta); err != nil {
@@ -527,7 +522,9 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 
 	// 开机自启
 	if params.Autostart {
-		utils.ExecCommand("virsh", "autostart", params.Name)
+		if err := setDomainAutostartRPC(params.Name, true); err != nil {
+			logger.App.Warn("设置虚拟机自动启动失败", "vm", params.Name, "error", err)
+		}
 	}
 
 	// 修复重启变关机
@@ -940,14 +937,9 @@ func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ra
 		return err
 	}
 
-	// 写入 XML 并定义
-	xmlPath := fmt.Sprintf("/tmp/_win-clone-%s.xml", params.Name)
-	utils.ExecShell(fmt.Sprintf("cat > %s << 'XMLEOF'\n%s\nXMLEOF", utils.ShellSingleQuote(xmlPath), vmXML))
-
-	defineResult := utils.ExecCommand("virsh", "define", xmlPath)
-	utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(xmlPath)))
-	if defineResult.Error != nil {
-		return fmt.Errorf("定义虚拟机失败: %s", defineResult.Stderr)
+	// 定义虚拟机（直接通过 RPC，无需临时文件）
+	if _, err := defineDomainXMLRPC(vmXML); err != nil {
+		return fmt.Errorf("定义虚拟机失败: %w", err)
 	}
 	if memoryMeta != nil {
 		if err := writeVMMemoryMetadata(params.Name, memoryMeta); err != nil {
@@ -1800,11 +1792,11 @@ func shutdownVMForReinstall(ctx context.Context, vmName string, progressFn func(
 	if progressFn != nil {
 		progressFn(18, "正在强制关闭虚拟机...")
 	}
-	result := utils.ExecCommand("virsh", "destroy", vmName)
-	if result.Error != nil {
-		state := strings.ToLower(strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout))
-		if state != "shut off" && state != "shutoff" {
-			return fmt.Errorf("强制断电失败: %s", result.Stderr)
+	err := destroyDomainRPC(vmName)
+	if err != nil {
+		state, stateErr := getDomainStateRPC(vmName)
+		if stateErr != nil || (strings.ToLower(state) != "shut off" && strings.ToLower(state) != "shutoff") {
+			return fmt.Errorf("强制断电失败: %w", err)
 		}
 	}
 	shutOff, err := waitForVMShutOff(ctx, vmName, 30*time.Second)
@@ -1954,7 +1946,7 @@ func ReinstallVM(ctx context.Context, params *ReinstallParams, progressFn func(i
 	rollbackNeeded := true
 	defer func() {
 		if rollbackNeeded {
-			_ = utils.ExecCommand("virsh", "destroy", params.Name)
+			_ = destroyDomainRPC(params.Name)
 			var rollbackMessages []string
 			if xmlModified {
 				if restoreXMLErr := SetVMInactiveDomainXML(params.Name, originalXML); restoreXMLErr != nil {
@@ -2094,7 +2086,7 @@ func DeleteVMWithDisks(name string, deleteDisks []string, transferDisks []string
 	}
 
 	// 强制关机
-	utils.ExecCommand("virsh", "destroy", name)
+	_ = destroyDomainRPC(name)
 	time.Sleep(1 * time.Second)
 
 	// 在 undefine 之前收集虚拟机的所有 IP 地址（undefine 后拿不到 MAC/IP 了）
@@ -2131,16 +2123,14 @@ func DeleteVMWithDisks(name string, deleteDisks []string, transferDisks []string
 	utils.ExecShell(fmt.Sprintf("virsh change-media %s hda --eject 2>/dev/null || true", utils.ShellSingleQuote(name)))
 
 	// 取消定义（含快照和 NVRAM，不使用 --remove-all-storage 避免删除 ISO 和需要转移的磁盘）
-	result := utils.ExecCommand("virsh", "undefine", name, "--nvram", "--snapshots-metadata")
-	if result.Error != nil {
-		// 尝试不带 --nvram
-		result = utils.ExecCommand("virsh", "undefine", name, "--snapshots-metadata")
-		if result.Error != nil {
-			if strings.Contains(result.Stderr, "domain not found") || strings.Contains(result.Stderr, "Domain not found") {
+	if err := undefineDomainRPC(name, libvirt.DomainUndefineNvram|libvirt.DomainUndefineSnapshotsMetadata); err != nil {
+		// 尝试不带 NVRAM
+		if err2 := undefineDomainRPC(name, libvirt.DomainUndefineSnapshotsMetadata); err2 != nil {
+			if strings.Contains(err2.Error(), "not found") {
 				logger.App.Warn("虚拟机已不存在，清理完成", "vm", name)
 			} else {
-				logger.App.Warn("取消虚拟机定义失败", "vm", name, "stderr", result.Stderr)
-				warnings = append(warnings, fmt.Sprintf("取消虚拟机定义失败: %s", result.Stderr))
+				logger.App.Warn("取消虚拟机定义失败", "vm", name, "error", err2)
+				warnings = append(warnings, fmt.Sprintf("取消虚拟机定义失败: %v", err2))
 			}
 		}
 	}
@@ -2214,7 +2204,7 @@ func ForceDeleteVM(name string) error {
 	logger.App.Info("开始强制清理虚拟机", "vm", name)
 
 	// 尽量强制关机
-	utils.ExecCommand("virsh", "destroy", name)
+	_ = destroyDomainRPC(name)
 
 	// 清理静态 IP 和端口转发（尽力而为）
 	vmIPs := collectVMIPs(name)
@@ -2224,19 +2214,16 @@ func ForceDeleteVM(name string) error {
 	}
 
 	// 尝试正常 undefine
-	result := utils.ExecCommand("virsh", "undefine", name, "--nvram", "--snapshots-metadata")
-	if result.Error != nil {
-		result = utils.ExecCommand("virsh", "undefine", name, "--snapshots-metadata")
-		if result.Error != nil {
-			result = utils.ExecCommand("virsh", "undefine", name)
-			if result.Error != nil {
+	if err := undefineDomainRPC(name, libvirt.DomainUndefineNvram|libvirt.DomainUndefineSnapshotsMetadata); err != nil {
+		if err2 := undefineDomainRPC(name, libvirt.DomainUndefineSnapshotsMetadata); err2 != nil {
+			if err3 := undefineDomainRPC(name, 0); err3 != nil {
 				// 正常 undefine 全部失败，尝试强制清理 libvirt 配置文件
-				logger.App.Warn("undefine失败，尝试直接清理libvirt配置文件", "stderr", result.Stderr)
+				logger.App.Warn("undefine失败，尝试直接清理libvirt配置文件", "error", err3)
 
 				// 删除 libvirt 域 XML 配置文件
 				xmlPath := fmt.Sprintf("/etc/libvirt/qemu/%s.xml", name)
-				if err := os.Remove(xmlPath); err != nil && !os.IsNotExist(err) {
-					logger.App.Warn("删除XML配置文件失败", "error", err)
+				if removeErr := os.Remove(xmlPath); removeErr != nil && !os.IsNotExist(removeErr) {
+					logger.App.Warn("删除XML配置文件失败", "error", removeErr)
 				}
 
 				// 删除自动启动链接

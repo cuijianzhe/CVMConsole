@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"kvm_console/utils"
+	"github.com/digitalocean/go-libvirt"
 )
 
 const (
@@ -198,46 +198,43 @@ func parseTopologyAttr(topology string, pattern *regexp.Regexp) int {
 
 // setVMCPUWithTopologySync 设置虚拟机 vCPU 数量，同时同步 CPU topology。
 // 当 domain XML 中存在 topology 时，必须同时修改 vcpu 和 topology 后 define，
-// 因为 virsh setvcpus 和 virsh define 都会校验 sockets×dies×cores×threads == vcpu。
-// 不存在 topology 时，使用 virsh setvcpus 命令。
-// 注意：必须同时检查 inactive 和 live XML，因为运行时 virsh setvcpus --config
+// 因为 setvcpus 和 define 都会校验 sockets×dies×cores×threads == vcpu。
+// 不存在 topology 时，使用 RPC setvcpus 命令。
+// 注意：必须同时检查 inactive 和 live XML，因为运行时 setvcpus --config
 // 也会校验当前 live 域的 topology 一致性。
 func setVMCPUWithTopologySync(name string, vcpu, maxVCPU int) error {
-	inactiveResult := utils.ExecCommand("virsh", "dumpxml", name, "--inactive")
-	if inactiveResult.Error != nil {
-		return fmt.Errorf("获取虚拟机持久化 XML 失败: %s", inactiveResult.Stderr)
+	xmlStr, err := getDomainXMLRPC(name, libvirt.DomainXMLInactive)
+	if err != nil {
+		return fmt.Errorf("获取虚拟机持久化 XML 失败: %w", err)
 	}
-	xmlStr := inactiveResult.Stdout
 
 	hasTopology := vmCPUTopologyRegexp.MatchString(xmlStr)
 
 	if !hasTopology {
-		// 持久化配置没有 topology，再检查在线配置（运行时 virsh setvcpus 可能校验在线域的拓扑）
-		liveResult := utils.ExecCommand("virsh", "dumpxml", name)
-		if liveResult.Error == nil {
-			hasTopology = vmCPUTopologyRegexp.MatchString(liveResult.Stdout)
+		// 持久化配置没有 topology，再检查在线配置（运行时 setvcpus 可能校验在线域的拓扑）
+		liveXML, liveErr := getDomainXMLRPC(name, 0)
+		if liveErr == nil {
+			hasTopology = vmCPUTopologyRegexp.MatchString(liveXML)
 			if hasTopology {
 				// 在线配置有 topology 但持久化没有，以在线配置的 topology 为准来重建持久化
 				// 需要将在线 topology 信息合并到持久化 XML 中
-				xmlStr = mergeTopologyFromLiveToInactive(xmlStr, liveResult.Stdout)
+				xmlStr = mergeTopologyFromLiveToInactive(xmlStr, liveXML)
 			}
 		}
 	}
 
 	if !hasTopology {
-		// 无 topology，使用传统的 virsh setvcpus 命令
+		// 无 topology，使用 RPC 设置 vCPU
 		// 设置最大 vCPU（热添加上限），默认与当前 vCPU 相同
 		maxArg := vcpu
 		if maxVCPU > vcpu {
 			maxArg = maxVCPU
 		}
-		result := utils.ExecCommand("virsh", "setvcpus", name, strconv.Itoa(maxArg), "--config", "--maximum")
-		if result.Error != nil {
-			return fmt.Errorf("设置 CPU 最大值失败: %s", result.Stderr)
+		if err := setDomainVcpusFlagsRPC(name, uint32(maxArg), domainVcpuConfig|domainVcpuMaximum); err != nil {
+			return fmt.Errorf("设置 CPU 最大值失败: %w", err)
 		}
-		result = utils.ExecCommand("virsh", "setvcpus", name, strconv.Itoa(vcpu), "--config")
-		if result.Error != nil {
-			return fmt.Errorf("设置 CPU 失败: %s", result.Stderr)
+		if err := setDomainVcpusFlagsRPC(name, uint32(vcpu), domainVcpuConfig); err != nil {
+			return fmt.Errorf("设置 CPU 失败: %w", err)
 		}
 		return nil
 	}
@@ -278,7 +275,7 @@ func setVMCPUWithTopologySync(name string, vcpu, maxVCPU int) error {
 		}
 	}
 
-	_, err := defineDomainXMLRPC(xmlStr)
+	_, err = defineDomainXMLRPC(xmlStr)
 	if err != nil {
 		return fmt.Errorf("设置 CPU 拓扑失败: %w", err)
 	}
@@ -313,30 +310,24 @@ func mergeTopologyFromLiveToInactive(inactiveXML, liveXML string) string {
 
 // SetVMCPUTopologyMode 设置虚拟机 CPU 拓扑模式。运行中的虚拟机需要先关机后再修改。
 func SetVMCPUTopologyMode(name, mode string) error {
-	stateResult := utils.ExecCommand("virsh", "domstate", name)
-	if stateResult.Error != nil {
-		return fmt.Errorf("获取虚拟机状态失败: %s", stateResult.Stderr)
+	state, err := getDomainStateRPC(name)
+	if err != nil {
+		return fmt.Errorf("获取虚拟机状态失败: %w", err)
 	}
-	state := strings.TrimSpace(stateResult.Stdout)
 	if state == "running" || state == "paused" {
 		return fmt.Errorf("请先关机后再修改 CPU 拓扑")
 	}
 
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", name, "--inactive")
-	if xmlResult.Error != nil {
-		return fmt.Errorf("获取虚拟机 XML 失败: %s", xmlResult.Stderr)
+	xmlStr, err := getDomainXMLRPC(name, libvirt.DomainXMLInactive)
+	if err != nil {
+		return fmt.Errorf("获取虚拟机 XML 失败: %w", err)
 	}
 
-	xmlStr := xmlResult.Stdout
 	osType := detectVMOSType("", xmlStr)
 	updated := ApplyCPUTopologyModeToDomainXML(xmlStr, mode, osType, ParseVCPUCountFromDomainXML(xmlStr))
 
-	xmlPath := fmt.Sprintf("/tmp/_cpu-topology-%s.xml", name)
-	utils.ExecShell(fmt.Sprintf("cat > %s << 'XMLEOF'\n%s\nXMLEOF", utils.ShellSingleQuote(xmlPath), updated))
-	defineResult := utils.ExecCommand("virsh", "define", xmlPath)
-	utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(xmlPath)))
-	if defineResult.Error != nil {
-		return fmt.Errorf("修改 CPU 拓扑失败: %s", defineResult.Stderr)
+	if _, err := defineDomainXMLRPC(updated); err != nil {
+		return fmt.Errorf("修改 CPU 拓扑失败: %w", err)
 	}
 	return nil
 }

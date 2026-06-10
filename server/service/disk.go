@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/digitalocean/go-libvirt"
 	"kvm_console/config"
 	"kvm_console/utils"
 )
@@ -55,32 +56,29 @@ type diskXMLInfo struct {
 
 // ListDisks 列出虚拟机磁盘
 func ListDisks(vmName string) ([]DiskInfo, error) {
-	state := utils.ExecCommand("virsh", "domstate", vmName)
-	vmState := strings.TrimSpace(state.Stdout)
+	state, _ := getDomainStateRPC(vmName)
 
-	blkResult := utils.ExecCommand("virsh", "domblklist", vmName)
-	if blkResult.Error != nil {
-		return nil, fmt.Errorf("获取磁盘列表失败: %s", blkResult.Stderr)
+	domainXML, err := getDomainXMLRPC(vmName, 0)
+	if err != nil {
+		return nil, fmt.Errorf("获取磁盘列表失败: %w", err)
 	}
+
+	// 从 XML 解析块设备列表（替代 virsh domblklist）
+	blkList := parseDisksFromDomainXML(domainXML)
 
 	// 从 XML 获取每个磁盘的详细信息（格式、设备类型、总线、IOPS）
 	diskXMLMap := parseDiskXMLInfo(vmName)
 	diskIOPSMap := ParseAllDiskIOPSTune(vmName)
 
 	var disks []DiskInfo
-	lines := strings.Split(blkResult.Stdout, "\n")
 
-	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) < 1 || fields[0] == "Target" || strings.HasPrefix(line, "-") {
+	for _, blk := range blkList {
+		device := blk.Target
+		path := blk.Source
+
+		// 跳过没有 target 的设备
+		if device == "" {
 			continue
-		}
-
-		// 获取设备名和路径
-		device := fields[0]
-		path := ""
-		if len(fields) >= 2 {
-			path = fields[1]
 		}
 
 		disk := DiskInfo{
@@ -107,11 +105,11 @@ func ListDisks(vmName string) ([]DiskInfo, error) {
 		disk.HotSupport = disk.Bus == "virtio" || disk.Bus == "scsi"
 
 		// 容量和占用
-		if vmState == "running" && disk.Path != "" {
-			blkInfo := utils.ExecCommand("virsh", "domblkinfo", vmName, disk.Device)
-			if blkInfo.Error == nil {
-				disk.CapacityGB = parseBlkInfoGB(blkInfo.Stdout, "Capacity:")
-				disk.UsedGB = parseBlkInfoGB(blkInfo.Stdout, "Allocation:")
+		if state == "running" && disk.Path != "" {
+			capVal, allocVal, _, blkErr := getBlockInfoRPC(vmName, disk.Device)
+			if blkErr == nil {
+				disk.CapacityGB = fmt.Sprintf("%.2f", float64(capVal)/1024/1024/1024)
+				disk.UsedGB = fmt.Sprintf("%.2f", float64(allocVal)/1024/1024/1024)
 			}
 		} else if disk.Path != "" {
 			// 关机时也能用 qemu-img info 获取
@@ -143,12 +141,12 @@ func ListDisks(vmName string) ([]DiskInfo, error) {
 func parseDiskXMLInfo(vmName string) map[string]diskXMLInfo {
 	result := make(map[string]diskXMLInfo)
 
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName)
-	if xmlResult.Error != nil {
+	xmlStr, err := getDomainXMLRPC(vmName, 0)
+	if err != nil {
 		return result
 	}
 
-	lines := strings.Split(xmlResult.Stdout, "\n")
+	lines := strings.Split(xmlStr, "\n")
 	var currentDev string
 	var currentInfo diskXMLInfo
 	inDisk := false
@@ -267,7 +265,7 @@ func AttachExistingDisk(vmName, diskPath, bus string) (string, error) {
 		diskPath = destPath
 	}
 
-	vmState := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
+	vmState, _ := getDomainStateRPC(vmName)
 
 	// 检测磁盘格式
 	format := "qcow2"
@@ -326,19 +324,13 @@ func AttachExistingDisk(vmName, diskPath, bus string) (string, error) {
 		diskXML = hotplugXML
 	}
 
-	xmlPath := fmt.Sprintf("/tmp/_attach-disk-%s-%s.xml", vmName, nextDev)
-	utils.ExecShell(fmt.Sprintf("cat > %s << 'XMLEOF'\n%s\nXMLEOF", utils.ShellSingleQuote(xmlPath), diskXML))
-
-	var attachArgs []string
+	// attach-device: running=live+config(3), stopped=config(2)
+	var attachFlags uint32 = 2 // VIR_DOMAIN_DEVICE_MODIFY_CONFIG
 	if vmState == "running" {
-		attachArgs = []string{"attach-device", vmName, xmlPath, "--persistent"}
-	} else {
-		attachArgs = []string{"attach-device", vmName, xmlPath, "--config"}
+		attachFlags = 3 // VIR_DOMAIN_DEVICE_MODIFY_LIVE | VIR_DOMAIN_DEVICE_MODIFY_CONFIG
 	}
-	attachResult := utils.ExecCommand("virsh", attachArgs...)
-	utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(xmlPath)))
-	if attachResult.Error != nil {
-		return "", fmt.Errorf("挂载磁盘失败: %s", attachResult.Stderr)
+	if err := attachDeviceFlagsRPC(vmName, diskXML, attachFlags); err != nil {
+		return "", fmt.Errorf("挂载磁盘失败: %w", err)
 	}
 
 	return nextDev, nil
@@ -369,7 +361,7 @@ func AddDiskWithBusInDir(vmName string, sizeGB int, format, bus, diskDir string)
 	if strings.TrimSpace(diskDir) == "" {
 		diskDir = config.GlobalConfig.CloneDir
 	}
-	vmState := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
+	vmState, _ := getDomainStateRPC(vmName)
 
 	// 根据总线类型确定设备前缀
 	devPrefix := getDevPrefix(bus)
@@ -430,20 +422,14 @@ func AddDiskWithBusInDir(vmName string, sizeGB int, format, bus, diskDir string)
 		diskXML = hotplugXML
 	}
 
-	xmlPath := fmt.Sprintf("/tmp/_attach-disk-%s-%s.xml", vmName, nextDev)
-	utils.ExecShell(fmt.Sprintf("cat > %s << 'XMLEOF'\n%s\nXMLEOF", utils.ShellSingleQuote(xmlPath), diskXML))
-
-	var attachArgs []string
+	// attach-device: running=live+config(3), stopped=config(2)
+	var attachFlags uint32 = 2 // VIR_DOMAIN_DEVICE_MODIFY_CONFIG
 	if vmState == "running" {
-		attachArgs = []string{"attach-device", vmName, xmlPath, "--persistent"}
-	} else {
-		attachArgs = []string{"attach-device", vmName, xmlPath, "--config"}
+		attachFlags = 3 // VIR_DOMAIN_DEVICE_MODIFY_LIVE | VIR_DOMAIN_DEVICE_MODIFY_CONFIG
 	}
-	attachResult := utils.ExecCommand("virsh", attachArgs...)
-	utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(xmlPath)))
-	if attachResult.Error != nil {
+	if err := attachDeviceFlagsRPC(vmName, diskXML, attachFlags); err != nil {
 		utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(diskPath)))
-		return "", fmt.Errorf("挂载磁盘失败: %s", attachResult.Stderr)
+		return "", fmt.Errorf("挂载磁盘失败: %w", err)
 	}
 
 	return nextDev, nil
@@ -496,12 +482,12 @@ func AddExtraDisksForVM(vmName string, disks []ExtraDiskParam, defaultDir, defau
 // 否则 libvirt 会报 "No more available PCI slots"。
 // 当 PCIe 插槽已满时，返回 ErrNoPCIESlots 错误供上层降级处理。
 func buildDiskHotplugXML(vmName string, diskXML string) (string, error) {
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName)
-	if xmlResult.Error != nil {
+	xmlStr, err := getDomainXMLRPC(vmName, 0)
+	if err != nil {
 		// 无法获取 XML 时直接返回原始 XML，让 libvirt 自行分配
 		return diskXML, nil
 	}
-	if !hasPCIERootController(xmlResult.Stdout) {
+	if !hasPCIERootController(xmlStr) {
 		// 非 PCIe 机型（i440fx 等），不需要手动分配 PCI 地址
 		return diskXML, nil
 	}
@@ -525,8 +511,8 @@ var ErrNoPCIESlots = fmt.Errorf("no_pcie_slots")
 // 返回降级后的设备名，或错误。
 func tryFallbackDiskToSCSI(vmName, diskPath, format string, existingDisks []DiskInfo, vmState string) (string, error) {
 	// 1. 确认 VM 有 virtio-scsi 控制器
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName)
-	if xmlResult.Error != nil || !hasSCSIController(xmlResult.Stdout) {
+	xmlStr, err := getDomainXMLRPC(vmName, 0)
+	if err != nil || !hasSCSIController(xmlStr) {
 		// 尝试创建 virtio-scsi 控制器（需要 PCIe 插槽，通常也会失败）
 		if err := ensureHotplugCDROMController(vmName); err != nil {
 			return "", fmt.Errorf("PCIe 插槽已满且无可用的 virtio-scsi 控制器（尝试创建也失败: %v）。请先关机后再添加磁盘", err)
@@ -559,20 +545,13 @@ func tryFallbackDiskToSCSI(vmName, diskPath, format string, existingDisks []Disk
 			"</disk>",
 		format, diskPath, nextDev)
 
-	// 4. 写入 XML 并挂载
-	xmlPath := fmt.Sprintf("/tmp/_attach-disk-%s-%s.xml", vmName, nextDev)
-	utils.ExecShell(fmt.Sprintf("cat > %s << 'XMLEOF'\n%s\nXMLEOF", utils.ShellSingleQuote(xmlPath), diskXML))
-
-	var attachArgs []string
+	// attach-device: running=live+config(3), stopped=config(2)
+	var attachFlags uint32 = 2 // VIR_DOMAIN_DEVICE_MODIFY_CONFIG
 	if vmState == "running" {
-		attachArgs = []string{"attach-device", vmName, xmlPath, "--persistent"}
-	} else {
-		attachArgs = []string{"attach-device", vmName, xmlPath, "--config"}
+		attachFlags = 3 // VIR_DOMAIN_DEVICE_MODIFY_LIVE | VIR_DOMAIN_DEVICE_MODIFY_CONFIG
 	}
-	attachResult := utils.ExecCommand("virsh", attachArgs...)
-	utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(xmlPath)))
-	if attachResult.Error != nil {
-		return "", fmt.Errorf("scsi 降级挂载失败: %s", attachResult.Stderr)
+	if err := attachDeviceFlagsRPC(vmName, diskXML, attachFlags); err != nil {
+		return "", fmt.Errorf("scsi 降级挂载失败: %w", err)
 	}
 
 	return nextDev, nil
@@ -597,15 +576,15 @@ func SetDiskBus(vmName, device, newBus string) error {
 	if err := EnsureVMNotMigrating(vmName, "修改磁盘驱动类型"); err != nil {
 		return err
 	}
-	state := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
+	state, _ := getDomainStateRPC(vmName)
 	if state == "running" {
 		return fmt.Errorf("修改磁盘驱动类型需要先关机")
 	}
 
 	// 获取当前 XML
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName, "--inactive")
-	if xmlResult.Error != nil {
-		return fmt.Errorf("获取虚拟机 XML 失败: %s", xmlResult.Stderr)
+	xmlResult, err := getDomainXMLRPC(vmName, libvirt.DomainXMLInactive)
+	if err != nil {
+		return fmt.Errorf("获取虚拟机 XML 失败: %w", err)
 	}
 
 	// 计算新的设备名：保留原字母后缀，替换前缀
@@ -616,7 +595,7 @@ func SetDiskBus(vmName, device, newBus string) error {
 	_ = oldPrefix // 避免未使用
 
 	// 解析并修改 XML
-	xmlStr := xmlResult.Stdout
+	xmlStr := xmlResult
 	lines := strings.Split(xmlStr, "\n")
 	var newLines []string
 	inTargetDisk := false
@@ -657,16 +636,8 @@ func SetDiskBus(vmName, device, newBus string) error {
 	}
 
 	newXML := strings.Join(newLines, "\n")
-	xmlPath := fmt.Sprintf("/tmp/_diskbus-%s.xml", vmName)
-	writeResult := utils.ExecShell(fmt.Sprintf("cat > %s << 'XMLEOF'\n%s\nXMLEOF", utils.ShellSingleQuote(xmlPath), newXML))
-	if writeResult.Error != nil {
-		return fmt.Errorf("写入 XML 失败: %s", writeResult.Stderr)
-	}
-
-	defineResult := utils.ExecCommand("virsh", "define", xmlPath)
-	utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(xmlPath)))
-	if defineResult.Error != nil {
-		return fmt.Errorf("修改磁盘驱动失败: %s", defineResult.Stderr)
+	if _, err := defineDomainXMLRPC(newXML); err != nil {
+		return fmt.Errorf("修改磁盘驱动失败: %w", err)
 	}
 
 	return nil
@@ -695,7 +666,7 @@ func ResizeDisk(vmName, device string, newSizeGB int) error {
 	if err := EnsureVMNotMigrating(vmName, "扩容磁盘"); err != nil {
 		return err
 	}
-	vmState := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
+	vmState, _ := getDomainStateRPC(vmName)
 
 	// 安全检查：如果存在外部快照，拒绝扩容
 	hasExtSnap, extSnapNames, _ := CheckVMSnapshotSafety(vmName)
@@ -704,15 +675,24 @@ func ResizeDisk(vmName, device string, newSizeGB int) error {
 			strings.Join(extSnapNames, "、"))
 	}
 
-	// 获取磁盘路径
-	pathResult := utils.ExecShell(fmt.Sprintf(
-		"virsh domblklist '%s' | awk '$1==\"%s\"{print $2}'", vmName, device))
-	diskPath := strings.TrimSpace(pathResult.Stdout)
+	// 获取磁盘路径（从 XML 解析）
+	domainXML, xmlErr := getDomainXMLRPC(vmName, 0)
+	if xmlErr != nil {
+		return fmt.Errorf("获取虚拟机 XML 失败: %w", xmlErr)
+	}
+	blkList := parseDisksFromDomainXML(domainXML)
+	diskPath := ""
+	for _, blk := range blkList {
+		if blk.Target == device {
+			diskPath = blk.Source
+			break
+		}
+	}
 
 	if vmState == "running" {
-		result := utils.ExecCommand("virsh", "blockresize", vmName, device, fmt.Sprintf("%dG", newSizeGB))
-		if result.Error != nil {
-			return fmt.Errorf("热扩容失败: %s", result.Stderr)
+		newSizeBytes := uint64(newSizeGB) * 1024 * 1024 * 1024
+		if err := blockResizeRPC(vmName, device, newSizeBytes, libvirt.DomainBlockResizeBytes); err != nil {
+			return fmt.Errorf("热扩容失败: %w", err)
 		}
 	} else {
 		if diskPath == "" {
@@ -732,23 +712,32 @@ func RemoveDisk(vmName, device string, deleteFile bool) error {
 	if err := EnsureVMNotMigrating(vmName, "删除磁盘"); err != nil {
 		return err
 	}
-	vmState := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
+	vmState, _ := getDomainStateRPC(vmName)
 
-	// 获取磁盘路径
-	pathResult := utils.ExecShell(fmt.Sprintf(
-		"virsh domblklist %s | awk '$1==\"%s\"{print $2}'", utils.ShellSingleQuote(vmName), device))
-	diskPath := strings.TrimSpace(pathResult.Stdout)
+	// 获取磁盘路径（从 XML 解析）
+	domainXML, xmlErr := getDomainXMLRPC(vmName, 0)
+	if xmlErr != nil {
+		return fmt.Errorf("获取虚拟机 XML 失败: %w", xmlErr)
+	}
+	blkList := parseDisksFromDomainXML(domainXML)
+	diskPath := ""
+	for _, blk := range blkList {
+		if blk.Target == device {
+			diskPath = blk.Source
+			break
+		}
+	}
 
 	// 分离磁盘
-	var detachArgs []string
+	var detachFlags uint32 = 2 // VIR_DOMAIN_DEVICE_MODIFY_CONFIG
 	if vmState == "running" {
-		detachArgs = []string{"detach-disk", vmName, device, "--persistent"}
-	} else {
-		detachArgs = []string{"detach-disk", vmName, device, "--config"}
+		// virsh detach-disk --persistent = live + config
+		detachFlags = 3 // VIR_DOMAIN_DEVICE_MODIFY_LIVE | VIR_DOMAIN_DEVICE_MODIFY_CONFIG
 	}
-	result := utils.ExecCommand("virsh", detachArgs...)
-	if result.Error != nil {
-		return fmt.Errorf("分离磁盘失败: %s", result.Stderr)
+	// 构建 detach 需要的 disk XML
+	diskDetXML := fmt.Sprintf("<disk type='file' device='disk'>\n  <target dev='%s'/>\n</disk>", device)
+	if err := detachDeviceFlagsRPC(vmName, diskDetXML, detachFlags); err != nil {
+		return fmt.Errorf("分离磁盘失败: %w", err)
 	}
 
 	// 删除文件
@@ -757,21 +746,6 @@ func RemoveDisk(vmName, device string, deleteFile bool) error {
 	}
 
 	return nil
-}
-
-// parseBlkInfoGB 从 domblkinfo 解析容量（字节→GB）
-func parseBlkInfoGB(output, key string) string {
-	for _, line := range strings.Split(output, "\n") {
-		if strings.Contains(line, key) {
-			fields := strings.Fields(line)
-			if len(fields) >= 2 {
-				var bytes int64
-				fmt.Sscanf(fields[1], "%d", &bytes)
-				return fmt.Sprintf("%.2f", float64(bytes)/1024/1024/1024)
-			}
-		}
-	}
-	return "-"
 }
 
 // parseQemuInfoGB 从 qemu-img info JSON 解析容量（仅读取顶层字段，避免被 children 中的同名字段干扰）
@@ -834,9 +808,17 @@ func GetVMQcow2Disks(vmName string) ([]DiskSimpleInfo, error) {
 
 // GetDiskFilePath 获取磁盘设备对应的文件路径
 func GetDiskFilePath(vmName, device string) string {
-	pathResult := utils.ExecShell(fmt.Sprintf(
-		"virsh domblklist %s | awk '$1==\"%s\"{print $2}'", utils.ShellSingleQuote(vmName), device))
-	return strings.TrimSpace(pathResult.Stdout)
+	domainXML, err := getDomainXMLRPC(vmName, 0)
+	if err != nil {
+		return ""
+	}
+	blkList := parseDisksFromDomainXML(domainXML)
+	for _, blk := range blkList {
+		if blk.Target == device {
+			return blk.Source
+		}
+	}
+	return ""
 }
 
 // TransferDiskFile 将磁盘文件转移到用户存储的虚拟磁盘目录
@@ -877,7 +859,7 @@ func ChangeCDROM(vmName, isoPath, device string, forceNew bool) error {
 	if err := EnsureVMNotMigrating(vmName, "更换光盘"); err != nil {
 		return err
 	}
-	vmState := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
+	vmState, _ := getDomainStateRPC(vmName)
 
 	// 强制新增模式：直接添加新光驱设备
 	if forceNew {
@@ -893,16 +875,21 @@ func ChangeCDROM(vmName, isoPath, device string, forceNew bool) error {
 		}
 	}
 
-	// 使用 change-media 替换 ISO
-	var args []string
+	// 通过 attachDeviceFlagsRPC 更换 CDROM 介质
+	// 构建 CDROM 设备 XML，source 指向新的 ISO
+	cdromXML := fmt.Sprintf(
+		"<disk type='file' device='cdrom'>\n"+
+			"  <driver name='qemu' type='raw'/>\n"+
+			"  <source file='%s'/>\n"+
+			"  <target dev='%s' bus='sata'/>\n"+
+			"</disk>", isoPath, device)
+
+	var attachFlags uint32 = 2 // VIR_DOMAIN_DEVICE_MODIFY_CONFIG
 	if vmState == "running" {
-		args = []string{"change-media", vmName, device, isoPath, "--live", "--config"}
-	} else {
-		args = []string{"change-media", vmName, device, isoPath, "--config"}
+		attachFlags = 3 // VIR_DOMAIN_DEVICE_MODIFY_LIVE | VIR_DOMAIN_DEVICE_MODIFY_CONFIG
 	}
-	result := utils.ExecCommand("virsh", args...)
-	if result.Error != nil {
-		return fmt.Errorf("插入光盘失败: %s", result.Stderr)
+	if err := attachDeviceFlagsRPC(vmName, cdromXML, attachFlags); err != nil {
+		return fmt.Errorf("插入光盘失败: %w", err)
 	}
 	return nil
 }
@@ -912,7 +899,7 @@ func EjectCDROM(vmName, device string) error {
 	if err := EnsureVMNotMigrating(vmName, "弹出光盘"); err != nil {
 		return err
 	}
-	vmState := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
+	vmState, _ := getDomainStateRPC(vmName)
 
 	if device == "" {
 		device = findCDROMDevice(vmName)
@@ -921,20 +908,24 @@ func EjectCDROM(vmName, device string) error {
 		}
 	}
 
-	var args []string
+	// 通过 attachDeviceFlagsRPC 弹出 CDROM 介质（source 留空）
+	cdromXML := fmt.Sprintf(
+		"<disk type='file' device='cdrom'>\n"+
+			"  <driver name='qemu' type='raw'/>\n"+
+			"  <target dev='%s' bus='sata'/>\n"+
+			"</disk>", device)
+
+	var attachFlags uint32 = 2 // VIR_DOMAIN_DEVICE_MODIFY_CONFIG
 	if vmState == "running" {
-		args = []string{"change-media", vmName, device, "--eject", "--live", "--config"}
-	} else {
-		args = []string{"change-media", vmName, device, "--eject", "--config"}
+		attachFlags = 3 // VIR_DOMAIN_DEVICE_MODIFY_LIVE | VIR_DOMAIN_DEVICE_MODIFY_CONFIG
 	}
-	result := utils.ExecCommand("virsh", args...)
-	if result.Error != nil {
+	if err := attachDeviceFlagsRPC(vmName, cdromXML, attachFlags); err != nil {
 		// 忽略"没有介质"的错误
-		if strings.Contains(result.Stderr, "doesn't have media") ||
-			strings.Contains(result.Stderr, "is not removable") {
+		if strings.Contains(err.Error(), "doesn't have media") ||
+			strings.Contains(err.Error(), "is not removable") {
 			return nil
 		}
-		return fmt.Errorf("弹出光盘失败: %s", result.Stderr)
+		return fmt.Errorf("弹出光盘失败: %w", err)
 	}
 	return nil
 }
@@ -944,7 +935,7 @@ func RemoveCDROM(vmName, device string) error {
 	if err := EnsureVMNotMigrating(vmName, "移除光驱"); err != nil {
 		return err
 	}
-	vmState := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
+	vmState, _ := getDomainStateRPC(vmName)
 
 	if device == "" {
 		device = findCDROMDevice(vmName)
@@ -961,13 +952,13 @@ func RemoveCDROM(vmName, device string) error {
 	}
 
 	// 获取当前 XML
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName, "--inactive")
-	if xmlResult.Error != nil {
-		return fmt.Errorf("获取虚拟机 XML 失败: %s", xmlResult.Stderr)
+	xmlResult, err := getDomainXMLRPC(vmName, libvirt.DomainXMLInactive)
+	if err != nil {
+		return fmt.Errorf("获取虚拟机 XML 失败: %w", err)
 	}
 
 	// 从 XML 中移除对应的 cdrom disk 节点
-	xmlStr := xmlResult.Stdout
+	xmlStr := xmlResult
 	lines := strings.Split(xmlStr, "\n")
 	var newLines []string
 	var diskBuffer []string
@@ -1009,14 +1000,8 @@ func RemoveCDROM(vmName, device string) error {
 	}
 
 	newXML := strings.Join(newLines, "\n")
-	xmlPath := fmt.Sprintf("/tmp/_cdrom-rm-%s.xml", vmName)
-	if err := os.WriteFile(xmlPath, []byte(newXML), 0644); err != nil {
-		return fmt.Errorf("写入 XML 文件失败: %v", err)
-	}
-	defineResult := utils.ExecCommand("virsh", "define", xmlPath)
-	os.Remove(xmlPath)
-	if defineResult.Error != nil {
-		return fmt.Errorf("移除光驱失败: %s", defineResult.Stderr)
+	if _, err := defineDomainXMLRPC(newXML); err != nil {
+		return fmt.Errorf("移除光驱失败: %w", err)
 	}
 
 	return nil
@@ -1033,13 +1018,13 @@ func findCDROMDevice(vmName string) string {
 
 // findAllCDROMDevices 查找虚拟机的所有 cdrom 设备名
 func findAllCDROMDevices(vmName string) []string {
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName)
-	if xmlResult.Error != nil {
+	xmlStr, err := getDomainXMLRPC(vmName, 0)
+	if err != nil {
 		return nil
 	}
 
 	var devices []string
-	lines := strings.Split(xmlResult.Stdout, "\n")
+	lines := strings.Split(xmlStr, "\n")
 	inCdrom := false
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
@@ -1088,21 +1073,24 @@ func attachNewCDROM(vmName, isoPath, vmState string) error {
 		return fmt.Errorf("没有可用的 %s 光驱设备名", strings.ToUpper(bus))
 	}
 
-	var args []string
+	// 通过 attachDeviceFlagsRPC 添加 CDROM 设备
+	cdromXML := fmt.Sprintf(
+		"<disk type='file' device='cdrom'>\n"+
+			"  <driver name='qemu' type='raw'/>\n"+
+			"  <source file='%s'/>\n"+
+			"  <target dev='%s' bus='%s'/>\n"+
+			"  <readonly/>\n"+
+			"</disk>", isoPath, nextDev, bus)
+
+	var attachFlags uint32 = 2 // VIR_DOMAIN_DEVICE_MODIFY_CONFIG
 	if vmState == "running" {
-		args = []string{"attach-disk", vmName, isoPath, nextDev,
-			"--type", "cdrom", "--mode", "readonly", "--targetbus", bus, "--persistent"}
-	} else {
-		args = []string{"attach-disk", vmName, isoPath, nextDev,
-			"--type", "cdrom", "--mode", "readonly", "--targetbus", bus, "--config"}
+		attachFlags = 3 // VIR_DOMAIN_DEVICE_MODIFY_LIVE | VIR_DOMAIN_DEVICE_MODIFY_CONFIG
 	}
-	result := utils.ExecCommand("virsh", args...)
-	if result.Error != nil {
-		stderr := strings.TrimSpace(result.Stderr)
-		if vmState == "running" && strings.Contains(stderr, "cannot be hotplugged") {
+	if err := attachDeviceFlagsRPC(vmName, cdromXML, attachFlags); err != nil {
+		if vmState == "running" && strings.Contains(err.Error(), "cannot be hotplugged") {
 			return fmt.Errorf("当前虚拟机不支持通过 %s 总线热添加光驱，请先关机后再添加", strings.ToUpper(bus))
 		}
-		return fmt.Errorf("添加光驱失败: %s", stderr)
+		return fmt.Errorf("添加光驱失败: %w", err)
 	}
 	return nil
 }
@@ -1115,16 +1103,16 @@ func SetVMPCIERootPorts(vmName string, targetCount int) error {
 	if err := EnsureVMNotMigrating(vmName, "修改 PCIe 端口数"); err != nil {
 		return err
 	}
-	state := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
+	state, _ := getDomainStateRPC(vmName)
 	if state == "running" {
 		return fmt.Errorf("修改 PCIe 端口数量需要先关机")
 	}
 
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName, "--inactive")
-	if xmlResult.Error != nil {
-		return fmt.Errorf("获取虚拟机 XML 失败: %s", xmlResult.Stderr)
+	xmlResult, err := getDomainXMLRPC(vmName, libvirt.DomainXMLInactive)
+	if err != nil {
+		return fmt.Errorf("获取虚拟机 XML 失败: %w", err)
 	}
-	if !hasPCIERootController(xmlResult.Stdout) {
+	if !hasPCIERootController(xmlResult) {
 		return fmt.Errorf("当前虚拟机不是 PCIe (q35/virt) 机型，不需要手动管理 pcie-root-port")
 	}
 
@@ -1132,7 +1120,7 @@ func SetVMPCIERootPorts(vmName string, targetCount int) error {
 	// system 端口：虚拟机启动时必须的端口（由 libvirt 按设备数量自动生成）
 	// extra 端口：我们在创建虚拟机时注入 XML 中额外预留的空端口
 
-	lines := strings.Split(xmlResult.Stdout, "\n")
+	lines := strings.Split(xmlResult, "\n")
 
 	// 先找到所有 pcie-root-port 控制器块
 	type portBlock struct {
@@ -1270,14 +1258,8 @@ func SetVMPCIERootPorts(vmName string, targetCount int) error {
 	emptyLineRe := regexp.MustCompile(`\n\s*\n\s*\n`)
 	newXML = emptyLineRe.ReplaceAllString(newXML, "\n\n")
 
-	xmlPath := fmt.Sprintf("/tmp/_pcie-ports-%s.xml", vmName)
-	if err := os.WriteFile(xmlPath, []byte(newXML), 0644); err != nil {
-		return fmt.Errorf("写入 XML 文件失败: %v", err)
-	}
-	defineResult := utils.ExecCommand("virsh", "define", xmlPath)
-	os.Remove(xmlPath)
-	if defineResult.Error != nil {
-		return fmt.Errorf("修改 PCIe 端口数量失败: %s", defineResult.Stderr)
+	if _, err := defineDomainXMLRPC(newXML); err != nil {
+		return fmt.Errorf("修改 PCIe 端口数量失败: %w", err)
 	}
 
 	return nil
@@ -1285,16 +1267,16 @@ func SetVMPCIERootPorts(vmName string, targetCount int) error {
 
 // GetVMPCIERootPorts 获取虚拟机当前的 pcie-root-port 数量
 func GetVMPCIERootPorts(vmName string) (int, error) {
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName, "--inactive")
-	if xmlResult.Error != nil {
-		return 0, fmt.Errorf("获取虚拟机 XML 失败: %s", xmlResult.Stderr)
+	xmlStr, err := getDomainXMLRPC(vmName, libvirt.DomainXMLInactive)
+	if err != nil {
+		return 0, fmt.Errorf("获取虚拟机 XML 失败: %w", err)
 	}
-	if !hasPCIERootController(xmlResult.Stdout) {
+	if !hasPCIERootController(xmlStr) {
 		return 0, nil // 非 PCIe 机型，返回 0
 	}
 
 	count := 0
-	for _, line := range strings.Split(xmlResult.Stdout, "\n") {
+	for _, line := range strings.Split(xmlStr, "\n") {
 		if strings.Contains(line, `<controller type='pci'`) && strings.Contains(line, `model='pcie-root-port'`) {
 			count++
 		}
@@ -1303,47 +1285,38 @@ func GetVMPCIERootPorts(vmName string) (int, error) {
 }
 
 func ensureHotplugCDROMController(vmName string) error {
-	liveXMLResult := utils.ExecCommand("virsh", "dumpxml", vmName)
-	if liveXMLResult.Error != nil {
-		return fmt.Errorf("获取运行中虚拟机 XML 失败: %s", liveXMLResult.Stderr)
+	liveXMLStr, err := getDomainXMLRPC(vmName, 0)
+	if err != nil {
+		return fmt.Errorf("获取运行中虚拟机 XML 失败: %w", err)
 	}
-	configXMLResult := utils.ExecCommand("virsh", "dumpxml", vmName, "--inactive")
-	if configXMLResult.Error != nil {
-		return fmt.Errorf("获取持久化虚拟机 XML 失败: %s", configXMLResult.Stderr)
+	configXMLStr, err := getDomainXMLRPC(vmName, libvirt.DomainXMLInactive)
+	if err != nil {
+		return fmt.Errorf("获取持久化虚拟机 XML 失败: %w", err)
 	}
 
-	hasLiveController := hasSCSIController(liveXMLResult.Stdout)
-	hasConfigController := hasSCSIController(configXMLResult.Stdout)
+	hasLiveController := hasSCSIController(liveXMLStr)
+	hasConfigController := hasSCSIController(configXMLStr)
 	if hasLiveController && hasConfigController {
 		return nil
 	}
 
-	controllerXML, err := buildHotplugSCSIControllerXML(vmName, liveXMLResult.Stdout)
-	if err != nil {
-		return err
+	controllerXML, buildErr := buildHotplugSCSIControllerXML(vmName, liveXMLStr)
+	if buildErr != nil {
+		return buildErr
 	}
-	xmlPath := fmt.Sprintf("/tmp/_cdrom-scsi-controller-%s.xml", vmName)
-	if err := os.WriteFile(xmlPath, []byte(controllerXML), 0644); err != nil {
-		return fmt.Errorf("写入 SCSI 控制器 XML 失败: %v", err)
-	}
-	defer os.Remove(xmlPath)
 
 	if !hasLiveController {
-		result := utils.ExecCommand("virsh", "attach-device", vmName, xmlPath, "--live")
-		if result.Error != nil {
-			stderr := strings.TrimSpace(result.Stderr)
-			if !strings.Contains(stderr, "Duplicate ID") && !strings.Contains(stderr, "already exists") {
-				return fmt.Errorf("为热添加光驱准备 SCSI 控制器失败: %s", stderr)
+		if err := attachDeviceFlagsRPC(vmName, controllerXML, 1); err != nil { // 1=VIR_DOMAIN_DEVICE_MODIFY_LIVE
+			if !strings.Contains(err.Error(), "Duplicate ID") && !strings.Contains(err.Error(), "already exists") {
+				return fmt.Errorf("为热添加光驱准备 SCSI 控制器失败: %w", err)
 			}
 		}
 	}
 
 	if !hasConfigController {
-		result := utils.ExecCommand("virsh", "attach-device", vmName, xmlPath, "--config")
-		if result.Error != nil {
-			stderr := strings.TrimSpace(result.Stderr)
-			if !strings.Contains(stderr, "Duplicate ID") && !strings.Contains(stderr, "already exists") {
-				return fmt.Errorf("为持久化配置写入 SCSI 控制器失败: %s", stderr)
+		if err := attachDeviceFlagsRPC(vmName, controllerXML, 2); err != nil { // 2=VIR_DOMAIN_DEVICE_MODIFY_CONFIG
+			if !strings.Contains(err.Error(), "Duplicate ID") && !strings.Contains(err.Error(), "already exists") {
+				return fmt.Errorf("为持久化配置写入 SCSI 控制器失败: %w", err)
 			}
 		}
 	}
@@ -1378,12 +1351,12 @@ func hasPCIERootController(xmlContent string) bool {
 }
 
 func findFreePCIERootPortBus(vmName string) (int, error) {
-	infoPCIResult := utils.ExecCommand("virsh", "qemu-monitor-command", vmName, "--hmp", "info pci")
-	if infoPCIResult.Error != nil {
-		return 0, fmt.Errorf("获取运行中虚拟机 PCI 拓扑失败: %s", infoPCIResult.Stderr)
+	infoPCIResult, err := qemuMonitorCommandRPC(vmName, "info pci", domainQemuMonitorCommandHmp)
+	if err != nil {
+		return 0, fmt.Errorf("获取运行中虚拟机 PCI 拓扑失败: %w", err)
 	}
 
-	freeBuses := parseFreePCIERootPortBuses(infoPCIResult.Stdout)
+	freeBuses := parseFreePCIERootPortBuses(infoPCIResult)
 	if len(freeBuses) == 0 {
 		return 0, fmt.Errorf("当前虚拟机没有空闲的 pcie-root-port 热插槽，请先关机后再添加光驱")
 	}
@@ -1470,7 +1443,7 @@ func SetDiskIOPSTune(vmName, dev string, iops *DiskIOPSTune) error {
 		return err
 	}
 
-	vmState := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
+	vmState, _ := getDomainStateRPC(vmName)
 	totalIops := 0
 	readIops := 0
 	writeIops := 0
@@ -1480,29 +1453,34 @@ func SetDiskIOPSTune(vmName, dev string, iops *DiskIOPSTune) error {
 		writeIops = iops.WriteIopsSec
 	}
 
-	args := []string{"blkdeviotune", vmName, dev}
-	if vmState == "running" {
-		args = append(args, "--live", "--config")
-	} else {
-		args = append(args, "--config")
-	}
-
+	// 构建 TypedParam 列表
 	// libvirt 不允许 total_iops_sec 与 read/write_iops_sec 同时设置，二者互斥
+	var params []libvirt.TypedParam
 	if totalIops > 0 {
-		args = append(args, "--total-iops-sec", strconv.Itoa(totalIops))
 		if readIops > 0 || writeIops > 0 {
 			return fmt.Errorf("总 IOPS 与读/写 IOPS 不能同时设置，请只设置其中一种")
 		}
+		params = append(params, libvirt.TypedParam{
+			Field: libvirt.DomainBlockIotuneTotalIopsSec,
+			Value: *libvirt.NewTypedParamValueInt(int32(totalIops)),
+		})
 	} else {
-		args = append(args,
-			"--read-iops-sec", strconv.Itoa(readIops),
-			"--write-iops-sec", strconv.Itoa(writeIops),
-		)
+		params = append(params, libvirt.TypedParam{
+			Field: libvirt.DomainBlockIotuneReadIopsSec,
+			Value: *libvirt.NewTypedParamValueInt(int32(readIops)),
+		})
+		params = append(params, libvirt.TypedParam{
+			Field: libvirt.DomainBlockIotuneWriteIopsSec,
+			Value: *libvirt.NewTypedParamValueInt(int32(writeIops)),
+		})
 	}
 
-	result := utils.ExecCommand("virsh", args...)
-	if result.Error != nil {
-		return fmt.Errorf("设置磁盘 IOPS 限制失败: %s", result.Stderr)
+	var tuneFlags uint32 = 2 // VIR_DOMAIN_AFFECT_CONFIG
+	if vmState == "running" {
+		tuneFlags = 3 // VIR_DOMAIN_AFFECT_LIVE | VIR_DOMAIN_AFFECT_CONFIG
+	}
+	if err := setBlkIOParametersRPC(vmName, dev, params, tuneFlags); err != nil {
+		return fmt.Errorf("设置磁盘 IOPS 限制失败: %w", err)
 	}
 
 	return nil
@@ -1510,35 +1488,26 @@ func SetDiskIOPSTune(vmName, dev string, iops *DiskIOPSTune) error {
 
 // GetDiskIOPSTune 从 libvirt 获取指定磁盘的 IOPS 设置
 func GetDiskIOPSTune(vmName, dev string) (*DiskIOPSTune, error) {
-	result := utils.ExecCommand("virsh", "blkdeviotune", vmName, dev)
-	if result.Error != nil {
-		return nil, fmt.Errorf("获取磁盘 IOPS 信息失败: %s", result.Stderr)
+	params, err := getBlkIOParametersRPC(vmName, dev, 0)
+	if err != nil {
+		return nil, fmt.Errorf("获取磁盘 IOPS 信息失败: %w", err)
 	}
 
 	iops := &DiskIOPSTune{}
-	lines := strings.Split(result.Stdout, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
-		intVal, err := strconv.Atoi(val)
-		if err != nil {
-			continue
-		}
-		switch key {
-		case "total_iops_sec":
-			iops.TotalIopsSec = intVal
-		case "read_iops_sec":
-			iops.ReadIopsSec = intVal
-		case "write_iops_sec":
-			iops.WriteIopsSec = intVal
+	for _, p := range params {
+		switch p.Field {
+		case libvirt.DomainBlockIotuneTotalIopsSec:
+			if v, ok := p.Value.I.(int32); ok {
+				iops.TotalIopsSec = int(v)
+			}
+		case libvirt.DomainBlockIotuneReadIopsSec:
+			if v, ok := p.Value.I.(int32); ok {
+				iops.ReadIopsSec = int(v)
+			}
+		case libvirt.DomainBlockIotuneWriteIopsSec:
+			if v, ok := p.Value.I.(int32); ok {
+				iops.WriteIopsSec = int(v)
+			}
 		}
 	}
 
@@ -1549,12 +1518,12 @@ func GetDiskIOPSTune(vmName, dev string) (*DiskIOPSTune, error) {
 func ParseAllDiskIOPSTune(vmName string) map[string]*DiskIOPSTune {
 	result := make(map[string]*DiskIOPSTune)
 
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName)
-	if xmlResult.Error != nil {
+	xmlStr, err := getDomainXMLRPC(vmName, 0)
+	if err != nil {
 		return result
 	}
 
-	lines := strings.Split(xmlResult.Stdout, "\n")
+	lines := strings.Split(xmlStr, "\n")
 	var currentDev string
 	inDisk := false
 	inIOTune := false

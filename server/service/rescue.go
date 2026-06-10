@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/digitalocean/go-libvirt"
+
 	"kvm_console/logger"
 	"kvm_console/utils"
 )
@@ -47,7 +49,10 @@ func StartRescue(vmName, rescueISO string, progress func(int, string)) error {
 
 	// 步骤 1: 强制关机
 	progress(5, "正在强制关闭虚拟机...")
-	state := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
+	state, err := getDomainStateRPC(vmName)
+	if err != nil {
+		return fmt.Errorf("获取虚拟机状态失败: %w", err)
+	}
 	if state == "running" {
 		if err := DestroyVM(vmName); err != nil {
 			return fmt.Errorf("强制关机失败: %w", err)
@@ -55,7 +60,7 @@ func StartRescue(vmName, rescueISO string, progress func(int, string)) error {
 		// 等待虚拟机完全关机
 		for i := 0; i < 15; i++ {
 			time.Sleep(time.Second)
-			state = strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
+			state, _ = getDomainStateRPC(vmName)
 			if state == "shut off" {
 				break
 			}
@@ -112,14 +117,17 @@ func StopRescue(vmName string, progress func(int, string)) error {
 	}
 	// 步骤 1: 强制关机
 	progress(5, "正在强制关闭虚拟机...")
-	state := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
+	state, err := getDomainStateRPC(vmName)
+	if err != nil {
+		return fmt.Errorf("获取虚拟机状态失败: %w", err)
+	}
 	if state == "running" {
 		if err := DestroyVM(vmName); err != nil {
 			return fmt.Errorf("强制关机失败: %w", err)
 		}
 		for i := 0; i < 15; i++ {
 			time.Sleep(time.Second)
-			state = strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
+			state, _ = getDomainStateRPC(vmName)
 			if state == "shut off" {
 				break
 			}
@@ -196,11 +204,10 @@ func saveOriginalConfig(vmName string) (*RescueOriginalConfig, error) {
 	}
 
 	// 获取 XML
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName, "--inactive")
-	if xmlResult.Error != nil {
-		return nil, fmt.Errorf("获取虚拟机 XML 失败: %s", xmlResult.Stderr)
+	xmlStr, err := getDomainXMLRPC(vmName, libvirt.DomainXMLInactive)
+	if err != nil {
+		return nil, fmt.Errorf("获取虚拟机 XML 失败: %w", err)
 	}
-	xmlStr := xmlResult.Stdout
 
 	// 解析磁盘总线信息
 	diskRe := regexp.MustCompile(`(?s)<disk type='[^']*' device='disk'>(.*?)</disk>`)
@@ -265,12 +272,10 @@ func loadOriginalConfig(vmName string) (*RescueOriginalConfig, error) {
 
 // switchDiskBusForRescue 将所有磁盘总线改为 sata（通过编辑 XML）
 func switchDiskBusForRescue(vmName string, origConfig *RescueOriginalConfig) error {
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName, "--inactive")
-	if xmlResult.Error != nil {
-		return fmt.Errorf("获取虚拟机 XML 失败: %s", xmlResult.Stderr)
+	xmlStr, err := getDomainXMLRPC(vmName, libvirt.DomainXMLInactive)
+	if err != nil {
+		return fmt.Errorf("获取虚拟机 XML 失败: %w", err)
 	}
-
-	xmlStr := xmlResult.Stdout
 	lines := strings.Split(xmlStr, "\n")
 	var newLines []string
 	inDisk := false
@@ -315,12 +320,8 @@ func switchDiskBusForRescue(vmName string, origConfig *RescueOriginalConfig) err
 	}
 
 	newXML := strings.Join(newLines, "\n")
-	xmlPath := fmt.Sprintf("/tmp/_rescue-disk-%s.xml", vmName)
-	utils.ExecShell(fmt.Sprintf("cat > %s << 'XMLEOF'\n%s\nXMLEOF", utils.ShellSingleQuote(xmlPath), newXML))
-	defineResult := utils.ExecCommand("virsh", "define", xmlPath)
-	utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(xmlPath)))
-	if defineResult.Error != nil {
-		return fmt.Errorf("定义磁盘配置失败: %s", defineResult.Stderr)
+	if _, err := defineDomainXMLRPC(newXML); err != nil {
+		return fmt.Errorf("定义磁盘配置失败: %w", err)
 	}
 
 	return nil
@@ -337,12 +338,10 @@ func restoreDiskBus(vmName string, origConfig *RescueOriginalConfig) error {
 		return nil
 	}
 
-	xmlResult := utils.ExecCommand("virsh", "dumpxml", vmName, "--inactive")
-	if xmlResult.Error != nil {
-		return fmt.Errorf("获取虚拟机 XML 失败: %s", xmlResult.Stderr)
+	xmlStr, err := getDomainXMLRPC(vmName, libvirt.DomainXMLInactive)
+	if err != nil {
+		return fmt.Errorf("获取虚拟机 XML 失败: %w", err)
 	}
-
-	xmlStr := xmlResult.Stdout
 	lines := strings.Split(xmlStr, "\n")
 	var newLines []string
 	inDisk := false
@@ -400,12 +399,8 @@ func restoreDiskBus(vmName string, origConfig *RescueOriginalConfig) error {
 	}
 
 	newXML := strings.Join(newLines, "\n")
-	xmlPath := fmt.Sprintf("/tmp/_rescue-restore-%s.xml", vmName)
-	utils.ExecShell(fmt.Sprintf("cat > %s << 'XMLEOF'\n%s\nXMLEOF", utils.ShellSingleQuote(xmlPath), newXML))
-	defineResult := utils.ExecCommand("virsh", "define", xmlPath)
-	utils.ExecShell(fmt.Sprintf("rm -f %s", utils.ShellSingleQuote(xmlPath)))
-	if defineResult.Error != nil {
-		return fmt.Errorf("恢复磁盘配置失败: %s", defineResult.Stderr)
+	if _, err := defineDomainXMLRPC(newXML); err != nil {
+		return fmt.Errorf("恢复磁盘配置失败: %w", err)
 	}
 
 	return nil

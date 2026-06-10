@@ -5,8 +5,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"kvm_console/utils"
 )
 
 var monitorInfoCommandPattern = regexp.MustCompile(`^info\s+[a-zA-Z0-9_.:-]+(?:\s+[a-zA-Z0-9_.:-]+)*$`)
@@ -40,13 +38,13 @@ type VMMonitorCommandResult struct {
 
 // GetVMMonitorStatus 获取虚拟机当前监视器状态
 func GetVMMonitorStatus(name string) (*VMMonitorStatus, error) {
-	stateResult := utils.ExecCommand("virsh", "domstate", name, "--reason")
-	if stateResult.Error != nil {
-		return nil, fmt.Errorf("获取虚拟机状态失败: %s", stateResult.Stderr)
+	stateStr, err := getDomainStateRPC(name)
+	if err != nil {
+		return nil, fmt.Errorf("获取虚拟机状态失败: %w", err)
 	}
 
 	status := &VMMonitorStatus{
-		DomainState: strings.TrimSpace(stateResult.Stdout),
+		DomainState: stateStr,
 	}
 
 	domainStateLower := strings.ToLower(status.DomainState)
@@ -55,12 +53,12 @@ func GetVMMonitorStatus(name string) (*VMMonitorStatus, error) {
 		return status, nil
 	}
 
-	monitorResult := utils.ExecCommand("virsh", "qemu-monitor-command", name, "--hmp", "info status")
-	if monitorResult.Error != nil {
-		return nil, fmt.Errorf("获取 QEMU Monitor 状态失败: %s", monitorResult.Stderr)
+	monitorOutput, err := qemuMonitorCommandRPC(name, "info status", 1)
+	if err != nil {
+		return nil, fmt.Errorf("获取 QEMU Monitor 状态失败: %w", err)
 	}
 
-	status.RawOutput = strings.TrimSpace(monitorResult.Stdout)
+	status.RawOutput = strings.TrimSpace(monitorOutput)
 	status.MonitorStatus = parseMonitorStatus(status.RawOutput)
 	return status, nil
 }
@@ -80,12 +78,12 @@ func ExecuteVMMonitorCommand(name, command string) (*VMMonitorCommandResult, err
 		return nil, fmt.Errorf("虚拟机当前状态为 %s，QEMU Monitor 不可用", status.DomainState)
 	}
 
-	result := utils.ExecCommand("virsh", "qemu-monitor-command", name, "--hmp", normalized)
-	if result.Error != nil {
-		return nil, fmt.Errorf("执行监视器命令失败: %s", result.Stderr)
+	output, err := qemuMonitorCommandRPC(name, normalized, 1)
+	if err != nil {
+		return nil, fmt.Errorf("执行监视器命令失败: %w", err)
 	}
 
-	output := strings.TrimSpace(result.Stdout)
+	output = strings.TrimSpace(output)
 	if output == "" {
 		output = fmt.Sprintf("命令 %s 已发送", normalized)
 	}

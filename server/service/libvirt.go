@@ -1882,18 +1882,17 @@ func getVMIPFromDomifaddrSource(name, source string, ipRe *regexp.Regexp, cidr s
 func getVMDiskInfo(name string) diskInfoResult {
 	info := diskInfoResult{}
 
-	// 获取磁盘路径
-	blkResult := utils.ExecCommand("virsh", "domblklist", name)
-	if blkResult.Error != nil {
+	// 通过 RPC 获取 XML 并解析磁盘信息
+	xmlStr, err := getDomainXMLRPC(name, 0)
+	if err != nil {
 		return info
 	}
 
-	lines := strings.Split(blkResult.Stdout, "\n")
-	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) >= 2 && fields[1] != "-" && fields[1] != "Source" && !strings.HasPrefix(line, "-") {
-			info.device = fields[0]
-			info.path = fields[1]
+	disks := parseDisksFromDomainXML(xmlStr)
+	for _, disk := range disks {
+		if disk.Source != "" && disk.Source != "-" {
+			info.device = disk.Target
+			info.path = disk.Source
 			break
 		}
 	}
@@ -1914,15 +1913,6 @@ func getVMDiskInfo(name string) diskInfoResult {
 			parts := strings.Split(backing, "/")
 			templateFile := parts[len(parts)-1]
 			info.template = strings.TrimSuffix(templateFile, ".qcow2")
-		}
-	}
-	if (info.size == "" || info.size == "-") && info.device != "" {
-		blkInfoResult := utils.ExecCommand("virsh", "domblkinfo", name, info.device)
-		if blkInfoResult.Error == nil {
-			size := parseBlkInfoGB(blkInfoResult.Stdout, "Capacity:")
-			if size != "-" && size != "" {
-				info.size = size + " GB"
-			}
 		}
 	}
 
@@ -1946,29 +1936,25 @@ func getVMDiskInfo(name string) diskInfoResult {
 func getVMNetworkInfo(name string) netInfoResult {
 	info := netInfoResult{network: "unknown"}
 
-	// 从 domiflist 获取
-	result := utils.ExecCommand("virsh", "domiflist", name)
-	if result.Error != nil {
+	// 通过 RPC 获取 XML 并解析网卡信息
+	xmlStr, err := getDomainXMLRPC(name, 0)
+	if err != nil {
 		return info
 	}
 
-	lines := strings.Split(result.Stdout, "\n")
-	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) >= 5 && fields[0] != "Interface" && !strings.HasPrefix(line, "-") {
-			// fields: Interface Type Source Model MAC
-			switch fields[1] {
-			case "network":
-				info.network = "nat"
-			case "bridge":
-				info.network = "bridge"
-			default:
-				info.network = fields[1]
-			}
-			info.nicModel = fields[3] // Model 列
-			info.mac = fields[4]
-			break
+	ifaces := parseInterfacesFromDomainXML(xmlStr)
+	for _, iface := range ifaces {
+		switch iface.Type {
+		case "network":
+			info.network = "nat"
+		case "bridge":
+			info.network = "bridge"
+		default:
+			info.network = iface.Type
 		}
+		info.nicModel = iface.Model
+		info.mac = iface.MAC
+		break
 	}
 
 	return info

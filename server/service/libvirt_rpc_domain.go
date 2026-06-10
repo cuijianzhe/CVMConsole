@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/digitalocean/go-libvirt"
 
@@ -27,6 +28,13 @@ const (
 	domainMemLive    libvirt.DomainMemoryModFlags = 1 // VIR_DOMAIN_AFFECT_LIVE
 	domainMemConfig  libvirt.DomainMemoryModFlags = 2 // VIR_DOMAIN_AFFECT_CONFIG
 	domainMemMaximum libvirt.DomainMemoryModFlags = 4 // VIR_DOMAIN_MEM_MAXIMUM
+)
+
+// ==================== QEMU Monitor 命令标志常量 ====================
+// go-libvirt 未定义 qemu monitor command flags 常量，此处按 libvirt C 头文件补充
+
+const (
+	domainQemuMonitorCommandHmp uint32 = 1 // VIR_DOMAIN_QEMU_MONITOR_COMMAND_HMP
 )
 
 // ==================== 状态映射 ====================
@@ -497,4 +505,429 @@ func getDomainVcpuCountRPC(name string, flags uint32) (int, error) {
 	}
 	logger.Libvirt.Debug("RPC: 获取 vCPU 计数成功", "domain", name, "count", count)
 	return int(count), nil
+}
+
+// ==================== 域管理扩展操作 ====================
+
+// undefineDomainRPC 取消定义 VM（替代 virsh undefine [--nvram] [--snapshots-metadata]）
+// flags: libvirt.DomainUndefineNvram(4) / libvirt.DomainUndefineSnapshotsMetadata(2) 等
+func undefineDomainRPC(name string, flags libvirt.DomainUndefineFlagsValues) error {
+	dom, err := lookupDomainByName(name)
+	if err != nil {
+		return err
+	}
+	l, err := GetLibvirt()
+	if err != nil {
+		return fmt.Errorf("取消定义域 %s 失败: %w", name, err)
+	}
+	if err := l.DomainUndefineFlags(dom, flags); err != nil {
+		return fmt.Errorf("取消定义域 %s 失败: %w", name, err)
+	}
+	logger.Libvirt.Info("RPC: 取消定义域成功", "domain", name, "flags", flags)
+	return nil
+}
+
+// qemuMonitorCommandRPC 执行 QEMU Monitor 命令（替代 virsh qemu-monitor-command --hmp）
+// flags: 0 = QMP 模式, domainQemuMonitorCommandHmp(1) = HMP 模式
+func qemuMonitorCommandRPC(name string, cmd string, flags uint32) (string, error) {
+	dom, err := lookupDomainByName(name)
+	if err != nil {
+		return "", err
+	}
+	l, err := GetLibvirt()
+	if err != nil {
+		return "", fmt.Errorf("执行域 %s QEMU Monitor 命令失败: %w", name, err)
+	}
+	result, err := l.QEMUDomainMonitorCommand(dom, cmd, flags)
+	if err != nil {
+		return "", fmt.Errorf("执行域 %s QEMU Monitor 命令失败: %w", name, err)
+	}
+	logger.Libvirt.Info("RPC: 执行 QEMU Monitor 命令成功", "domain", name, "cmd", cmd, "flags", flags)
+	return result, nil
+}
+
+// getDomainMetadataRPC 获取域元数据（替代 virsh metadata）
+// metadataType: libvirt.DomainMetadataDescription(0) / DomainMetadataTitle(1) / DomainMetadataElement(2)
+func getDomainMetadataRPC(name string, metadataType int32, uri string, flags uint32) (string, error) {
+	dom, err := lookupDomainByName(name)
+	if err != nil {
+		return "", err
+	}
+	l, err := GetLibvirt()
+	if err != nil {
+		return "", fmt.Errorf("获取域 %s 元数据失败: %w", name, err)
+	}
+	// 将 string 转换为 OptString：空字符串对应 nil（null），非空对应单元素切片
+	var uriOpt libvirt.OptString
+	if uri != "" {
+		uriOpt = libvirt.OptString{uri}
+	}
+	metadata, err := l.DomainGetMetadata(dom, metadataType, uriOpt, libvirt.DomainModificationImpact(flags))
+	if err != nil {
+		return "", fmt.Errorf("获取域 %s 元数据失败: %w", name, err)
+	}
+	logger.Libvirt.Info("RPC: 获取域元数据成功", "domain", name, "type", metadataType)
+	return metadata, nil
+}
+
+// setDomainMetadataRPC 设置域元数据（替代 virsh metadata --edit）
+// metadataType: libvirt.DomainMetadataDescription(0) / DomainMetadataTitle(1) / DomainMetadataElement(2)
+// 传入空字符串的 metadata 表示删除对应元数据
+func setDomainMetadataRPC(name string, metadataType int32, metadata string, key string, uri string, flags uint32) error {
+	dom, err := lookupDomainByName(name)
+	if err != nil {
+		return err
+	}
+	l, err := GetLibvirt()
+	if err != nil {
+		return fmt.Errorf("设置域 %s 元数据失败: %w", name, err)
+	}
+	// 将 string 转换为 OptString：空字符串对应 nil（null），非空对应单元素切片
+	var metadataOpt libvirt.OptString
+	if metadata != "" {
+		metadataOpt = libvirt.OptString{metadata}
+	}
+	var keyOpt libvirt.OptString
+	if key != "" {
+		keyOpt = libvirt.OptString{key}
+	}
+	var uriOpt libvirt.OptString
+	if uri != "" {
+		uriOpt = libvirt.OptString{uri}
+	}
+	if err := l.DomainSetMetadata(dom, metadataType, metadataOpt, keyOpt, uriOpt, libvirt.DomainModificationImpact(flags)); err != nil {
+		return fmt.Errorf("设置域 %s 元数据失败: %w", name, err)
+	}
+	logger.Libvirt.Info("RPC: 设置域元数据成功", "domain", name, "type", metadataType)
+	return nil
+}
+
+// attachDeviceFlagsRPC 热插拔设备（替代 virsh attach-device）
+// flags: libvirt.DomainDeviceModifyLive(1) / DomainDeviceModifyConfig(2) / DomainDeviceModifyForce(4)
+func attachDeviceFlagsRPC(name string, xmlDesc string, flags uint32) error {
+	dom, err := lookupDomainByName(name)
+	if err != nil {
+		return err
+	}
+	l, err := GetLibvirt()
+	if err != nil {
+		return fmt.Errorf("挂载设备到域 %s 失败: %w", name, err)
+	}
+	if err := l.DomainAttachDeviceFlags(dom, xmlDesc, flags); err != nil {
+		return fmt.Errorf("挂载设备到域 %s 失败: %w", name, err)
+	}
+	logger.Libvirt.Info("RPC: 挂载设备成功", "domain", name, "flags", flags)
+	return nil
+}
+
+// detachDeviceFlagsRPC 热拔插设备（替代 virsh detach-device）
+// flags: libvirt.DomainDeviceModifyLive(1) / DomainDeviceModifyConfig(2) / DomainDeviceModifyForce(4)
+func detachDeviceFlagsRPC(name string, xmlDesc string, flags uint32) error {
+	dom, err := lookupDomainByName(name)
+	if err != nil {
+		return err
+	}
+	l, err := GetLibvirt()
+	if err != nil {
+		return fmt.Errorf("卸载域 %s 设备失败: %w", name, err)
+	}
+	if err := l.DomainDetachDeviceFlags(dom, xmlDesc, flags); err != nil {
+		return fmt.Errorf("卸载域 %s 设备失败: %w", name, err)
+	}
+	logger.Libvirt.Info("RPC: 卸载设备成功", "domain", name, "flags", flags)
+	return nil
+}
+
+// getBlockInfoRPC 获取磁盘块信息（替代 virsh domblkinfo）
+// 返回磁盘容量/分配/物理大小（字节）
+func getBlockInfoRPC(name string, dev string) (capacity uint64, allocation uint64, physical uint64, err error) {
+	dom, err := lookupDomainByName(name)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	l, err := GetLibvirt()
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("获取域 %s 磁盘 %s 信息失败: %w", name, dev, err)
+	}
+	// API 返回顺序: allocation, capacity, physical
+	allocVal, capVal, physVal, infoErr := l.DomainGetBlockInfo(dom, dev, 0)
+	if infoErr != nil {
+		return 0, 0, 0, fmt.Errorf("获取域 %s 磁盘 %s 信息失败: %w", name, dev, infoErr)
+	}
+	logger.Libvirt.Debug("RPC: 获取磁盘信息成功", "domain", name, "device", dev,
+		"capacity", capVal, "allocation", allocVal, "physical", physVal)
+	return capVal, allocVal, physVal, nil
+}
+
+// getInterfaceParametersRPC 获取网卡参数（替代 virsh domiftune）
+// 采用两次调用模式：先获取参数数量，再获取实际参数
+func getInterfaceParametersRPC(name string, device string, flags uint32) ([]libvirt.TypedParam, error) {
+	dom, err := lookupDomainByName(name)
+	if err != nil {
+		return nil, err
+	}
+	l, err := GetLibvirt()
+	if err != nil {
+		return nil, fmt.Errorf("获取域 %s 网卡 %s 参数失败: %w", name, device, err)
+	}
+	// 第一次调用：获取参数数量
+	_, nparams, err := l.DomainGetInterfaceParameters(dom, device, 0, libvirt.DomainModificationImpact(flags))
+	if err != nil {
+		return nil, fmt.Errorf("获取域 %s 网卡 %s 参数数量失败: %w", name, device, err)
+	}
+	if nparams == 0 {
+		logger.Libvirt.Debug("RPC: 网卡参数为空", "domain", name, "device", device)
+		return []libvirt.TypedParam{}, nil
+	}
+	// 第二次调用：获取实际参数
+	params, _, err := l.DomainGetInterfaceParameters(dom, device, nparams, libvirt.DomainModificationImpact(flags))
+	if err != nil {
+		return nil, fmt.Errorf("获取域 %s 网卡 %s 参数失败: %w", name, device, err)
+	}
+	logger.Libvirt.Debug("RPC: 获取网卡参数成功", "domain", name, "device", device, "count", len(params))
+	return params, nil
+}
+
+// ==================== XML 解析辅助函数 ====================
+
+// diskBlockInfo 从域 XML 解析的磁盘块设备简要信息
+type diskBlockInfo struct {
+	Target string // 设备名（如 vda, vdb）
+	Source string // 磁盘文件路径
+}
+
+// parseDisksFromDomainXML 从域 XML 中解析所有磁盘块设备（替代 virsh domblklist）
+func parseDisksFromDomainXML(xmlStr string) []diskBlockInfo {
+	var disks []diskBlockInfo
+	lines := strings.Split(xmlStr, "\n")
+	inDisk := false
+	var current diskBlockInfo
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "<disk ") {
+			inDisk = true
+			current = diskBlockInfo{}
+		}
+		if inDisk {
+			if strings.Contains(trimmed, "<source ") {
+				if strings.Contains(trimmed, "file='") {
+					parts := strings.Split(trimmed, "file='")
+					if len(parts) > 1 {
+						current.Source = strings.Split(parts[1], "'")[0]
+					}
+				}
+			}
+			if strings.Contains(trimmed, "<target") && strings.Contains(trimmed, "dev='") {
+				parts := strings.Split(trimmed, "dev='")
+				if len(parts) > 1 {
+					current.Target = strings.Split(parts[1], "'")[0]
+				}
+			}
+			if strings.Contains(trimmed, "</disk>") {
+				if current.Target != "" {
+					disks = append(disks, current)
+				}
+				inDisk = false
+			}
+		}
+	}
+	return disks
+}
+
+// interfaceInfo 从域 XML 解析的网卡信息
+type interfaceInfo struct {
+	MAC      string // MAC 地址
+	Type     string // 接口类型（network/bridge 等）
+	Source   string // 网络源（网络名或桥接名）
+	Model    string // 网卡模型（virtio/e1000 等）
+	Target   string // vnet 设备名（运行时）
+}
+
+// parseInterfacesFromDomainXML 从域 XML 中解析所有网卡（替代 virsh domiflist）
+func parseInterfacesFromDomainXML(xmlStr string) []interfaceInfo {
+	var ifaces []interfaceInfo
+	lines := strings.Split(xmlStr, "\n")
+	inIface := false
+	var current interfaceInfo
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "<interface ") {
+			inIface = true
+			current = interfaceInfo{}
+			if strings.Contains(trimmed, "type='") {
+				parts := strings.Split(trimmed, "type='")
+				if len(parts) > 1 {
+					current.Type = strings.Split(parts[1], "'")[0]
+				}
+			}
+		}
+		if inIface {
+			if strings.Contains(trimmed, "<source ") {
+				if strings.Contains(trimmed, "network='") {
+					parts := strings.Split(trimmed, "network='")
+					if len(parts) > 1 {
+						current.Source = strings.Split(parts[1], "'")[0]
+					}
+				} else if strings.Contains(trimmed, "bridge='") {
+					parts := strings.Split(trimmed, "bridge='")
+					if len(parts) > 1 {
+						current.Source = strings.Split(parts[1], "'")[0]
+					}
+				}
+			}
+			if strings.Contains(trimmed, "<mac") && strings.Contains(trimmed, "address='") {
+				parts := strings.Split(trimmed, "address='")
+				if len(parts) > 1 {
+					current.MAC = strings.Split(parts[1], "'")[0]
+				}
+			}
+			if strings.Contains(trimmed, "<model") && strings.Contains(trimmed, "type='") {
+				parts := strings.Split(trimmed, "type='")
+				if len(parts) > 1 {
+					current.Model = strings.Split(parts[1], "'")[0]
+				}
+			}
+			if strings.Contains(trimmed, "<target") && strings.Contains(trimmed, "dev='") {
+				parts := strings.Split(trimmed, "dev='")
+				if len(parts) > 1 {
+					current.Target = strings.Split(parts[1], "'")[0]
+				}
+			}
+			if strings.Contains(trimmed, "</interface>") {
+				ifaces = append(ifaces, current)
+				inIface = false
+			}
+		}
+	}
+	return ifaces
+}
+
+// getFirstVMMACFromXML 通过 RPC 获取 VM 的第一个网卡 MAC 地址
+func getFirstVMMACFromXML(vmName string) string {
+	xmlStr, err := getDomainXMLRPC(vmName, 0)
+	if err != nil {
+		return ""
+	}
+	ifaces := parseInterfacesFromDomainXML(xmlStr)
+	if len(ifaces) > 0 {
+		return strings.ToLower(ifaces[0].MAC)
+	}
+	return ""
+}
+
+// getFirstVMVnetIFFromXML 通过 RPC 获取运行中 VM 的第一个 vnet 接口名
+func getFirstVMVnetIFFromXML(vmName string) string {
+	xmlStr, err := getDomainXMLRPC(vmName, 0)
+	if err != nil {
+		return ""
+	}
+	ifaces := parseInterfacesFromDomainXML(xmlStr)
+	for _, iface := range ifaces {
+		if strings.HasPrefix(iface.Target, "vnet") {
+			return iface.Target
+		}
+	}
+	return ""
+}
+
+// getFirstVMInterfaceModelFromXML 通过 RPC 获取 VM 的第一个网卡模型
+func getFirstVMInterfaceModelFromXML(vmName string) string {
+	xmlStr, err := getDomainXMLRPC(vmName, 0)
+	if err != nil {
+		return "virtio"
+	}
+	ifaces := parseInterfacesFromDomainXML(xmlStr)
+	if len(ifaces) > 0 && ifaces[0].Model != "" {
+		return ifaces[0].Model
+	}
+	return "virtio"
+}
+
+// setInterfaceParametersRPC 设置网卡参数（替代 virsh domiftune --set）
+func setInterfaceParametersRPC(name string, device string, params []libvirt.TypedParam, flags uint32) error {
+	dom, err := lookupDomainByName(name)
+	if err != nil {
+		return err
+	}
+	l, err := GetLibvirt()
+	if err != nil {
+		return fmt.Errorf("设置域 %s 网卡 %s 参数失败: %w", name, device, err)
+	}
+	if err := l.DomainSetInterfaceParameters(dom, device, params, flags); err != nil {
+		return fmt.Errorf("设置域 %s 网卡 %s 参数失败: %w", name, device, err)
+	}
+	logger.Libvirt.Info("RPC: 设置网卡参数成功", "domain", name, "device", device, "flags", flags)
+	return nil
+}
+
+// ==================== 磁盘 I/O Tuning ====================
+
+// blockResizeRPC 调整磁盘块大小（替代 virsh blockresize）
+// size 单位为字节；flags: DomainBlockResizeBytes(1)=size以字节为单位, DomainBlockResizeCapacity(2)=size以扇区为单位
+func blockResizeRPC(name string, disk string, size uint64, flags libvirt.DomainBlockResizeFlags) error {
+	dom, err := lookupDomainByName(name)
+	if err != nil {
+		return err
+	}
+	l, err := GetLibvirt()
+	if err != nil {
+		return fmt.Errorf("调整域 %s 磁盘 %s 大小失败: %w", name, disk, err)
+	}
+	if err := l.DomainBlockResize(dom, disk, size, flags); err != nil {
+		return fmt.Errorf("调整域 %s 磁盘 %s 大小为 %d 失败: %w", name, disk, size, err)
+	}
+	logger.Libvirt.Info("RPC: 调整磁盘大小成功", "domain", name, "disk", disk, "size", size, "flags", flags)
+	return nil
+}
+
+// getBlkIOParametersRPC 获取磁盘 I/O Tuning 参数（替代 virsh blkdeviotune）
+// 采用两次调用模式：先获取参数数量，再获取实际参数
+func getBlkIOParametersRPC(name string, disk string, flags uint32) ([]libvirt.TypedParam, error) {
+	dom, err := lookupDomainByName(name)
+	if err != nil {
+		return nil, err
+	}
+	l, err := GetLibvirt()
+	if err != nil {
+		return nil, fmt.Errorf("获取域 %s 磁盘 %s IOTune 失败: %w", name, disk, err)
+	}
+	// 第一次调用：获取参数数量
+	var diskOpt libvirt.OptString
+	if disk != "" {
+		diskOpt = libvirt.OptString{disk}
+	}
+	_, nparams, err := l.DomainGetBlockIOTune(dom, diskOpt, 0, flags)
+	if err != nil {
+		return nil, fmt.Errorf("获取域 %s 磁盘 %s IOTune 参数数量失败: %w", name, disk, err)
+	}
+	if nparams == 0 {
+		logger.Libvirt.Debug("RPC: 磁盘 IOTune 参数为空", "domain", name, "disk", disk)
+		return []libvirt.TypedParam{}, nil
+	}
+	// 第二次调用：获取实际参数
+	params, _, err := l.DomainGetBlockIOTune(dom, diskOpt, nparams, flags)
+	if err != nil {
+		return nil, fmt.Errorf("获取域 %s 磁盘 %s IOTune 参数失败: %w", name, disk, err)
+	}
+	logger.Libvirt.Debug("RPC: 获取磁盘 IOTune 成功", "domain", name, "disk", disk, "count", len(params))
+	return params, nil
+}
+
+// setBlkIOParametersRPC 设置磁盘 I/O Tuning 参数（替代 virsh blkdeviotune --set）
+func setBlkIOParametersRPC(name string, disk string, params []libvirt.TypedParam, flags uint32) error {
+	dom, err := lookupDomainByName(name)
+	if err != nil {
+		return err
+	}
+	l, err := GetLibvirt()
+	if err != nil {
+		return fmt.Errorf("设置域 %s 磁盘 %s IOTune 失败: %w", name, disk, err)
+	}
+	if err := l.DomainSetBlockIOTune(dom, disk, params, flags); err != nil {
+		return fmt.Errorf("设置域 %s 磁盘 %s IOTune 失败: %w", name, disk, err)
+	}
+	logger.Libvirt.Info("RPC: 设置磁盘 IOTune 成功", "domain", name, "disk", disk, "flags", flags)
+	return nil
 }
