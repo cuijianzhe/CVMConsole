@@ -86,6 +86,15 @@ func buildStoragePoolNode(dev lsblkDevice, mounts map[string]findmntInfo, dfUsag
 	if node.Enabled && !node.CanUseForVM {
 		node.Enabled = false
 	}
+
+	// 检测已有数据警告（仅对可格式化的整盘显示）
+	if node.CanFormat && node.Type == "disk" {
+		if hasData, warn := detectExistingData(node); hasData {
+			node.HasExistingData = true
+			node.ExistingDataWarning = warn
+		}
+	}
+
 	return node
 }
 
@@ -120,6 +129,43 @@ func canFormatStorageNode(node HostStoragePoolInfo) (bool, string) {
 	}
 	if node.Type == "loop" || node.Type == "rom" || node.Removable {
 		return false, "不支持格式化 loop、光驱或可移动设备"
+	}
+	// 排除 device-mapper 设备
+	if node.Type == "dm" || strings.HasPrefix(node.Name, "dm-") {
+		return false, "不支持格式化 device-mapper 设备"
+	}
+	// 排除内存盘
+	nameLower := strings.ToLower(node.Name)
+	if strings.HasPrefix(nameLower, "ram") || strings.HasPrefix(nameLower, "zram") {
+		return false, "不支持格式化内存盘设备"
+	}
+	// 排除 LVM 物理卷
+	fstype := strings.ToLower(node.FSType)
+	if fstype == "lvm2_member" {
+		return false, "该设备已被用作 LVM 物理卷"
+	}
+	// 排除 mdraid 成员
+	if fstype == "linux_raid_member" {
+		return false, "该设备已加入 mdraid 阵列"
+	}
+	// 排除 ZFS 存储池成员
+	if fstype == "zfs_member" {
+		return false, "该设备已加入 ZFS 存储池"
+	}
+	// 检查子设备中是否有 LVM/raid/zfs 成员
+	if hasChildWithFSType(node, "lvm2_member", "linux_raid_member", "zfs_member") {
+		reason := "该设备的子分区已加入"
+		var parts []string
+		if hasChildWithFSType(node, "lvm2_member") {
+			parts = append(parts, "LVM")
+		}
+		if hasChildWithFSType(node, "linux_raid_member") {
+			parts = append(parts, "mdraid")
+		}
+		if hasChildWithFSType(node, "zfs_member") {
+			parts = append(parts, "ZFS")
+		}
+		return false, reason + strings.Join(parts, "/") + "，无法格式化"
 	}
 	if len(node.Mountpoints) > 0 || hasMountedChild(node) {
 		return false, "设备或其分区当前已挂载"
@@ -166,6 +212,41 @@ func hasMountedChild(node HostStoragePoolInfo) bool {
 		}
 	}
 	return false
+}
+
+// hasChildWithFSType 递归检查节点或其子节点是否存在指定 FSType。
+func hasChildWithFSType(node HostStoragePoolInfo, fstypes ...string) bool {
+	for _, child := range node.Children {
+		for _, ft := range fstypes {
+			if strings.EqualFold(child.FSType, ft) {
+				return true
+			}
+		}
+		if hasChildWithFSType(child, fstypes...) {
+			return true
+		}
+	}
+	return false
+}
+
+// detectExistingData 检测磁盘是否已有分区表或文件系统（仅对可格式化的整盘生效）。
+func detectExistingData(node HostStoragePoolInfo) (bool, string) {
+	if node.Type != "disk" {
+		return false, ""
+	}
+	if len(node.Mountpoints) > 0 || node.SystemDisk {
+		return false, ""
+	}
+	// 跳过已被 LVM/raid/zfs 使用的磁盘（已有专门的错误提示）
+	if hasChildWithFSType(node, "lvm2_member", "linux_raid_member", "zfs_member") {
+		return false, ""
+	}
+	// 检测是否存在分区表或已有文件系统
+	hasData := len(node.Children) > 0 || node.FSType != ""
+	if hasData {
+		return true, "该磁盘上检测到已有分区或文件系统，继续操作可能导致数据丢失。"
+	}
+	return false, ""
 }
 
 func normalizeMountpoints(items []string) []string {

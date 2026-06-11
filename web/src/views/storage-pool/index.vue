@@ -9,6 +9,10 @@
         <p>管理宿主机硬盘分区，配置虚拟机落盘位置与格式化挂载</p>
       </div>
       <div class="page-header-right">
+        <div class="filter-toggle">
+          <el-switch v-model="showAvailableOnly" size="small" />
+          <span>仅显示可用磁盘</span>
+        </div>
         <el-button type="primary" :icon="Refresh" @click="fetchData" :loading="loading">刷新</el-button>
       </div>
     </div>
@@ -89,7 +93,7 @@
 
     <div class="disk-group-list" v-loading="loading">
       <el-card
-        v-for="disk in tableData"
+        v-for="disk in filteredTableData"
         :key="disk.id"
         class="disk-group-card"
         shadow="never"
@@ -124,6 +128,15 @@
             </div>
           </div>
         </template>
+
+        <el-alert
+          v-if="disk.has_existing_data"
+          :title="disk.existing_data_warning"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="existing-data-alert"
+        />
 
         <div v-if="disk.children && disk.children.length > 0" class="partition-list">
           <div
@@ -174,9 +187,9 @@
             </div>
           </div>
         </div>
-        <el-empty v-else description="无分区信息" :image-size="60" />
+        <el-empty v-if="!disk.children || disk.children.length === 0" description="无分区信息" :image-size="60" />
       </el-card>
-      <el-empty v-if="!loading && tableData.length === 0" description="未发现存储设备" />
+      <el-empty v-if="!loading && filteredTableData.length === 0" :description="tableData.length > 0 ? '当前没有符合条件的可用磁盘，可关闭「仅显示可用磁盘」查看全部' : '未发现存储设备'" />
     </div>
 
     <el-dialog title="配置存储池" v-model="configVisible" width="520px" :close-on-click-modal="false" append-to-body>
@@ -233,6 +246,7 @@ import * as echarts from 'echarts'
 
 const tableData = ref([])
 const loading = ref(false)
+const showAvailableOnly = ref(true)
 const configVisible = ref(false)
 const formatVisible = ref(false)
 const savingConfig = ref(false)
@@ -261,6 +275,17 @@ const fetchData = async () => {
 }
 
 onMounted(fetchData)
+
+const filteredTableData = computed(() => {
+  if (!showAvailableOnly.value) return tableData.value
+  return tableData.value.filter(disk => {
+    // 已配置的存储池始终显示
+    if (disk.configured) return true
+    // 可格式化的盘显示（可用作新存储池）
+    if (disk.can_format) return true
+    return false
+  })
+})
 
 const openConfig = (row) => {
   currentRow.value = row
@@ -996,6 +1021,20 @@ onUnmounted(() => {
 
 .danger-alert {
   margin-bottom: 16px;
+}
+
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.existing-data-alert {
+  margin: 12px 20px 0;
 }
 
 @media (max-width: 900px) {
