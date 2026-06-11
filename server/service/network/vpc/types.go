@@ -18,6 +18,10 @@ type VPCSwitchRequest struct {
 	AllowPromiscuous  bool    `json:"allow_promiscuous"`
 	AllowMACChange    bool    `json:"allow_mac_change"`
 	AllowForgedTx     bool    `json:"allow_forged_transmits"`
+	CIDR              string  `json:"cidr"`       // 自定义网段（如 10.0.1.0/24），留空则自动分配
+	GatewayIP         string  `json:"gateway_ip"` // 自定义网关地址，留空则自动计算（CIDR 内第一个可用 IP）
+	DHCPStart         string  `json:"dhcp_start"` // DHCP 起始地址，留空则自动计算
+	DHCPEnd           string  `json:"dhcp_end"`   // DHCP 结束地址，留空则自动计算
 	TrafficDownGB     float64 `json:"traffic_down_gb"`
 	TrafficUpGB       float64 `json:"traffic_up_gb"`
 	BandwidthMbps     int     `json:"bandwidth_mbps"` // 兼容旧版字段，传入时同时作为上下行默认值

@@ -2,6 +2,8 @@ package vpc
 
 import (
 	"fmt"
+	"net"
+	"net/netip"
 	"strings"
 
 	"kvm_console/config"
@@ -59,7 +61,8 @@ func CreateVPCSwitch(operator, role string, req VPCSwitchRequest) (*model.VPCSwi
 	if err != nil {
 		return nil, err
 	}
-	cidr, gateway, dhcpStart, dhcpEnd, err := allocateVPCSubnet()
+	// 解析网段：优先使用用户指定的 CIDR，否则自动分配
+	cidr, gateway, dhcpStart, dhcpEnd, err := resolveVPCSwitchSubnet(bridgeMode, req)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +111,13 @@ func UpdateVPCSwitch(operator, role string, id uint, req VPCSwitchRequest) (*mod
 	}
 	if err := validateBridgeVLANID(HookBridgeModeForSwitch(sw), req.BridgeVLANID); err != nil {
 		return nil, err
+	}
+	// 禁止修改网段/网关（影响所有已绑定 VM 的网络配置）
+	if strings.TrimSpace(req.CIDR) != "" && strings.TrimSpace(req.CIDR) != sw.CIDR {
+		return nil, fmt.Errorf("暂不支持修改交换机网段，请删除后重新创建")
+	}
+	if strings.TrimSpace(req.GatewayIP) != "" && strings.TrimSpace(req.GatewayIP) != sw.GatewayIP {
+		return nil, fmt.Errorf("暂不支持修改交换机网关，请删除后重新创建")
 	}
 	if req.Name = normalizeVPCName(req.Name); req.Name != "" {
 		sw.Name = req.Name
@@ -251,6 +261,144 @@ func allocateVPCVLANID() (int, error) {
 		}
 	}
 	return 0, fmt.Errorf("VLAN 范围 %d-%d 内没有可用 ID", start, end)
+}
+
+// resolveVPCSwitchSubnet 解析交换机子网：优先使用用户指定的 CIDR/网关，否则自动分配。
+// 对于桥接直通模式，不需要 CIDR（由上级路由器分配），直接返回空值。
+func resolveVPCSwitchSubnet(bridgeMode string, req VPCSwitchRequest) (cidr, gateway, dhcpStart, dhcpEnd string, err error) {
+	if bridgeMode == BridgeModeDirect {
+		return "", "", "", "", nil
+	}
+	req.CIDR = strings.TrimSpace(req.CIDR)
+	req.GatewayIP = strings.TrimSpace(req.GatewayIP)
+	req.DHCPStart = strings.TrimSpace(req.DHCPStart)
+	req.DHCPEnd = strings.TrimSpace(req.DHCPEnd)
+	// 未指定 CIDR 时自动分配
+	if req.CIDR == "" {
+		return allocateVPCSubnet()
+	}
+	// 验证 CIDR 格式
+	prefix, err := netip.ParsePrefix(req.CIDR)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("网段格式无效: %s（正确格式如 10.0.1.0/24）", req.CIDR)
+	}
+	// 必须是 IPv4
+	if !prefix.Addr().Is4() {
+		return "", "", "", "", fmt.Errorf("仅支持 IPv4 网段")
+	}
+	// 拒绝过大的子网（/16 或更大），防止 DHCP 范围过大
+	if prefix.Bits() < 16 {
+		return "", "", "", "", fmt.Errorf("子网掩码位不能小于 16，/16 以上子网过大")
+	}
+	// 拒绝过小的子网（/30 或更小），至少要能容纳网关+DHCP
+	if prefix.Bits() > 29 {
+		return "", "", "", "", fmt.Errorf("子网掩码位不能大于 29，至少需要 6 个可用 IP")
+	}
+	// 验证网关 IP
+	if req.GatewayIP == "" {
+		// 自动选择 CIDR 内第一个 IP 作为网关
+		addr := prefix.Addr().Next()
+		if !prefix.Contains(addr) {
+			return "", "", "", "", fmt.Errorf("无法自动计算网关地址")
+		}
+		req.GatewayIP = addr.String()
+	}
+	gatewayAddr, err := netip.ParseAddr(req.GatewayIP)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("网关地址格式无效: %s", req.GatewayIP)
+	}
+	if !prefix.Contains(gatewayAddr) {
+		return "", "", "", "", fmt.Errorf("网关地址 %s 不在网段 %s 内", req.GatewayIP, req.CIDR)
+	}
+	// 网关不能是网络地址或广播地址
+	if gatewayAddr == prefix.Addr() || gatewayAddr == broadcastAddr(prefix) {
+		return "", "", "", "", fmt.Errorf("网关地址不能是网络地址或广播地址")
+	}
+	// 检查 CIDR 是否已被使用
+	var existing model.VPCSwitch
+	if err := model.DB.Where("cidr = ?", req.CIDR).First(&existing).Error; err == nil {
+		return "", "", "", "", fmt.Errorf("网段 %s 已被交换机「%s」使用", req.CIDR, existing.Name)
+	}
+	// DHCP 范围：优先使用用户指定，否则自动计算（.10 ~ .250 或根据子网大小调整）
+	if req.DHCPStart == "" {
+		req.DHCPStart = defaultDHCPStart(prefix, gatewayAddr)
+	}
+	if req.DHCPEnd == "" {
+		req.DHCPEnd = defaultDHCPEnd(prefix)
+	}
+	dhcpStartAddr, err := netip.ParseAddr(req.DHCPStart)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("DHCP 起始地址格式无效: %s", req.DHCPStart)
+	}
+	dhcpEndAddr, err := netip.ParseAddr(req.DHCPEnd)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("DHCP 结束地址格式无效: %s", req.DHCPEnd)
+	}
+	if !prefix.Contains(dhcpStartAddr) || !prefix.Contains(dhcpEndAddr) {
+		return "", "", "", "", fmt.Errorf("DHCP 地址范围必须在网段 %s 内", req.CIDR)
+	}
+	if dhcpStartAddr == prefix.Addr() || dhcpEndAddr == prefix.Addr() {
+		return "", "", "", "", fmt.Errorf("DHCP 地址不能是网络地址")
+	}
+	if dhcpStartAddr == broadcastAddr(prefix) || dhcpEndAddr == broadcastAddr(prefix) {
+		return "", "", "", "", fmt.Errorf("DHCP 地址不能是广播地址")
+	}
+	if cmpAddr(dhcpStartAddr, dhcpEndAddr) > 0 {
+		return "", "", "", "", fmt.Errorf("DHCP 起始地址不能大于结束地址")
+	}
+	return req.CIDR, req.GatewayIP, req.DHCPStart, req.DHCPEnd, nil
+}
+
+// broadcastAddr 计算 IPv4 子网的广播地址
+func broadcastAddr(prefix netip.Prefix) netip.Addr {
+	addr := prefix.Addr().As4()
+	bits := prefix.Bits()
+	mask := net.CIDRMask(bits, 32)
+	for i := 0; i < 4; i++ {
+		addr[i] |= ^mask[i]
+	}
+	return netip.AddrFrom4(addr)
+}
+
+// cmpAddr 比较两个地址（-1: a<b, 0: a==b, 1: a>b）
+func cmpAddr(a, b netip.Addr) int {
+	a4 := a.As4()
+	b4 := b.As4()
+	for i := 0; i < 4; i++ {
+		if a4[i] < b4[i] {
+			return -1
+		}
+		if a4[i] > b4[i] {
+			return 1
+		}
+	}
+	return 0
+}
+
+// defaultDHCPStart 计算默认 DHCP 起始地址（网关+1，至少离网关 1 个 IP）
+func defaultDHCPStart(prefix netip.Prefix, gateway netip.Addr) string {
+	start := gateway.Next()
+	if !prefix.Contains(start) || start == broadcastAddr(prefix) {
+		return gateway.String()
+	}
+	// 跳过网关自身，从下一个可用 IP 开始
+	for prefix.Contains(start) && start != broadcastAddr(prefix) {
+		if start != gateway {
+			return start.String()
+		}
+		start = start.Next()
+	}
+	return gateway.String()
+}
+
+// defaultDHCPEnd 计算默认 DHCP 结束地址（广播地址前一个）
+func defaultDHCPEnd(prefix netip.Prefix) string {
+	bcast := broadcastAddr(prefix)
+	addr := bcast.Prev()
+	if prefix.Contains(addr) && addr != prefix.Addr() {
+		return addr.String()
+	}
+	return bcast.String()
 }
 
 func allocateVPCSubnet() (cidr, gateway, dhcpStart, dhcpEnd string, err error) {

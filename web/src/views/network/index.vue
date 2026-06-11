@@ -884,6 +884,17 @@
         <el-form-item label="名称" required>
           <el-input v-model="switchForm.name" placeholder="请输入交换机名称" />
         </el-form-item>
+        <template v-if="!selectedSwitchBridge || selectedSwitchBridge.mode !== 'bridge'">
+          <el-divider content-position="left">网段配置</el-divider>
+          <el-form-item label="网段(CIDR)">
+            <el-input v-model="switchForm.cidr" placeholder="如 10.0.1.0/24，留空自动分配" :disabled="!!editingSwitch" />
+            <div class="form-hint">创建后不可修改。留空时系统将自动分配未使用的子网。</div>
+          </el-form-item>
+          <el-form-item label="网关地址">
+            <el-input v-model="switchForm.gateway_ip" placeholder="如 10.0.1.1，留空自动计算" :disabled="!!editingSwitch" />
+            <div class="form-hint">创建后不可修改。留空时自动取网段内第一个可用 IP。</div>
+          </el-form-item>
+        </template>
         <el-form-item v-if="isAdmin" label="目标网桥">
           <el-select v-model="switchForm.bridge_name" style="width: 100%;" placeholder="选择目标网桥">
             <el-option v-for="item in bridges" :key="item.name" :label="bridgeOptionLabel(item)" :value="item.name" />
@@ -1287,7 +1298,7 @@ const probeSubmitting = ref(false)
 
 const switchDialogVisible = ref(false)
 const editingSwitch = ref(null)
-const switchForm = reactive({ username: '', name: '', bridge_name: 'br-ovs', bridge_vlan_id: 0, allow_promiscuous: false, allow_mac_change: false, allow_forged_transmits: false, traffic_down_gb: 0, traffic_up_gb: 0, bandwidth_down_mbps: 0, bandwidth_up_mbps: 0, bandwidth_mbps: 0 })
+const switchForm = reactive({ username: '', name: '', bridge_name: 'br-ovs', bridge_vlan_id: 0, allow_promiscuous: false, allow_mac_change: false, allow_forged_transmits: false, cidr: '', gateway_ip: '', dhcp_start: '', dhcp_end: '', traffic_down_gb: 0, traffic_up_gb: 0, bandwidth_down_mbps: 0, bandwidth_up_mbps: 0, bandwidth_mbps: 0 })
 
 const bridgeDialogVisible = ref(false)
 const bridgeForm = reactive({ name: '', mode: 'bridge', uplink_if: '', migrate_host_ip: true })
@@ -1564,6 +1575,10 @@ function openSwitchDialog(row) {
     allow_promiscuous: !!row?.allow_promiscuous,
     allow_mac_change: !!row?.allow_mac_change,
     allow_forged_transmits: !!row?.allow_forged_transmits,
+    cidr: row?.cidr || '',
+    gateway_ip: row?.gateway_ip || '',
+    dhcp_start: row?.dhcp_start || '',
+    dhcp_end: row?.dhcp_end || '',
     traffic_down_gb: row ? (row.traffic_down_gb ?? 0) : defaultTrafficDown.value,
     traffic_up_gb: row ? (row.traffic_up_gb ?? 0) : defaultTrafficUp.value,
     bandwidth_down_mbps: row ? (row.bandwidth_down_mbps ?? legacyBandwidth) : defaultBandwidthDown.value,

@@ -2,8 +2,10 @@ package model
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -78,6 +80,7 @@ func InitDB() {
 	hadLightweightQuotaMaxRuntimeColumn := DB.Migrator().HasColumn(&LightweightVMQuota{}, "max_runtime_hours")
 	hadLightweightRegistrationMaxRuntimeColumn := DB.Migrator().HasColumn(&LightweightVMRegistration{}, "max_runtime_hours")
 	hadVPCBindingInterfaceOrderColumn := DB.Migrator().HasColumn(&VPCVMBinding{}, "interface_order")
+	hadVPCSwitchCIDRColumn := DB.Migrator().HasColumn(&VPCSwitch{}, "cidr")
 
 	// 自动迁移表结构
 	if err := DB.AutoMigrate(&User{}, &UserAPIKey{}, &VmStatsRecord{}, &PortForwardIP{}, &PortForwardWhitelist{}, &PortForwardProbeState{}, &HostStatsRecord{}, &UserTrafficDaily{}, &SystemSetting{}, &VMCredential{}, &VMCache{}, &AuthActionToken{}, &SecurityChallenge{}, &SchedulerEvent{}, &VMSchedule{}, &NetworkBridge{}, &HostStoragePool{}, &HostNode{},
@@ -95,6 +98,7 @@ func InitDB() {
 	migrateLightweightSnapshotQuota(hadLightweightQuotaMaxSnapshotsColumn, hadLightweightRegistrationMaxSnapshotsColumn)
 	migrateLightweightRuntimeQuota(hadLightweightQuotaMaxRuntimeColumn, hadLightweightRegistrationMaxRuntimeColumn)
 	migrateVPCBindingInterfaceOrder(hadVPCBindingInterfaceOrderColumn)
+	migrateVPCSwitchCIDRColumn(hadVPCSwitchCIDRColumn)
 
 	// 兼容旧用户：补齐默认状态，确保升级后能继续登录
 	if err := DB.Model(&User{}).Where("status = '' OR status IS NULL").Updates(map[string]interface{}{
@@ -245,6 +249,67 @@ func migrateVPCBindingUniqueIndex() {
 	if err := DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vm_interface ON vpc_vm_bindings(vm_name, interface_order)").Error; err != nil {
 		logger.App.Warn("创建VPC绑定联合唯一索引失败", "error", err)
 	}
+}
+
+// migrateVPCSwitchCIDRColumn 为旧版 vpc_switches 表补齐 cidr 列
+// GORM AutoMigrate 在 SQLite 上新增 NOT NULL + UNIQUE 列时可能静默失败，因此需要手动迁移
+func migrateVPCSwitchCIDRColumn(hadColumn bool) {
+	if DB == nil || hadColumn {
+		return
+	}
+	logger.App.Info("开始迁移 vpc_switches.cidr 列")
+
+	// 1. 添加 cidr 列（暂不设 NOT NULL，避免与已有数据冲突）
+	if err := DB.Exec("ALTER TABLE vpc_switches ADD COLUMN cidr TEXT DEFAULT ''").Error; err != nil {
+		logger.App.Warn("添加 vpc_switches.cidr 列失败", "error", err)
+		return
+	}
+
+	// 2. 收集已占用的 CIDR，避免冲突
+	prefix := strings.Trim(config.GlobalConfig.VPCSubnetPrefix, ". ")
+	if prefix == "" {
+		prefix = "10.200"
+	}
+
+	var switches []VPCSwitch
+	if err := DB.Order("id ASC").Find(&switches).Error; err != nil {
+		logger.App.Warn("迁移时查询交换机列表失败", "error", err)
+		return
+	}
+
+	used := map[string]bool{}
+	for _, sw := range switches {
+		if sw.CIDR != "" {
+			used[sw.CIDR] = true
+		}
+	}
+
+	// 3. 为每个未设置 CIDR 的交换机分配一个唯一 CIDR
+	idx := 1
+	for _, sw := range switches {
+		if sw.CIDR != "" {
+			continue
+		}
+		var cidr string
+		for {
+			cidr = fmt.Sprintf("%s.%d.0/24", prefix, idx)
+			idx++
+			if !used[cidr] {
+				break
+			}
+		}
+		used[cidr] = true
+		if err := DB.Model(&VPCSwitch{}).Where("id = ?", sw.ID).Update("cidr", cidr).Error; err != nil {
+			logger.App.Warn("更新交换机 cidr 失败", "sw_id", sw.ID, "error", err)
+		}
+	}
+
+	// 4. 创建唯一索引
+	if err := DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vpc_switches_cidr ON vpc_switches(cidr)").Error; err != nil {
+		logger.App.Warn("创建 vpc_switches.cidr 唯一索引失败", "error", err)
+	}
+
+	logger.App.Info("vpc_switches.cidr 列迁移完成")
 }
 
 // initDefaultAdmin 创建默认管理员账号
