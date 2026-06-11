@@ -6,6 +6,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // AtomicWriteFile 原子写文件：先写入临时文件，再通过 os.Rename 替换目标文件
@@ -105,4 +106,35 @@ func ChownLibvirtQEMU(path string) error {
 		return fmt.Errorf("chown %s 失败: %w", path, err)
 	}
 	return nil
+}
+
+// SetFileImmutable 对文件设置 Linux 不可变属性 (chattr +i)
+// 设置后文件不可被修改、删除、重命名，即使 root 也无法直接操作
+func SetFileImmutable(path string) error {
+	result := ExecCommand("chattr", "+i", path)
+	if result.Error != nil {
+		return fmt.Errorf("设置文件不可变属性失败 %s: %s", path, result.Stderr)
+	}
+	return nil
+}
+
+// RemoveFileImmutable 移除文件的 Linux 不可变属性 (chattr -i)
+func RemoveFileImmutable(path string) error {
+	result := ExecCommand("chattr", "-i", path)
+	if result.Error != nil {
+		// 如果文件已经不可变或 chattr 不可用，不视为错误
+		return nil
+	}
+	return nil
+}
+
+// IsFileImmutable 检查文件是否设置了不可变属性
+func IsFileImmutable(path string) bool {
+	result := ExecCommand("lsattr", path)
+	if result.Error != nil {
+		return false
+	}
+	// lsattr 输出格式: "----i---------e------- /path/to/file"
+	// i 表示 immutable
+	return strings.Contains(result.Stdout, "-i-") || strings.Contains(result.Stdout, "----i")
 }

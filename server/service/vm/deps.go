@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"time"
 
-	bwpkg "kvm_console/service/bandwidth"
 	"kvm_console/model"
+	bwpkg "kvm_console/service/bandwidth"
 	"kvm_console/service/network/vpc"
 	"kvm_console/service/storage/disk"
 	"kvm_console/service/storage/pool"
@@ -18,38 +18,38 @@ import (
 // 在 main.go 启动时通过 InitDeps() 一次性注入。
 type Deps struct {
 	// ---- Host ----
-	FirstNonEmpty               func(values ...string) string
+	FirstNonEmpty                 func(values ...string) string
 	EnsureMaintenanceModeDisabled func(action string) error
-	IsLibvirtUnavailableError   func(err error) bool
-	IsMaintenanceModeEnabled    func() bool
-	IsLibvirtUnavailableText   func(text string) bool
+	IsLibvirtUnavailableError     func(err error) bool
+	IsMaintenanceModeEnabled      func() bool
+	IsLibvirtUnavailableText      func(text string) bool
 
 	// ---- Bandwidth ----
-	GetVMBandwidthMbps          func(vmName string) (int, int)
-	GetVMBandwidth              func(vmName string) (*bwpkg.BandwidthDetail, error)
+	GetVMBandwidthMbps           func(vmName string) (int, int)
+	GetVMBandwidth               func(vmName string) (*bwpkg.BandwidthDetail, error)
 	ReapplyConfiguredVMBandwidth func(vmName string) error
 
 	// ---- User ----
-	FindVMOwner         func(vmName string) string
-	CheckQuotaForStart  func(username, vmName string) error
-	GetUserDiskDir      func(username string) string
+	FindVMOwner        func(vmName string) string
+	CheckQuotaForStart func(username, vmName string) error
+	GetUserDiskDir     func(username string) string
 
 	// ---- Clone ----
-	InjectMemballoonConfig func(xmlStr string, enableFPR bool) string
+	InjectMemballoonConfig  func(xmlStr string, enableFPR bool) string
 	RandomStringFromCharset func(charset string, length int) string
 	ValidateStrongPassword  func(password string) error
 	CloneUsernameRegexp     *regexp.Regexp
 
 	// ---- Disk / Storage ----
-	AddDiskWithBusInDir func(vmName string, sizeGB int, format, bus, diskDir string) (string, error)
-	SetDiskIOPSTune    func(vmName, dev string, iops *DiskIOPSTune) error
-	GetDevPrefix       func(bus string) string
-	GetVMPCIERootPorts func(vmName string) (int, error)
-	ParseQemuInfoGB   func(output, key string) string
-	ParseQemuInfoStr  func(output, key string) string
+	AddDiskWithBusInDir   func(vmName string, sizeGB int, format, bus, diskDir string) (string, error)
+	SetDiskIOPSTune       func(vmName, dev string, iops *DiskIOPSTune) error
+	GetDevPrefix          func(bus string) string
+	GetVMPCIERootPorts    func(vmName string) (int, error)
+	ParseQemuInfoGB       func(output, key string) string
+	ParseQemuInfoStr      func(output, key string) string
 	CheckVMSnapshotSafety func(vmName string) (bool, []string, error)
-	GetDiskFilePath    func(vmName, device string) string
-	ListDisks          func(vmName string) ([]DiskInfo, error)
+	GetDiskFilePath       func(vmName, device string) string
+	ListDisks             func(vmName string) ([]DiskInfo, error)
 
 	// ---- Rescue ----
 	IsInRescueMode func(vmName string) bool
@@ -58,16 +58,16 @@ type Deps struct {
 	GetCachedStats func(name string) *VmStats
 
 	// ---- VPC / Network ----
-	ApplyVPCBindingRuntime          func(vmName string) error
-	ApplyVPCSwitchToDomainXML       func(vmXML string, switchID uint) (string, error)
-	SafeVMXMLFileName               func(vmName string) string
+	ApplyVPCBindingRuntime            func(vmName string) error
+	ApplyVPCSwitchToDomainXML         func(vmXML string, switchID uint) (string, error)
+	SafeVMXMLFileName                 func(vmName string) string
 	StripRuntimeOnlyInterfaceElements func(block string) string
-	BridgeNameForSwitch             func(sw model.VPCSwitch) string
-	SwitchUsesDirectBridge          func(sw model.VPCSwitch) bool
+	BridgeNameForSwitch               func(sw model.VPCSwitch) string
+	SwitchUsesDirectBridge            func(sw model.VPCSwitch) bool
 
 	// ---- Storage pool ----
-	GetAllISOs          func() ([]ISOFileInfo, error)
-	ResolveVMStorageDir func(poolID string, isAdmin bool) (string, string, error)
+	GetAllISOs           func() ([]ISOFileInfo, error)
+	ResolveVMStorageDir  func(poolID string, isAdmin bool) (string, string, error)
 	ListVMStorageTargets func(isAdmin bool) ([]VMStorageTarget, error)
 
 	// ---- OVS ----
@@ -78,11 +78,11 @@ type Deps struct {
 	FixSnapshotDiskPermissions func(vmName string)
 
 	// ---- Lightweight ----
-	ApplyLightweightVMBandwidth           func(vmName string) error
+	ApplyLightweightVMBandwidth             func(vmName string) error
 	CheckLightweightVMRuntimeQuotaAvailable func(vmName string) error
-	IsLightweightCloudUser                func(username string) bool
-	IsLightweightCloudVM                  func(vmName string) bool
-	GetLightweightVMQuota                 func(vmName string) (*model.LightweightVMQuota, error)
+	IsLightweightCloudUser                  func(username string) bool
+	IsLightweightCloudVM                    func(vmName string) bool
+	GetLightweightVMQuota                   func(vmName string) (*model.LightweightVMQuota, error)
 
 	// ---- Public IP ----
 	ListPublicIPAttachmentsForVM func(vmName string) []PublicIPAttachment
@@ -101,8 +101,8 @@ type Deps struct {
 	RebalanceUserBandwidth func(username string) error
 
 	// ---- Scheduler ----
-	RegisterScheduler          func(def SchedulerDefinition)
-	StartSchedulerEvent        func(input SchedulerEventStartInput) (*model.SchedulerEvent, error)
+	RegisterScheduler           func(def SchedulerDefinition)
+	StartSchedulerEvent         func(input SchedulerEventStartInput) (*model.SchedulerEvent, error)
 	FinishSchedulerEventSuccess func(event *model.SchedulerEvent, message string) error
 	FinishSchedulerEventFailed  func(event *model.SchedulerEvent, message string) error
 
@@ -110,50 +110,50 @@ type Deps struct {
 	DeleteVM func(vmName string) error
 
 	// ---- Migration hooks ----
-	HookEnsureVMNotMigrating        func(vmName, action string) error
-	HookApplyVMUnderMigrationStatus func(vm *VmInfo)
+	HookEnsureVMNotMigrating         func(vmName, action string) error
+	HookApplyVMUnderMigrationStatus  func(vm *VmInfo)
 	HookDetectMigrationModeFromState func(state string) string
-	HookMigrationModeLive           string
+	HookMigrationModeLive            func() string
 
 	// ---- CPU / Topology / Clock ----
-	ParseVCPUCountFromDomainXML     func(xmlStr string) int
+	ParseVCPUCountFromDomainXML         func(xmlStr string) int
 	ParseVMCPULimitPercentFromDomainXML func(xmlStr string, vcpu int) int
-	ParseCPUAffinityFromDomainXML   func(xmlStr string) string
+	ParseCPUAffinityFromDomainXML       func(xmlStr string) string
 	ParseVMCPUTopologyModeFromDomainXML func(xmlStr string) string
-	ParseVMAPICFromDomainXML        func(xmlContent string) bool
-	ParseRTCOffsetFromDomainXML     func(xmlContent string) string
-	ParseRTCStartDateFromDomainXML  func(xmlContent string) string
-	ApplyRTCConfigToDomainXML       func(xmlContent, offset, startDate, guestType string) (string, error)
-	ApplyVMAPICToDomainXML          func(xmlStr string, apic *bool) (string, error)
-	ApplyVMCPULimitToDomainXML      func(xmlStr string, vcpu, percent int) string
-	ApplyCPUTopologyModeToDomainXML func(xmlStr, mode, osType string, vcpu int) string
-	ParseCPUAffinity                func(input string) ([]int, error)
-	ValidateCPUAffinity             func(cores []int) error
-	ApplyCPUAffinityToDomainXML     func(xmlStr string, vcpu int, cores []int) string
-	EffectiveTopologyVCPU           func(current, maxVCPU int) int
-	SetVMCPUWithTopologySync        func(name string, vcpu, maxVCPU int) error
-	NormalizeVMCPUTopologyMode      func(mode string) string
+	ParseVMAPICFromDomainXML            func(xmlContent string) bool
+	ParseRTCOffsetFromDomainXML         func(xmlContent string) string
+	ParseRTCStartDateFromDomainXML      func(xmlContent string) string
+	ApplyRTCConfigToDomainXML           func(xmlContent, offset, startDate, guestType string) (string, error)
+	ApplyVMAPICToDomainXML              func(xmlStr string, apic *bool) (string, error)
+	ApplyVMCPULimitToDomainXML          func(xmlStr string, vcpu, percent int) string
+	ApplyCPUTopologyModeToDomainXML     func(xmlStr, mode, osType string, vcpu int) string
+	ParseCPUAffinity                    func(input string) ([]int, error)
+	ValidateCPUAffinity                 func(cores []int) error
+	ApplyCPUAffinityToDomainXML         func(xmlStr string, vcpu int, cores []int) string
+	EffectiveTopologyVCPU               func(current, maxVCPU int) int
+	SetVMCPUWithTopologySync            func(name string, vcpu, maxVCPU int) error
+	NormalizeVMCPUTopologyMode          func(mode string) string
 
 	// ---- Install Media ----
-	NormalizeInstallISOSelection    func(primary string, paths []string) (string, []string)
+	NormalizeInstallISOSelection     func(primary string, paths []string) (string, []string)
 	ApplyAdditionalCDROMsToDomainXML func(xmlContent string, isoPaths []string) (string, error)
 
 	// ---- Passthrough ----
-	EnsureVfioModuleLoaded          func() error
-	ValidatePCIPassthrough          func(pciAddress string) error
-	IsDeviceVfioBound               func(pciAddress string) bool
-	BindPCIDeviceToVfio             func(pciAddress string) error
-	ApplyHostDevsToDomainXML        func(xmlContent string, hostDevs []HostDeviceParam) (string, error)
+	EnsureVfioModuleLoaded   func() error
+	ValidatePCIPassthrough   func(pciAddress string) error
+	IsDeviceVfioBound        func(pciAddress string) bool
+	BindPCIDeviceToVfio      func(pciAddress string) error
+	ApplyHostDevsToDomainXML func(xmlContent string, hostDevs []HostDeviceParam) (string, error)
 
 	// ---- VM Name ----
-	ValidateVMName                  func(name string) error
+	ValidateVMName func(name string) error
 
 	// ---- VM Lock ----
-	IsVMLocked                      func(vmName string) bool
+	IsVMLocked func(vmName string) bool
 
 	// ---- CPU Limit ----
-	VMCPULimitUnlimited             int
-	ValidateVMCPULimitPercent       func(percent int) error
+	VMCPULimitUnlimited       int
+	ValidateVMCPULimitPercent func(percent int) error
 
 	// ---- VM lifecycle (self-referencing: defined in vm_*.go files that will also be migrated) ----
 	StartVM                     func(name string) error
@@ -183,8 +183,8 @@ type (
 	BandwidthDetail = bwpkg.BandwidthDetail
 
 	// Disk types from storage/disk
-	DiskIOPSTune  = disk.DiskIOPSTune
-	DiskInfo      = disk.DiskInfo
+	DiskIOPSTune   = disk.DiskIOPSTune
+	DiskInfo       = disk.DiskInfo
 	ExtraDiskParam = disk.ExtraDiskParam
 
 	// Storage pool types
@@ -217,7 +217,7 @@ type TemplateMetaAlias struct {
 	NVRAMPath     string                 `json:"nvram_path,omitempty"`
 	RootPassword  string                 `json:"root_password,omitempty"`
 	TemplateUser  string                 `json:"template_user,omitempty"`
-	DefaultConfig *TemplateDefaultConfig  `json:"default_config,omitempty"`
+	DefaultConfig *TemplateDefaultConfig `json:"default_config,omitempty"`
 	TemplateUID   string                 `json:"template_uid,omitempty"`
 	NodeID        string                 `json:"node_id,omitempty"`
 	ParentNodeID  string                 `json:"parent_node_id,omitempty"`

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/service"
 	"kvm_console/service/ip_resolver"
 	vm_memory "kvm_console/service/vm/memory"
@@ -69,6 +70,16 @@ func ImportDiskByPath(ctx context.Context, params *ImportDiskByPathParams, progr
 	}
 	if !utils.FileExists(mainDiskSrc) {
 		return nil, fmt.Errorf("磁盘文件不存在: %s", mainDiskSrc)
+	}
+
+	// 安全检查：拒绝将模板目录中的文件作为 VM 系统盘导入
+	if config.GlobalConfig != nil && config.GlobalConfig.TemplateDir != "" {
+		templateDir := filepath.Clean(config.GlobalConfig.TemplateDir)
+		cleanedSrc := filepath.Clean(mainDiskSrc)
+		if cleanedSrc == templateDir || strings.HasPrefix(cleanedSrc, templateDir+string(filepath.Separator)) {
+			logger.App.Error("拒绝将模板文件作为 VM 系统盘导入", "disk", mainDiskSrc, "template_dir", templateDir)
+			return nil, fmt.Errorf("不能直接导入模板目录中的磁盘文件，请使用模板克隆功能创建虚拟机")
+		}
 	}
 
 	if err := service.EnsureOVSNetworkReady(); err != nil {

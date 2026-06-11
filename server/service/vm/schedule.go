@@ -41,6 +41,7 @@ const (
 )
 
 var vmScheduleRunnerOnce sync.Once
+var vmScheduleRegisterOnce sync.Once
 
 // VMScheduleInput 定时任务写入参数。
 type VMScheduleInput struct {
@@ -85,15 +86,19 @@ type VMScheduledActionTaskParams struct {
 	Action     string `json:"action"`
 }
 
-func init() {
-	D.RegisterScheduler(SchedulerDefinition{
-		Key:         vmScheduleSchedulerKey,
-		Name:        vmScheduleSchedulerName,
-		Group:       vmScheduleSchedulerGroup,
-		Description: "按虚拟机详情中的定时任务配置执行开机、关机和删除动作",
-		Enabled: func() bool {
-			return true
-		},
+// registerVMScheduleScheduler 注册虚拟机定时任务调度器（延迟到 StartVMScheduleRunner 中调用，
+// 避免在 init() 阶段 D 尚未注入导致 nil pointer）。
+func registerVMScheduleScheduler() {
+	vmScheduleRegisterOnce.Do(func() {
+		D.RegisterScheduler(SchedulerDefinition{
+			Key:         vmScheduleSchedulerKey,
+			Name:        vmScheduleSchedulerName,
+			Group:       vmScheduleSchedulerGroup,
+			Description: "按虚拟机详情中的定时任务配置执行开机、关机和删除动作",
+			Enabled: func() bool {
+				return true
+			},
+		})
 	})
 }
 
@@ -174,6 +179,7 @@ func DeleteVMSchedules(vmName string) error {
 
 // StartVMScheduleRunner 启动后台扫描器。
 func StartVMScheduleRunner() {
+	registerVMScheduleScheduler()
 	vmScheduleRunnerOnce.Do(func() {
 		go func() {
 			runDueVMSchedulesOnce()

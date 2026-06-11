@@ -11,10 +11,10 @@ var (
 
 // Migration Hooks - 由 service/vm/migration 子包注册
 var (
-	HookEnsureVMNotMigrating        func(vmName, action string) error
-	HookApplyVMUnderMigrationStatus func(vm *VmInfo)
+	HookEnsureVMNotMigrating         func(vmName, action string) error
+	HookApplyVMUnderMigrationStatus  func(vm *VmInfo)
 	HookDetectMigrationModeFromState func(state string) string
-	HookMigrationModeLive           string
+	HookMigrationModeLive            string
 )
 
 // Memory Hooks - 由 service/vm/memory 子包注册
@@ -37,4 +37,31 @@ func EnsureVMNotMigrating(vmName, action string) error {
 		return HookEnsureVMNotMigrating(vmName, action)
 	}
 	return nil
+}
+
+// ApplyVMUnderMigrationStatus delegates to HookApplyVMUnderMigrationStatus.
+// Uses deferred resolution to work around init-order: the sub-package sets the
+// hook after vm_register.go captures the Deps, so we resolve at call time.
+func ApplyVMUnderMigrationStatus(vm *VmInfo) {
+	if HookApplyVMUnderMigrationStatus != nil {
+		HookApplyVMUnderMigrationStatus(vm)
+	}
+}
+
+// DetectMigrationModeFromState delegates to HookDetectMigrationModeFromState.
+// Uses deferred resolution for the same init-order reason.
+func DetectMigrationModeFromState(state string) string {
+	if HookDetectMigrationModeFromState != nil {
+		return HookDetectMigrationModeFromState(state)
+	}
+	return ""
+}
+
+// LiveMigrationMode returns the live migration mode constant.
+// Uses deferred resolution for the same init-order reason as the hooks above.
+func LiveMigrationMode() string {
+	if HookMigrationModeLive != "" {
+		return HookMigrationModeLive
+	}
+	return "live" // fallback to the known constant
 }

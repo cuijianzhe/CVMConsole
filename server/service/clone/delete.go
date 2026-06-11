@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/digitalocean/go-libvirt"
+	"kvm_console/config"
 	"kvm_console/logger"
 	"kvm_console/service/ip_resolver"
 	"kvm_console/service/libvirt_rpc"
@@ -17,6 +17,8 @@ import (
 	"kvm_console/service/snapshot"
 	"kvm_console/service/storage/disk"
 	"kvm_console/utils"
+
+	"github.com/digitalocean/go-libvirt"
 )
 
 // DeleteVM 删除虚拟机（含磁盘、静态IP、端口转发）- 兼容接口，删除所有磁盘
@@ -97,12 +99,32 @@ func DeleteVMWithDisks(name string, deleteDisks []string, transferDisks []string
 	if deleteDiskList == nil && len(allDiskPaths) > 0 {
 		deleteDiskList = allDiskPaths
 	}
+
+	// 获取模板目录，用于保护模板文件不被误删
+	templateDir := ""
+	if config.GlobalConfig != nil {
+		templateDir = filepath.Clean(config.GlobalConfig.TemplateDir)
+	}
+
 	for _, diskPath := range deleteDiskList {
-		if diskPath != "" {
-			if err := os.Remove(diskPath); err != nil && !os.IsNotExist(err) {
-				logger.App.Warn("删除磁盘文件失败", "path", diskPath, "error", err)
-				warnings = append(warnings, fmt.Sprintf("删除磁盘 %s 失败: %v", diskPath, err))
+		if diskPath == "" {
+			continue
+		}
+
+		// 安全检查：禁止删除模板目录下的文件（防止模板被误删）
+		if templateDir != "" {
+			cleanedPath := filepath.Clean(diskPath)
+			if isPathUnderDir(cleanedPath, templateDir) {
+				logger.App.Warn("跳过删除模板目录下的磁盘文件（模板保护），VM可能错误引用了模板文件",
+					"vm", name, "disk", diskPath, "template_dir", templateDir)
+				// 注意：这不是删除失败，而是保护性跳过，不应阻止任务完成
+				continue
 			}
+		}
+
+		if err := os.Remove(diskPath); err != nil && !os.IsNotExist(err) {
+			logger.App.Warn("删除磁盘文件失败", "path", diskPath, "error", err)
+			warnings = append(warnings, fmt.Sprintf("删除磁盘 %s 失败: %v", diskPath, err))
 		}
 	}
 
@@ -281,4 +303,16 @@ func CheckDiskTransferQuota(username string, diskPaths []string) (int64, error) 
 	}
 
 	return totalBytes, nil
+}
+
+// isPathUnderDir 检查给定路径是否在指定目录下（含目录本身）
+func isPathUnderDir(path, dir string) bool {
+	path = filepath.Clean(path)
+	dir = filepath.Clean(dir)
+	if path == dir {
+		return true
+	}
+	// 确保 dir 以路径分隔符结尾再比较前缀
+	dirWithSep := dir + string(filepath.Separator)
+	return strings.HasPrefix(path, dirWithSep)
 }

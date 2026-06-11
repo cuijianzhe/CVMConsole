@@ -15,6 +15,7 @@ import (
 	"kvm_console/service/ip_resolver"
 	"kvm_console/service/libvirt_rpc"
 	"kvm_console/service/vm_xml"
+	"kvm_console/utils"
 )
 
 // getMetaPath returns the .meta.json path for a template qcow2 file.
@@ -46,9 +47,13 @@ func saveTemplateMeta(templatePath string, meta *TemplateMeta) error {
 	if err != nil {
 		return err
 	}
+	// 临时移除不可变属性以允许写入
+	_ = utils.RemoveFileImmutable(metaPath)
 	if err := os.WriteFile(metaPath, data, 0o644); err != nil {
 		return fmt.Errorf("保存元数据失败: %w", err)
 	}
+	// 重新设置不可变属性
+	_ = utils.SetFileImmutable(metaPath)
 	return nil
 }
 
@@ -67,10 +72,14 @@ func deleteTemplateFiles(templateName string) error {
 	if err != nil {
 		return err
 	}
+	// 移除不可变属性，允许删除
+	_ = utils.RemoveFileImmutable(templatePath)
+	metaPath := getMetaPath(templatePath)
+	_ = utils.RemoveFileImmutable(metaPath)
+
 	if err := os.Remove(templatePath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("删除模板文件失败: %w", err)
 	}
-	metaPath := getMetaPath(templatePath)
 	if err := os.Remove(metaPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("删除模板元数据失败: %w", err)
 	}

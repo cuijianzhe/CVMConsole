@@ -130,7 +130,7 @@ func ExecuteVMDiskMigration(ctx context.Context, params VMDiskMigrationTaskParam
 	}
 
 	progress(12, fmt.Sprintf("硬盘 %s 将按%s迁移到目标存储...", plan.Device, diskMigrationModeLabel(plan.Mode)))
-	if plan.Mode == D.HookMigrationModeLive {
+	if plan.Mode == D.HookMigrationModeLive() {
 		err = executeLiveVMDiskMigration(ctx, plan, progress)
 	} else {
 		err = executeColdVMDiskMigration(ctx, plan, progress)
@@ -602,7 +602,7 @@ func bytesToGBString(value int64) string {
 }
 
 func diskMigrationModeLabel(mode string) string {
-	if mode == D.HookMigrationModeLive {
+	if mode == D.HookMigrationModeLive() {
 		return "热迁移"
 	}
 	return "冷迁移"

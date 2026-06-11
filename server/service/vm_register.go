@@ -15,11 +15,11 @@ import (
 func init() {
 	vmpkg.InitDeps(&vmpkg.Deps{
 		// ---- Host ----
-		FirstNonEmpty:                FirstNonEmpty,
+		FirstNonEmpty:                 FirstNonEmpty,
 		EnsureMaintenanceModeDisabled: EnsureMaintenanceModeDisabled,
-		IsLibvirtUnavailableError:    IsLibvirtUnavailableError,
-		IsMaintenanceModeEnabled:     IsMaintenanceModeEnabled,
-		IsLibvirtUnavailableText:     isLibvirtUnavailableText,
+		IsLibvirtUnavailableError:     IsLibvirtUnavailableError,
+		IsMaintenanceModeEnabled:      IsMaintenanceModeEnabled,
+		IsLibvirtUnavailableText:      isLibvirtUnavailableText,
 
 		// ---- Bandwidth ----
 		GetVMBandwidthMbps:           GetVMBandwidthMbps,
@@ -55,16 +55,16 @@ func init() {
 		GetCachedStats: GetCachedStats,
 
 		// ---- VPC / Network ----
-		ApplyVPCBindingRuntime:           ApplyVPCBindingRuntime,
-		ApplyVPCSwitchToDomainXML:        ApplyVPCSwitchToDomainXML,
-		SafeVMXMLFileName:                SafeVMXMLFileName,
+		ApplyVPCBindingRuntime:            ApplyVPCBindingRuntime,
+		ApplyVPCSwitchToDomainXML:         ApplyVPCSwitchToDomainXML,
+		SafeVMXMLFileName:                 SafeVMXMLFileName,
 		StripRuntimeOnlyInterfaceElements: StripRuntimeOnlyInterfaceElements,
-		BridgeNameForSwitch:              BridgeNameForSwitch,
-		SwitchUsesDirectBridge:           SwitchUsesDirectBridge,
+		BridgeNameForSwitch:               BridgeNameForSwitch,
+		SwitchUsesDirectBridge:            SwitchUsesDirectBridge,
 
 		// ---- Storage pool ----
-		GetAllISOs:          GetAllISOs,
-		ResolveVMStorageDir: ResolveVMStorageDir,
+		GetAllISOs:           GetAllISOs,
+		ResolveVMStorageDir:  ResolveVMStorageDir,
 		ListVMStorageTargets: ListVMStorageTargets,
 
 		// ---- OVS ----
@@ -98,8 +98,8 @@ func init() {
 		RebalanceUserBandwidth: RebalanceUserBandwidth,
 
 		// ---- Scheduler ----
-		RegisterScheduler:          registerSchedulerForVM,
-		StartSchedulerEvent:        startSchedulerEventForVM,
+		RegisterScheduler:           registerSchedulerForVM,
+		StartSchedulerEvent:         startSchedulerEventForVM,
 		FinishSchedulerEventSuccess: FinishSchedulerEventSuccess,
 		FinishSchedulerEventFailed:  FinishSchedulerEventFailed,
 
@@ -107,10 +107,13 @@ func init() {
 		DeleteVM: DeleteVM,
 
 		// ---- Migration hooks ----
-		HookEnsureVMNotMigrating:        HookEnsureVMNotMigrating,
-		HookApplyVMUnderMigrationStatus: HookApplyVMUnderMigrationStatus,
-		HookDetectMigrationModeFromState: HookDetectMigrationModeFromState,
-		HookMigrationModeLive:           HookMigrationModeLive,
+		// 使用 wrapper 函数而非直接捕获 Hook 变量，避免 init 顺序问题：
+		// vm_register.go 的 init 先于 vm/migration/register.go 执行，
+		// 直接捕获会得到 nil。wrapper 在调用时才解析 Hook 变量。
+		HookEnsureVMNotMigrating:         EnsureVMNotMigrating,
+		HookApplyVMUnderMigrationStatus:  ApplyVMUnderMigrationStatus,
+		HookDetectMigrationModeFromState: DetectMigrationModeFromState,
+		HookMigrationModeLive:            LiveMigrationMode,
 
 		// ---- CPU / Topology / Clock ----
 		ParseVCPUCountFromDomainXML:         vmpkg.ParseVCPUCountFromDomainXML,
@@ -132,7 +135,7 @@ func init() {
 		NormalizeVMCPUTopologyMode:          vmpkg.NormalizeVMCPUTopologyMode,
 
 		// ---- Install Media ----
-		NormalizeInstallISOSelection:    vmpkg.NormalizeInstallISOSelection,
+		NormalizeInstallISOSelection:     vmpkg.NormalizeInstallISOSelection,
 		ApplyAdditionalCDROMsToDomainXML: vmpkg.ApplyAdditionalCDROMsToDomainXML,
 
 		// ---- Passthrough ----
@@ -177,20 +180,20 @@ func getTemplateMetaForVM(templateName string) *vmpkg.TemplateMetaAlias {
 		return nil
 	}
 	result := &vmpkg.TemplateMetaAlias{
-		Type:          meta.Type,
-		Category:      meta.Category,
-		BootType:      meta.BootType,
-		BootVerified:  meta.BootVerified,
-		NVRAMPath:     meta.NVRAMPath,
-		RootPassword:  meta.RootPassword,
-		TemplateUser:  meta.TemplateUser,
-		TemplateUID:   meta.TemplateUID,
-		NodeID:        meta.NodeID,
-		ParentNodeID:  meta.ParentNodeID,
-		RootNodeID:    meta.RootNodeID,
-		AdminName:     meta.AdminName,
-		DisplayName:   meta.DisplayName,
-		CloneVisible:  meta.CloneVisible,
+		Type:         meta.Type,
+		Category:     meta.Category,
+		BootType:     meta.BootType,
+		BootVerified: meta.BootVerified,
+		NVRAMPath:    meta.NVRAMPath,
+		RootPassword: meta.RootPassword,
+		TemplateUser: meta.TemplateUser,
+		TemplateUID:  meta.TemplateUID,
+		NodeID:       meta.NodeID,
+		ParentNodeID: meta.ParentNodeID,
+		RootNodeID:   meta.RootNodeID,
+		AdminName:    meta.AdminName,
+		DisplayName:  meta.DisplayName,
+		CloneVisible: meta.CloneVisible,
 	}
 	if meta.DefaultConfig != nil {
 		result.DefaultConfig = &vmpkg.TemplateDefaultConfig{

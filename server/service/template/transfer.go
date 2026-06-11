@@ -420,23 +420,23 @@ func PreviewImportTemplate(ctx context.Context, params *ImportTemplateParams) (*
 		meta.Category = normalizeTemplateCategoryForName(meta.Type, meta.Category, node.Name)
 		existingTpl, exists := tree.byNodeID[meta.NodeID]
 		previewNode := ImportTemplatePreviewNode{
-			Name:           node.Name,
-			AdminName:      meta.AdminName,
-			DisplayName:    meta.DisplayName,
-			Category:       meta.Category,
-			TemplateUID:    meta.TemplateUID,
-			NodeID:         meta.NodeID,
-			ParentNodeID:   meta.ParentNodeID,
-			RootNodeID:     meta.RootNodeID,
-			Type:           meta.Type,
-			CloneVisible:   meta.CloneVisible,
-			Disabled:       meta.Disabled,
-			FileSize:       node.FileSize,
-			MD5:            node.MD5,
-			SHA256:         node.SHA256,
-			Exists:         exists,
-			WillImport:     !exists,
-			Meta:           meta,
+			Name:         node.Name,
+			AdminName:    meta.AdminName,
+			DisplayName:  meta.DisplayName,
+			Category:     meta.Category,
+			TemplateUID:  meta.TemplateUID,
+			NodeID:       meta.NodeID,
+			ParentNodeID: meta.ParentNodeID,
+			RootNodeID:   meta.RootNodeID,
+			Type:         meta.Type,
+			CloneVisible: meta.CloneVisible,
+			Disabled:     meta.Disabled,
+			FileSize:     node.FileSize,
+			MD5:          node.MD5,
+			SHA256:       node.SHA256,
+			Exists:       exists,
+			WillImport:   !exists,
+			Meta:         meta,
 		}
 		if exists {
 			if existingTpl.TemplateUID != manifest.TemplateUID {
@@ -588,6 +588,9 @@ func ImportTemplate(ctx context.Context, params *ImportTemplateParams, progressF
 		}
 		_ = utils.ExecCommand("chown", "libvirt-qemu:kvm", targetPath)
 		_ = utils.ExecCommand("chown", "libvirt-qemu:kvm", getMetaPath(targetPath))
+		// 设置模板文件为不可变，防止误删（模板只能通过模板管理接口删除）
+		_ = utils.SetFileImmutable(targetPath)
+		_ = utils.SetFileImmutable(getMetaPath(targetPath))
 		imported = append(imported, node.Name)
 	}
 	progressFn(100, "模板包导入完成")
@@ -626,20 +629,20 @@ func importLegacySingleTemplate(ctx context.Context, params *ImportTemplateParam
 		return nil, err
 	}
 	meta := &TemplateMeta{
-		Type:          tplType,
-		Category:      normalizeTemplateCategoryForName(tplType, "", params.TemplateName),
-		BootType:      DetectTemplateBootType(targetPath),
-		RootPassword:  params.RootPassword,
-		TemplateUser:  params.TemplateUser,
-		TemplateUID:   generateTemplateID("tpl"),
-		NodeID:        generateTemplateID("node"),
-		AdminName:     params.TemplateName,
-		DisplayName:   params.TemplateName,
-		CloneVisible:  true,
-		CreatedAt:     time.Now().Format(time.RFC3339),
-		MD5:           hash.MD5,
-		SHA256:        hash.SHA256,
-		FileSize:      hash.FileSize,
+		Type:         tplType,
+		Category:     normalizeTemplateCategoryForName(tplType, "", params.TemplateName),
+		BootType:     DetectTemplateBootType(targetPath),
+		RootPassword: params.RootPassword,
+		TemplateUser: params.TemplateUser,
+		TemplateUID:  generateTemplateID("tpl"),
+		NodeID:       generateTemplateID("node"),
+		AdminName:    params.TemplateName,
+		DisplayName:  params.TemplateName,
+		CloneVisible: true,
+		CreatedAt:    time.Now().Format(time.RFC3339),
+		MD5:          hash.MD5,
+		SHA256:       hash.SHA256,
+		FileSize:     hash.FileSize,
 	}
 	meta.RootNodeID = meta.NodeID
 	if err := saveTemplateMeta(targetPath, meta); err != nil {
@@ -648,6 +651,9 @@ func importLegacySingleTemplate(ctx context.Context, params *ImportTemplateParam
 	}
 	_ = utils.ExecCommand("chown", "libvirt-qemu:kvm", targetPath)
 	_ = utils.ExecCommand("chown", "libvirt-qemu:kvm", getMetaPath(targetPath))
+	// 设置模板文件为不可变，防止误删
+	_ = utils.SetFileImmutable(targetPath)
+	_ = utils.SetFileImmutable(getMetaPath(targetPath))
 	progressFn(100, "模板导入完成")
 	return &ImportTemplateResult{
 		TemplateName: params.TemplateName,

@@ -701,16 +701,28 @@ func ParseDisksFromDomainXML(xmlStr string) []DiskBlockInfo {
 	var disks []DiskBlockInfo
 	lines := strings.Split(xmlStr, "\n")
 	inDisk := false
+	inBackingStore := 0 // 跟踪 <backingStore> 嵌套层级，忽略其内部的 <source>
 	var current DiskBlockInfo
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "<disk ") {
 			inDisk = true
+			inBackingStore = 0
 			current = DiskBlockInfo{}
 		}
 		if inDisk {
-			if strings.Contains(trimmed, "<source ") {
+			// 跟踪 backingStore 嵌套，防止 backing file 路径覆盖主磁盘路径
+			if strings.HasPrefix(trimmed, "<backingStore") && !strings.Contains(trimmed, "/>") {
+				inBackingStore++
+			}
+			if strings.HasPrefix(trimmed, "</backingStore>") {
+				if inBackingStore > 0 {
+					inBackingStore--
+				}
+			}
+			// 只在非 backingStore 嵌套内时提取 <source> 路径
+			if inBackingStore == 0 && strings.Contains(trimmed, "<source ") {
 				if strings.Contains(trimmed, "file='") {
 					parts := strings.Split(trimmed, "file='")
 					if len(parts) > 1 {

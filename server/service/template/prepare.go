@@ -108,6 +108,9 @@ func PrepareTemplate(params *PrepareTemplateParams) error {
 	}
 	_ = utils.ChownLibvirtQEMU(destPath)
 	_ = utils.ChownLibvirtQEMU(getMetaPath(destPath))
+	// 设置模板文件为不可变，防止误删
+	_ = utils.SetFileImmutable(destPath)
+	_ = utils.SetFileImmutable(getMetaPath(destPath))
 	return nil
 }
 
