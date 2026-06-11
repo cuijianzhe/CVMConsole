@@ -269,7 +269,7 @@ func SetVMCPUWithTopologySync(name string, vcpu, maxVCPU int) error {
 		if multiplier > 0 && sockets*dies*parseTopologyAttr(topology, vmTopologyCoresRegex)*threads != topoVCPU {
 			cores := topoVCPU / multiplier
 			if cores > 0 && multiplier*cores == topoVCPU {
-				newTopology := fmt.Sprintf("<topology sockets='%d' dies='%d' cores='%d' threads='1'/>", sockets, dies, cores, threads)
+				newTopology := fmt.Sprintf("<topology sockets='%d' dies='%d' cores='%d' threads='%d'/>", sockets, dies, cores, threads)
 				xmlStr = vmCPUTopologyRegexp.ReplaceAllString(xmlStr, newTopology)
 			} else {
 				return fmt.Errorf("CPU 拓扑无法匹配目标 vCPU 数量：当前拓扑 sockets=%d dies=%d threads=%d，无法整除 vcpu=%d", sockets, dies, threads, topoVCPU)
