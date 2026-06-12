@@ -225,3 +225,11 @@ ls /usr/share/OVMF/OVMF_CODE_4M.fd
 > 2. 内核启动参数添加 IOMMU 支持
 > 3. IOMMU 组正确隔离（直通设备所在组不包含系统关键设备）
 > 4. 设备已绑定到 vfio-pci 驱动（面板会自动处理）
+
+### 网络等待就绪检测开关
+
+网络等待就绪检测开关功能未新增 apt 依赖，复用已有系统工具：
+
+- `systemctl`：systemd 服务管理命令，用于 disable/mask/unmask/enable `systemd-networkd-wait-online.service`。
+
+> **说明**：OVS 桥接环境中 `systemd-networkd-wait-online.service` 可能导致开机卡住。在系统设置的"宿主机设置"标签页中可切换此开关。禁用时执行 `systemctl disable + mask`，启用时执行 `systemctl unmask + enable`。

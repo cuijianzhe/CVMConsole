@@ -81,6 +81,9 @@ type SettingsResponse struct {
 	JWTSecretLastRotated string `json:"jwt_secret_last_rotated"`
 	// 日志管理
 	LogMaxBackups int `json:"log_max_backups"`
+	// 网络等待就绪检测
+	NetworkWaitOnlineDisabled bool   `json:"network_wait_online_disabled"`
+	NetworkWaitOnlineSummary  string `json:"network_wait_online_summary"`
 }
 
 // UpdateSettingsRequest 更新设置请求
@@ -140,6 +143,8 @@ type UpdateSettingsRequest struct {
 	JWTSecretRotateHours *int `json:"jwt_secret_rotate_hours"`
 	// 日志最大备份数
 	LogMaxBackups *int `json:"log_max_backups"`
+	// 网络等待就绪检测
+	NetworkWaitOnlineDisabled *bool `json:"network_wait_online_disabled"`
 }
 
 type TestSMTPRequest struct {
@@ -245,6 +250,8 @@ func GetSettings(c *gin.Context) {
 			JWTSecretRotateHours:                  cfg.JWTSecretRotateHours,
 			JWTSecretLastRotated:                  jwtLastRotated,
 			LogMaxBackups:                         cfg.LogMaxBackups,
+			NetworkWaitOnlineDisabled:             cfg.NetworkWaitOnlineDisabled,
+			NetworkWaitOnlineSummary:              networkWaitOnlineSummary(cfg.NetworkWaitOnlineDisabled),
 		},
 	})
 }
@@ -536,6 +543,11 @@ func UpdateSettings(c *gin.Context) {
 		}
 		cfg.LogMaxBackups = *req.LogMaxBackups
 	}
+	networkWaitOnlineChanged := false
+	if req.NetworkWaitOnlineDisabled != nil {
+		networkWaitOnlineChanged = *req.NetworkWaitOnlineDisabled != cfg.NetworkWaitOnlineDisabled
+		cfg.NetworkWaitOnlineDisabled = *req.NetworkWaitOnlineDisabled
+	}
 
 	if cfg.AutoPortStart >= cfg.AutoPortEnd {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "端口起始值必须小于结束值"})
@@ -560,6 +572,14 @@ func UpdateSettings(c *gin.Context) {
 				logger.App.Warn("应用全局带宽限制失败", "component", "全局带宽", "error", err)
 			}
 		}()
+	}
+
+	// 网络等待就绪检测设置变更后执行 systemctl 操作
+	if networkWaitOnlineChanged {
+		if err := service.SetNetworkWaitOnlineDisabled(cfg.NetworkWaitOnlineDisabled); err != nil {
+			logger.App.Warn("设置网络等待就绪检测失败", "disabled", cfg.NetworkWaitOnlineDisabled, "error", err)
+			// 不阻断设置保存，仅记录警告
+		}
 	}
 
 	if maintenanceChanged {
@@ -960,6 +980,14 @@ func ExportLogs(c *gin.Context) {
 			logger.App.Warn("导出日志文件失败：写入 ZIP 错误", "file", filename, "error", err)
 		}
 	}
+}
+
+// networkWaitOnlineSummary 生成网络等待就绪检测的状态摘要
+func networkWaitOnlineSummary(disabled bool) string {
+	if disabled {
+		return "已禁用 — systemd-networkd-wait-online.service 已 disable + mask，系统开机不再等待网络就绪，适合 OVS 桥接环境"
+	}
+	return "已启用 — systemd-networkd-wait-online.service 正常运行，OVS 桥接后开机可能卡在此服务上"
 }
 
 // formatBytes 将字节数转换为人类可读格式

@@ -195,3 +195,9 @@ func QueryVMStatsHistory(name string, start, end time.Time) ([]model.VmStatsReco
 func QueryHostStatsHistory(start, end time.Time) ([]model.HostStatsRecord, error) {
 	return hostpkg.QueryHostStatsHistory(start, end)
 }
+
+// ── Network wait-online ──
+
+func SetNetworkWaitOnlineDisabled(disabled bool) error {
+	return hostpkg.SetNetworkWaitOnlineDisabled(disabled)
+}

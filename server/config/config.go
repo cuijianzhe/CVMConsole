@@ -147,6 +147,8 @@ type Config struct {
 	LogConsoleLevel string `json:"log_console_level"` // 终端输出的日志级别（可独立于文件级别）
 	LogMaxSizeMB    int    `json:"log_max_size_mb"`
 	LogMaxBackups   int    `json:"log_max_backups"` // 日志最大归档备份数（0=不限制）
+	// 禁用网络等待就绪检测（解决 OVS 桥接后开机卡 systemd-networkd-wait-online.service）
+	NetworkWaitOnlineDisabled bool `json:"network_wait_online_disabled"`
 }
 
 // GlobalConfig 全局配置实例
@@ -236,6 +238,7 @@ func Init() {
 		LogConsoleLevel:                       getEnv("KVM_LOG_CONSOLE_LEVEL", ""),
 		LogMaxSizeMB:                          getEnvInt("KVM_LOG_MAX_SIZE_MB", 100),
 		LogMaxBackups:                         getEnvInt("KVM_LOG_MAX_BACKUPS", 0),
+		NetworkWaitOnlineDisabled:             getEnvBool("KVM_NETWORK_WAIT_ONLINE_DISABLED", false),
 	}
 	if GlobalConfig.VMCredentialSecret == "" {
 		GlobalConfig.VMCredentialSecret = GlobalConfig.JWTSecret
@@ -379,6 +382,7 @@ var PersistableKeys = []string{
 	"log_console_level",
 	"log_max_size_mb",
 	"log_max_backups",
+	"network_wait_online_disabled",
 }
 
 // keyToEnvVar 配置项到环境变量的映射
@@ -448,6 +452,7 @@ var keyToEnvVar = map[string]string{
 	"log_console_level":                         "KVM_LOG_CONSOLE_LEVEL",
 	"log_max_size_mb":                           "KVM_LOG_MAX_SIZE_MB",
 	"log_max_backups":                           "KVM_LOG_MAX_BACKUPS",
+	"network_wait_online_disabled":              "KVM_NETWORK_WAIT_ONLINE_DISABLED",
 }
 
 // LoadFromDB 从数据库加载持久化的设置覆盖当前配置
@@ -663,6 +668,10 @@ func (c *Config) LoadFromDB(settings map[string]string) {
 			if v, err := strconv.Atoi(value); err == nil {
 				c.LogMaxBackups = v
 			}
+		case "network_wait_online_disabled":
+			if v, err := strconv.ParseBool(value); err == nil {
+				c.NetworkWaitOnlineDisabled = v
+			}
 		}
 	}
 }
@@ -735,6 +744,7 @@ func (c *Config) ToSettingsMap() map[string]string {
 		"log_console_level":                         c.LogConsoleLevel,
 		"log_max_size_mb":                           strconv.Itoa(c.LogMaxSizeMB),
 		"log_max_backups":                           strconv.Itoa(c.LogMaxBackups),
+		"network_wait_online_disabled":              strconv.FormatBool(c.NetworkWaitOnlineDisabled),
 	}
 }
 

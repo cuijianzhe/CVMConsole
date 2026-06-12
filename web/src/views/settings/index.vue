@@ -468,6 +468,34 @@
                 </div>
               </div>
             </el-form-item>
+
+            <el-divider content-position="left">
+              <el-icon style="margin-right: 4px;"><Connection /></el-icon>
+              网络等待就绪检测
+            </el-divider>
+
+            <el-alert
+              title="systemd-networkd-wait-online.service 在 OVS 桥接环境中可能导致开机卡住。禁用后会执行 systemctl disable + mask，系统开机不再等待网络就绪。"
+              type="info"
+              :closable="false"
+              style="margin-bottom: 18px;"
+            />
+
+            <el-form-item label="禁用网络等待就绪">
+              <div class="host-setting-field">
+                <div class="host-setting-row">
+                  <el-switch
+                    v-model="form.network_wait_online_disabled"
+                    active-text="已禁用"
+                    inactive-text="已启用"
+                  />
+                </div>
+                <div class="form-tip">
+                  <el-icon><InfoFilled /></el-icon>
+                  {{ form.network_wait_online_summary || '加载中...' }}
+                </div>
+              </div>
+            </el-form-item>
           </el-tab-pane>
 
           <el-tab-pane label="调度与高级" name="advanced">
@@ -1134,6 +1162,8 @@ const form = reactive({
   jwt_secret_rotate_hours: 24,
   jwt_secret_last_rotated: '',
   log_max_backups: 0,
+  network_wait_online_disabled: false,
+  network_wait_online_summary: '',
 })
 
 // ISO 列表
@@ -1583,7 +1613,8 @@ const buildPayload = () => ({
   smtp_security: form.smtp_security,
   smtp_timeout_seconds: form.smtp_timeout_seconds,
   jwt_secret_rotate_hours: form.jwt_secret_rotate_hours,
-  log_max_backups: form.log_max_backups
+  log_max_backups: form.log_max_backups,
+  network_wait_online_disabled: form.network_wait_online_disabled,
 })
 
 const handleTestSMTP = async () => {
