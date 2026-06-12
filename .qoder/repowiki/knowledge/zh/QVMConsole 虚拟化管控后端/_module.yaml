@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: backend_service
+title: QVMConsole 虚拟化管控后端
+scope:
+    - server/
+source_files: []
+depends_on: []
+related_to:
+    - path: frontend_app
