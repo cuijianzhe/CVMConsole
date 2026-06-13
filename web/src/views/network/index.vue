@@ -891,6 +891,7 @@
           <el-form-item label="网段(CIDR)">
             <el-input v-model="switchForm.cidr" placeholder="如 10.0.1.0/24，留空自动分配" :disabled="!!editingSwitch" />
             <div class="form-hint">创建后不可修改。留空时系统将自动分配未使用的子网。</div>
+            <div class="form-hint" style="color: var(--el-color-warning);">注意：网段不能与宿主机网段相同，否则会导致网络冲突。</div>
           </el-form-item>
           <el-form-item label="网关地址">
             <el-input v-model="switchForm.gateway_ip" placeholder="如 10.0.1.1，留空自动计算" :disabled="!!editingSwitch" />

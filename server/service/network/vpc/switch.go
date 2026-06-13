@@ -9,6 +9,7 @@ import (
 	"kvm_console/config"
 	"kvm_console/logger"
 	"kvm_console/model"
+	"kvm_console/utils"
 )
 
 func ListVPCSwitches(operator, role, requestedUsername string) ([]model.VPCSwitch, error) {
@@ -364,6 +365,14 @@ func resolveVPCSwitchSubnet(bridgeMode string, req VPCSwitchRequest) (cidr, gate
 	if err := model.DB.Where("cidr = ?", req.CIDR).First(&existing).Error; err == nil {
 		return "", "", "", "", fmt.Errorf("网段 %s 已被交换机「%s」使用", req.CIDR, existing.Name)
 	}
+	// 检查是否与宿主机网段冲突
+	hostCIDR := getHostNetworkCIDR()
+	if hostCIDR != "" {
+		hostPrefix, hostErr := netip.ParsePrefix(hostCIDR)
+		if hostErr == nil && (prefix.Contains(hostPrefix.Addr()) || hostPrefix.Contains(prefix.Addr())) {
+			return "", "", "", "", fmt.Errorf("网段 %s 与宿主机网段 %s 冲突，请使用其他网段", req.CIDR, hostCIDR)
+		}
+	}
 	// DHCP 范围：优先使用用户指定，否则自动计算（.10 ~ .250 或根据子网大小调整）
 	if req.DHCPStart == "" {
 		req.DHCPStart = defaultDHCPStart(prefix, gatewayAddr)
@@ -465,4 +474,31 @@ func allocateVPCSubnet() (cidr, gateway, dhcpStart, dhcpEnd string, err error) {
 		}
 	}
 	return "", "", "", "", fmt.Errorf("VPC 子网池 %s.1-254 已用尽", prefix)
+}
+
+// getHostNetworkCIDR 获取宿主机主网卡的网段 CIDR（如 "192.168.1.0/24"）
+func getHostNetworkCIDR() string {
+	hostNIC := config.GlobalConfig.ExternalNIC
+	if hostNIC == "" {
+		// 自动检测默认路由出口网卡
+		result := utils.ExecCommand("bash", "-c", `ip -4 route show default 2>/dev/null | awk '{print $5; exit}'`)
+		hostNIC = strings.TrimSpace(result.Stdout)
+	}
+	if hostNIC == "" {
+		return ""
+	}
+	result := utils.ExecCommand("ip", "-4", "-o", "addr", "show", "dev", hostNIC, "scope", "global")
+	if result.Error != nil || result.Stdout == "" {
+		return ""
+	}
+	fields := strings.Fields(result.Stdout)
+	if len(fields) < 4 {
+		return ""
+	}
+	cidr := strings.TrimSpace(fields[3])
+	prefix, err := netip.ParsePrefix(cidr)
+	if err != nil {
+		return ""
+	}
+	return prefix.Masked().String()
 }
