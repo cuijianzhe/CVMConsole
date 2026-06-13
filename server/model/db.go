@@ -82,6 +82,9 @@ func InitDB() {
 	hadVPCBindingInterfaceOrderColumn := DB.Migrator().HasColumn(&VPCVMBinding{}, "interface_order")
 	hadVPCSwitchCIDRColumn := DB.Migrator().HasColumn(&VPCSwitch{}, "cidr")
 
+	// 预修复: 在 AutoMigrate 之前清理 vpc_switches.cidr 重复数据并删除旧唯一索引
+	preFixVPCSwitchCIDRIndex()
+
 	// 自动迁移表结构
 	if err := DB.AutoMigrate(&User{}, &UserAPIKey{}, &VmStatsRecord{}, &PortForwardIP{}, &PortForwardWhitelist{}, &PortForwardProbeState{}, &HostStatsRecord{}, &UserTrafficDaily{}, &SystemSetting{}, &VMCredential{}, &VMCache{}, &AuthActionToken{}, &SecurityChallenge{}, &SchedulerEvent{}, &VMSchedule{}, &NetworkBridge{}, &HostStoragePool{}, &HostNode{},
 		&LightweightVMQuota{}, &LightweightVMTrafficMonthly{}, &LightweightVMRegistration{},
@@ -257,6 +260,23 @@ func migrateVPCBindingUniqueIndex() {
 	}
 }
 
+// preFixVPCSwitchCIDRIndex 在 AutoMigrate 之前修复 vpc_switches.cidr 索引问题。
+// 当数据库中存在多个空字符串 CIDR（桥接/直通模式交换机）时，唯一索引创建会失败。
+// 此函数需在 AutoMigrate 之前调用。
+func preFixVPCSwitchCIDRIndex() {
+	if DB == nil {
+		return
+	}
+	// 检查表是否存在
+	if !DB.Migrator().HasTable(&VPCSwitch{}) {
+		return
+	}
+	// 删除可能存在的旧唯一索引（避免 AutoMigrate 与手动索引冲突）
+	DB.Exec("DROP INDEX IF EXISTS idx_vpc_switches_cidr")
+	// 将空字符串 CIDR 更新为 NULL（SQLite 允许多个 NULL 在 UNIQUE 索引中共存）
+	DB.Exec("UPDATE vpc_switches SET cidr = NULL WHERE cidr = ''")
+}
+
 // migrateVPCSwitchCIDRColumn 为旧版 vpc_switches 表补齐 cidr 列
 // GORM 默认将 CIDR 映射为 c_id_r（连续大写字母被拆分为独立单词），
 // 旧版数据库中存在 c_id_r 列存储实际 CIDR 值，需迁移至显式指定的 cidr 列。
@@ -282,8 +302,8 @@ func migrateVPCSwitchCIDRColumn(hadColumn bool) {
 		} else {
 			logger.App.Info("已删除遗留列 c_id_r")
 		}
-		// 创建唯一索引（可能因之前迁移失败而缺失）
-		if err := DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vpc_switches_cidr ON vpc_switches(cidr)").Error; err != nil {
+		// 创建唯一索引（可能因之前迁移失败而缺失）——使用部分索引排除空值
+		if err := DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vpc_switches_cidr ON vpc_switches(cidr) WHERE cidr IS NOT NULL AND cidr != ''").Error; err != nil {
 			logger.App.Warn("创建 vpc_switches.cidr 唯一索引失败", "error", err)
 		}
 		// 删除旧的无效索引（c_id_r 列上的索引，如果有的话）
@@ -344,8 +364,8 @@ func migrateVPCSwitchCIDRColumn(hadColumn bool) {
 		}
 	}
 
-	// 4. 创建唯一索引
-	if err := DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vpc_switches_cidr ON vpc_switches(cidr)").Error; err != nil {
+	// 4. 创建部分唯一索引（排除空值，桥接/直通模式交换机无CIDR）
+	if err := DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vpc_switches_cidr ON vpc_switches(cidr) WHERE cidr IS NOT NULL AND cidr != ''").Error; err != nil {
 		logger.App.Warn("创建 vpc_switches.cidr 唯一索引失败", "error", err)
 	}
 
