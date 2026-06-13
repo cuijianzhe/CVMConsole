@@ -101,6 +101,7 @@ func InitDB() {
 	migrateLightweightSnapshotQuota(hadLightweightQuotaMaxSnapshotsColumn, hadLightweightRegistrationMaxSnapshotsColumn)
 	migrateLightweightRuntimeQuota(hadLightweightQuotaMaxRuntimeColumn, hadLightweightRegistrationMaxRuntimeColumn)
 	migrateVPCBindingInterfaceOrder(hadVPCBindingInterfaceOrderColumn)
+	migrateVPCBindingInterfaceOrderNormalize()
 	migrateVPCSwitchCIDRColumn(hadVPCSwitchCIDRColumn)
 
 	// 兼容旧用户：补齐默认状态，确保升级后能继续登录
@@ -257,6 +258,55 @@ func migrateVPCBindingUniqueIndex() {
 	// 创建新的联合唯一索引
 	if err := DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vm_interface ON vpc_vm_bindings(vm_name, interface_order)").Error; err != nil {
 		logger.App.Warn("创建VPC绑定联合唯一索引失败", "error", err)
+	}
+}
+
+// migrateVPCBindingInterfaceOrderNormalize 修复非连续的 interface_order，
+// 确保每个 VM 的绑定从 0 开始连续编号。
+// 解决因删除旧网口、重新添加导致的 interface_order 间隙（如 2, 3 而非 0, 1）。
+func migrateVPCBindingInterfaceOrderNormalize() {
+	if DB == nil {
+		return
+	}
+	var vmNames []string
+	if err := DB.Model(&VPCVMBinding{}).Distinct("vm_name").Pluck("vm_name", &vmNames).Error; err != nil {
+		logger.App.Warn("查询VM绑定列表失败", "error", err)
+		return
+	}
+	totalFixed := 0
+	for _, vmName := range vmNames {
+		vmName = strings.TrimSpace(vmName)
+		if vmName == "" {
+			continue
+		}
+		var bindings []VPCVMBinding
+		if err := DB.Where("vm_name = ?", vmName).Order("interface_order ASC, id ASC").Find(&bindings).Error; err != nil || len(bindings) == 0 {
+			continue
+		}
+		needsFix := false
+		for i, b := range bindings {
+			if b.InterfaceOrder != i {
+				needsFix = true
+				break
+			}
+		}
+		if !needsFix {
+			continue
+		}
+		const tempBase = -10000
+		for i := range bindings {
+			DB.Model(&bindings[i]).Update("interface_order", tempBase-i)
+		}
+		for i := range bindings {
+			if err := DB.Model(&bindings[i]).Update("interface_order", i).Error; err != nil {
+				logger.App.Warn("修复interface_order失败", "vm", vmName, "id", bindings[i].ID, "target", i, "error", err)
+			} else {
+				totalFixed++
+			}
+		}
+	}
+	if totalFixed > 0 {
+		logger.App.Info("已修复非连续 interface_order", "count", totalFixed)
 	}
 }
 

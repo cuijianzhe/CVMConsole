@@ -166,18 +166,31 @@ func buildOVSVPCBandwidthFlows(cookie, vmOfport, gatewayOfport, vmIP, switchCIDR
 	return flows
 }
 
-// GetVPCSwitchForVM 获取 VM 所属的 VPC 交换机
+// GetVPCSwitchForVM 获取 VM 所属的 VPC 交换机。
+// 若 VM 绑定多个交换机，优先返回有 DHCP 子网的 NAT 交换机（CIDR 非空），
+// 避免返回桥接直通交换机导致静态 IP / 带宽等操作指向错误的交换机。
 func GetVPCSwitchForVM(vmName string) (*model.VPCSwitch, bool) {
 	vmName = strings.TrimSpace(vmName)
 	if vmName == "" || model.DB == nil {
 		return nil, false
 	}
-	var binding model.VPCVMBinding
-	if err := model.DB.Where("vm_name = ?", vmName).First(&binding).Error; err != nil {
+	var bindings []model.VPCVMBinding
+	if err := model.DB.Where("vm_name = ?", vmName).Order("interface_order ASC").Find(&bindings).Error; err != nil || len(bindings) == 0 {
 		return HookInferVPCSwitchForVM(vmName)
 	}
+	// 优先找有 DHCP 子网的 NAT 交换机（CIDR 非空）
+	for _, b := range bindings {
+		var sw model.VPCSwitch
+		if err := model.DB.First(&sw, b.SwitchID).Error; err != nil {
+			continue
+		}
+		if strings.TrimSpace(sw.CIDR) != "" {
+			return &sw, true
+		}
+	}
+	// 回退：返回第一个绑定对应的交换机（可能是桥接直通）
 	var sw model.VPCSwitch
-	if err := model.DB.First(&sw, binding.SwitchID).Error; err != nil {
+	if err := model.DB.First(&sw, bindings[0].SwitchID).Error; err != nil {
 		return HookInferVPCSwitchForVM(vmName)
 	}
 	return &sw, true

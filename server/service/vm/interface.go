@@ -78,7 +78,8 @@ func AttachVMInterface(vmName string, sw model.VPCSwitch, nicModel string, inter
 	return nil
 }
 
-// detachVMInterface 从虚拟机中移除指定序号（从0开始的接口索引）的网口
+// detachVMInterface 从虚拟机中移除指定 interface_order（逻辑序号）对应的网口
+// 优先用 interface_order 作为 XML 位置索引匹配，失败时回退到 MAC 匹配
 func DetachVMInterface(vmName string, interfaceOrder int) error {
 	// 获取虚拟机所有网口
 	result := utils.ExecCommand("virsh", "dumpxml", vmName)
@@ -92,10 +93,17 @@ func DetachVMInterface(vmName string, interfaceOrder int) error {
 
 	xmlText := result.Stdout
 
-	// 查找第 N 个 <interface>（从0开始计数）
+	// 查找目标 interface 块：先用位置索引，失败后用 MAC 回退
 	interfaceBlock, ok := extractInterfaceByIndex(xmlText, interfaceOrder)
 	if !ok {
-		return fmt.Errorf("未找到第 %d 个网口", interfaceOrder+1)
+		// 位置匹配失败（常见于 interface_order 与 XML 实际位置不一致的场景）
+		// 回退：通过确定性 MAC 在 XML 中查找匹配的 interface 块
+		targetMAC := generateInterfaceMAC(vmName, interfaceOrder)
+		interfaceBlock, ok = extractInterfaceByMAC(xmlText, targetMAC)
+		if !ok {
+			return fmt.Errorf("未找到第 %d 个网口", interfaceOrder+1)
+		}
+		logger.App.Info("网口位置匹配失败，已通过 MAC 回退匹配", "vm", vmName, "order", interfaceOrder, "mac", targetMAC)
 	}
 
 	// 清理运行时特有元素以便 detach
@@ -182,6 +190,40 @@ func extractInterfaceByIndex(xmlText string, targetIndex int) (string, bool) {
 		}
 
 		foundCount++
+		searchFrom = end
+	}
+}
+
+// extractInterfaceByMAC 从 VM XML 中按 MAC 地址查找第一个匹配的 interface 块
+func extractInterfaceByMAC(xmlText, targetMAC string) (string, bool) {
+	targetMAC = strings.ToLower(strings.TrimSpace(targetMAC))
+	searchFrom := 0
+	for {
+		startRel := strings.Index(xmlText[searchFrom:], "<interface ")
+		if startRel < 0 {
+			return "", false
+		}
+		start := searchFrom + startRel
+		endRel := strings.Index(xmlText[start:], "</interface>")
+		if endRel < 0 {
+			return "", false
+		}
+		end := start + endRel + len("</interface>")
+		block := xmlText[start:end]
+
+		// 在 interface 块内查找 mac address='...'
+		macStartRel := strings.Index(strings.ToLower(block), "mac address='")
+		if macStartRel >= 0 {
+			macValStart := macStartRel + len("mac address='")
+			macValEnd := strings.Index(block[macValStart:], "'")
+			if macValEnd >= 0 {
+				macAddr := strings.ToLower(strings.TrimSpace(block[macValStart : macValStart+macValEnd]))
+				if macAddr == targetMAC {
+					return block, true
+				}
+			}
+		}
+
 		searchFrom = end
 	}
 }
@@ -299,17 +341,24 @@ func UpsertVMBindingNicModel(vmName string, interfaceOrder int, nicModel string)
 		Update("nic_model", nicModel).Error
 }
 
-// GetNextVMBindingOrder 获取下一个可用的接口序号
+// GetNextVMBindingOrder 获取下一个可用的接口序号（找第一个空闲槽位，从0开始）
 func GetNextVMBindingOrder(vmName string) int {
 	if model.DB == nil {
 		return 0
 	}
-	var maxOrder int
+	var orders []int
 	model.DB.Model(&model.VPCVMBinding{}).
 		Where("vm_name = ?", vmName).
-		Select("COALESCE(MAX(interface_order), -1) as max_order").
-		Scan(&maxOrder)
-	return maxOrder + 1
+		Pluck("interface_order", &orders)
+	used := make(map[int]bool, len(orders))
+	for _, o := range orders {
+		used[o] = true
+	}
+	for i := 0; ; i++ {
+		if !used[i] {
+			return i
+		}
+	}
 }
 
 // getAllVMInterfaceMACs 获取虚拟机所有网口的 MAC 地址列表

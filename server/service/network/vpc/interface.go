@@ -77,15 +77,19 @@ func AddVMInterface(vmName string, req AddVMInterfaceRequest) (*VMInterfaceInfo,
 		}
 	}
 
-	// 确定下一个 interface_order
-	var maxOrder int
-	if err := model.DB.Model(&model.VPCVMBinding{}).
+	// 确定下一个 interface_order（找第一个空闲槽位，避免间隙）
+	var orders []int
+	model.DB.Model(&model.VPCVMBinding{}).
 		Where("vm_name = ?", vmName).
-		Select("COALESCE(MAX(interface_order), -1) as max_order").
-		Scan(&maxOrder).Error; err != nil {
-		return nil, fmt.Errorf("查询现有网口失败: %w", err)
+		Pluck("interface_order", &orders)
+	used := make(map[int]bool, len(orders))
+	for _, o := range orders {
+		used[o] = true
 	}
-	nextOrder := maxOrder + 1
+	nextOrder := 0
+	for used[nextOrder] {
+		nextOrder++
+	}
 
 	// 网卡型号
 	nicModel := strings.TrimSpace(req.NicModel)
@@ -101,20 +105,6 @@ func AddVMInterface(vmName string, req AddVMInterfaceRequest) (*VMInterfaceInfo,
 	// 创建 VM 网口 XML 并附加到虚拟机
 	if err := HookAttachVMInterface(vmName, sw, nicModel, nextOrder); err != nil {
 		return nil, err
-	}
-
-	// 如果 nextOrder == 0 表示没有现有绑定，需要检查是否已有默认绑定（旧数据迁移场景）
-	if nextOrder == 0 {
-		var existingCount int64
-		model.DB.Model(&model.VPCVMBinding{}).Where("vm_name = ?", vmName).Count(&existingCount)
-		if existingCount > 0 {
-			var newMax int
-			model.DB.Model(&model.VPCVMBinding{}).
-				Where("vm_name = ?", vmName).
-				Select("COALESCE(MAX(interface_order), 0) as max_order").
-				Scan(&newMax)
-			nextOrder = newMax + 1
-		}
 	}
 
 	// 创建 VPC 绑定记录
