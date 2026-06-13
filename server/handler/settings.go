@@ -17,6 +17,7 @@ import (
 	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/service"
+	"kvm_console/service/storage/quota"
 	"kvm_console/taskqueue"
 )
 
@@ -980,6 +981,21 @@ func ExportLogs(c *gin.Context) {
 			logger.App.Warn("导出日志文件失败：写入 ZIP 错误", "file", filename, "error", err)
 		}
 	}
+}
+
+// TrimUserStorage 执行用户存储回收（fstrim + fallocate --dig-holes）
+func TrimUserStorage(c *gin.Context) {
+	result, err := quota.TrimStorage()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "存储回收失败: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "存储回收完成",
+		"data":    result,
+	})
 }
 
 // networkWaitOnlineSummary 生成网络等待就绪检测的状态摘要

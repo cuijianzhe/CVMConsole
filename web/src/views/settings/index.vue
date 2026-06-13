@@ -943,6 +943,55 @@
               </div>
             </el-form-item>
           </el-tab-pane>
+
+          <el-tab-pane label="存储管理" name="storage">
+            <el-divider content-position="left">
+              <el-icon style="margin-right: 4px;"><FolderOpened /></el-icon>
+              用户存储维护
+            </el-divider>
+
+            <el-form-item label="存储镜像文件">
+              <div style="width: 100%;">
+                <el-text type="info">/var/lib/kvm-user-storage.img</el-text>
+              </div>
+            </el-form-item>
+
+            <el-form-item label="挂载点">
+              <div style="width: 100%;">
+                <el-text type="info">/var/lib/kvm-user-storage</el-text>
+              </div>
+            </el-form-item>
+
+            <el-form-item label="存储回收">
+              <div style="width: 100%;">
+                <div style="margin-bottom: 12px;" v-if="trimResult">
+                  <el-alert
+                    :type="trimResult.trimmed_bytes > 0 ? 'success' : 'info'"
+                    :closable="false"
+                    show-icon
+                  >
+                    <template #title>
+                      回收前 {{ formatFileSize(trimResult.before_blocks * 1024) }} →
+                      回收后 {{ formatFileSize(trimResult.after_blocks * 1024) }}
+                      （释放 {{ trimResult.trimmed_human }}）
+                    </template>
+                  </el-alert>
+                </div>
+                <el-button
+                  type="primary"
+                  :loading="trimming"
+                  @click="handleTrimStorage"
+                >
+                  <el-icon style="margin-right: 4px;"><Refresh /></el-icon>
+                  执行存储回收
+                </el-button>
+                <div class="form-tip" style="margin-top: 8px;">
+                  <el-icon><InfoFilled /></el-icon>
+                  执行 fstrim + fallocate --dig-holes 回收稀疏文件中的未使用空间，不影响已有数据
+                </div>
+              </div>
+            </el-form-item>
+          </el-tab-pane>
         </el-tabs>
 
         <el-form-item>
@@ -1058,7 +1107,7 @@
 <script setup>
 import { computed, ref, reactive, onMounted, watch } from 'vue'
 import { Check, Connection, CopyDocument, Cpu, Delete, Download, FirstAidKit, FolderOpened, InfoFilled, Message, Odometer, Plus, Refresh, Warning } from '@element-plus/icons-vue'
-import { getHostKSMStatus, getHostKVMUnrestrictedGuestStatus, getHostZRAMStatus, getSettings, getCPUAffinityPresets, getUserStorageISOPath, rotateJWTSecret, saveCPUAffinityPresets, testSMTP, updateHostKSMProfile, updateHostKVMUnrestrictedGuest, updateHostZRAMProfile, updateSettings, getLogStatus, deleteLogs, exportLogs } from '@/api/settings'
+import { getHostKSMStatus, getHostKVMUnrestrictedGuestStatus, getHostZRAMStatus, getSettings, getCPUAffinityPresets, getUserStorageISOPath, rotateJWTSecret, saveCPUAffinityPresets, testSMTP, updateHostKSMProfile, updateHostKVMUnrestrictedGuest, updateHostZRAMProfile, updateSettings, getLogStatus, deleteLogs, exportLogs, trimUserStorage } from '@/api/settings'
 import { getAllISOs } from '@/api/infra'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { setSiteTitle } from '@/utils/site'
@@ -1185,6 +1234,10 @@ const exportDialogVisible = ref(false)
 const exportFileList = ref([])
 const exportSelectedFiles = ref([])
 const exportTableRef = ref(null)
+
+// 存储回收状态
+const trimming = ref(false)
+const trimResult = ref(null)
 
 const ksmProfileOptions = computed(() => ksmStatus.value?.profiles?.length ? ksmStatus.value.profiles : fallbackKSMProfiles)
 const zramProfileOptions = computed(() => zramStatus.value?.profiles?.length ? zramStatus.value.profiles : fallbackZRAMProfiles)
@@ -1818,6 +1871,35 @@ const handleExportLogs = async () => {
     console.error('导出日志失败', err)
   } finally {
     logExporting.value = false
+  }
+}
+
+// ==================== 存储回收 ====================
+
+const handleTrimStorage = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '确定要执行用户存储回收吗？此操作会回收稀疏文件中的未使用空间，不影响已有数据。',
+      '存储回收',
+      { confirmButtonText: '确定执行', cancelButtonText: '取消', type: 'info' }
+    )
+  } catch {
+    return
+  }
+
+  trimming.value = true
+  trimResult.value = null
+  try {
+    const res = await trimUserStorage()
+    if (res.code === 200 && res.data) {
+      trimResult.value = res.data
+      ElMessage.success(res.message || '存储回收完成')
+    }
+  } catch (err) {
+    console.error('存储回收失败', err)
+    ElMessage.error('存储回收失败')
+  } finally {
+    trimming.value = false
   }
 }
 

@@ -190,3 +190,11 @@ export async function exportLogs(data) {
   })
   return response.data
 }
+
+// 执行存储回收（fstrim + fallocate --dig-holes）
+export function trimUserStorage() {
+  return request({
+    url: '/settings/storage/trim',
+    method: 'post'
+  })
+}

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"kvm_console/logger"
 	"kvm_console/utils"
 )
 
@@ -449,4 +450,83 @@ func SyncAllUserQuotas() error {
 	}
 
 	return nil
+}
+
+// TrimStorageResult 存储回收结果
+type TrimStorageResult struct {
+	BeforeBlocks int64  `json:"before_blocks"` // 回收前实际占用块数（1K blocks）
+	AfterBlocks  int64  `json:"after_blocks"`  // 回收后实际占用块数（1K blocks）
+	TrimmedBytes int64  `json:"trimmed_bytes"` // 回收的字节数
+	TrimmedHuman string `json:"trimmed_human"` // 人类可读的回收大小
+}
+
+// TrimStorage 执行存储回收
+// 先对挂载点执行 fstrim，再对镜像文件执行 fallocate --dig-holes
+func TrimStorage() (*TrimStorageResult, error) {
+	imgPath := GetStorageImagePath()
+	mountPoint := GetStorageMountPoint()
+
+	// 获取回收前的实际占用
+	beforeBlocks, err := getFileBlocks(imgPath)
+	if err != nil {
+		return nil, fmt.Errorf("获取回收前文件块数失败: %w", err)
+	}
+
+	// 1. 对挂载点执行 fstrim
+	fstrimResult := utils.ExecShellQuiet(fmt.Sprintf("fstrim -v %s 2>&1", utils.ShellSingleQuote(mountPoint)))
+	if fstrimResult.Error != nil {
+		// fstrim 失败不阻断，继续执行 fallocate
+		logger.App.Warn("fstrim 执行失败，将继续执行 fallocate --dig-holes", "error", fstrimResult.Error, "stderr", fstrimResult.Stderr)
+	}
+
+	// 2. 对镜像文件执行 fallocate --dig-holes 释放稀疏文件空洞
+	digResult := utils.ExecShellQuiet(fmt.Sprintf("fallocate --dig-holes %s 2>&1", utils.ShellSingleQuote(imgPath)))
+	if digResult.Error != nil {
+		return nil, fmt.Errorf("fallocate --dig-holes 执行失败: %s", digResult.Stderr)
+	}
+
+	// 获取回收后的实际占用
+	afterBlocks, err := getFileBlocks(imgPath)
+	if err != nil {
+		return nil, fmt.Errorf("获取回收后文件块数失败: %w", err)
+	}
+
+	trimmedBytes := (beforeBlocks - afterBlocks) * 1024
+	if trimmedBytes < 0 {
+		trimmedBytes = 0
+	}
+
+	return &TrimStorageResult{
+		BeforeBlocks: beforeBlocks,
+		AfterBlocks:  afterBlocks,
+		TrimmedBytes: trimmedBytes,
+		TrimmedHuman: formatBytes(trimmedBytes),
+	}, nil
+}
+
+// getFileBlocks 获取文件占用的 1K 块数（通过 stat 或 ls -ls）
+func getFileBlocks(path string) (int64, error) {
+	result := utils.ExecShellQuiet(fmt.Sprintf("stat --format='%%b' %s 2>/dev/null", utils.ShellSingleQuote(path)))
+	if result.Error != nil || strings.TrimSpace(result.Stdout) == "" {
+		return 0, fmt.Errorf("获取文件块数失败: %s", result.Stderr)
+	}
+	blocks, err := strconv.ParseInt(strings.TrimSpace(result.Stdout), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("解析文件块数失败: %w", err)
+	}
+	return blocks, nil
+}
+
+// formatBytes 将字节数转换为人类可读格式
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }

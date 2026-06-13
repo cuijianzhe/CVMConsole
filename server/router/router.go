@@ -98,6 +98,7 @@ func Setup() *gin.Engine {
 			settings.GET("/log/status", handler.GetLogStatus)
 			settings.POST("/log/delete", handler.DeleteLogs)
 			settings.POST("/log/export", handler.ExportLogs)
+			settings.POST("/storage/trim", handler.TrimUserStorage)
 		}
 
 		// ==================== 需要认证的路由 ====================
