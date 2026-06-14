@@ -3,6 +3,8 @@ package vm
 import (
 	"fmt"
 	"os"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -171,6 +173,132 @@ func SetVMBootOrder(name string, bootOrder []string) error {
 	_ = os.Remove(xmlPath)
 	if defineResult.Error != nil {
 		return fmt.Errorf("设置启动顺序失败: %s", defineResult.Stderr)
+	}
+	return nil
+}
+
+// ReorderVMDevices 按传入的设备标识符顺序重排 XML 中的 <disk> 元素。
+// deviceOrder 是 dev 名称列表（如 ["sdb", "sda", "vda"]），
+// 排在列表前面的设备将在 XML 的 <devices> 段中更靠前。
+// 由于 libvirt 按 <address> 中的 unit 编号排序设备，
+// 交换时同步交换对应磁盘的 unit 编号以真正改变设备顺序。
+func ReorderVMDevices(name string, deviceOrder []string) error {
+	if len(deviceOrder) == 0 {
+		return nil
+	}
+	if err := D.HookEnsureVMNotMigrating(name, "重排设备顺序"); err != nil {
+		return err
+	}
+	xmlResult := utils.ExecCommand("virsh", "dumpxml", name, "--inactive")
+	if xmlResult.Error != nil {
+		return fmt.Errorf("获取虚拟机 XML 失败: %s", xmlResult.Stderr)
+	}
+	xmlContent := xmlResult.Stdout
+
+	// 构建设备标识符 -> 目标位置的映射
+	orderMap := make(map[string]int, len(deviceOrder))
+	for i, dev := range deviceOrder {
+		orderMap[dev] = i
+	}
+
+	// 匹配所有 <disk> 元素（含 cdrom）
+	diskRe := regexp.MustCompile(`(?s)<disk\b[^>]*>.*?</disk>`)
+	diskMatches := diskRe.FindAllString(xmlContent, -1)
+	if len(diskMatches) == 0 {
+		return nil
+	}
+
+	// 获取每个 disk 的 dev 名称和 address unit
+	targetRe := regexp.MustCompile(`<target\s+dev=['"]([^'"]+)['"]\s+bus=['"]([^'"]+)['"]`)
+	addrRe := regexp.MustCompile(`<address\s+[^>]*\bunit=['"](\d+)['"]`)
+	type diskMeta struct {
+		xml     string
+		dev     string
+		bus     string
+		unit    int
+		hasUnit bool
+	}
+	var disks []diskMeta
+	for _, diskXML := range diskMatches {
+		d := diskMeta{xml: diskXML, unit: -1}
+		if m := targetRe.FindStringSubmatch(diskXML); len(m) > 2 {
+			d.dev = m[1]
+			d.bus = m[2]
+		}
+		if m := addrRe.FindStringSubmatch(diskXML); len(m) > 1 {
+			fmt.Sscanf(m[1], "%d", &d.unit)
+			d.hasUnit = true
+		}
+		disks = append(disks, d)
+	}
+
+	// 收集所有在 deviceOrder 中的 SATA/IDE 磁盘的 unit 号
+	// 并按目标顺序重分配 unit 号
+	type orderedDisk struct {
+		idx  int
+		unit int
+	}
+	var ordered []orderedDisk
+	for i, d := range disks {
+		if _, ok := orderMap[d.dev]; ok && d.hasUnit && (d.bus == "sata" || d.bus == "ide") {
+			ordered = append(ordered, orderedDisk{idx: i, unit: d.unit})
+		}
+	}
+	// 按 deviceOrder 中的顺序对 ordered 排序
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return orderMap[disks[ordered[i].idx].dev] < orderMap[disks[ordered[j].idx].dev]
+	})
+	// 构建 unit 映射：原 unit -> 新 unit
+	unitMap := make(map[int]int, len(ordered))
+	for newIdx, od := range ordered {
+		unitMap[od.unit] = newIdx
+	}
+
+	// 重新分配 unit 号：使用占位符避免交换时的字符串冲突
+	newXML := xmlContent
+	// 首先把所有受影响的 unit 替换为占位符
+	type unitReplace struct {
+		oldAddr    string
+		newUnit    int
+		newAddrStr string // 替换后的 address 字符串（带新 unit）
+	}
+	var replacements []unitReplace
+	for _, d := range disks {
+		if !d.hasUnit {
+			continue
+		}
+		if newUnit, ok := unitMap[d.unit]; ok {
+			oldAddr := addrRe.FindString(d.xml)
+			if oldAddr == "" {
+				continue
+			}
+			newAddr := oldAddr
+			newAddr = strings.Replace(newAddr, fmt.Sprintf("unit='%d'", d.unit), fmt.Sprintf("unit='%d'", newUnit), 1)
+			newAddr = strings.Replace(newAddr, fmt.Sprintf(`unit="%d"`, d.unit), fmt.Sprintf(`unit="%d"`, newUnit), 1)
+			replacements = append(replacements, unitReplace{oldAddr: oldAddr, newUnit: newUnit, newAddrStr: newAddr})
+		}
+	}
+	// Phase 1: 替换为唯一占位符
+	for i, r := range replacements {
+		ph := fmt.Sprintf("__QVM_UNIT_PH_%d__", i)
+		newXML = strings.Replace(newXML, r.oldAddr, ph, 1)
+	}
+	// Phase 2: 从占位符还原为新 unit
+	for i, r := range replacements {
+		ph := fmt.Sprintf("__QVM_UNIT_PH_%d__", i)
+		newXML = strings.Replace(newXML, ph, r.newAddrStr, 1)
+	}
+
+	// 写入临时文件并 define
+	xmlPath := fmt.Sprintf("/tmp/_reorder-%s.xml", name)
+	if err := os.WriteFile(xmlPath, []byte(newXML), 0644); err != nil {
+		return fmt.Errorf("写入设备顺序 XML 失败: %v", err)
+	}
+	defer os.Remove(xmlPath)
+	defineResult := utils.ExecCommand("virsh", "define", xmlPath)
+	_ = os.Remove(xmlPath)
+	if defineResult.Error != nil {
+		return fmt.Errorf("重排设备顺序失败: %s", defineResult.Stderr)
 	}
 	return nil
 }

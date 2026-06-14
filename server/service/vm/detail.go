@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -287,20 +288,34 @@ func GetVMNetworkInfo(name string) NetInfoResult {
 	return info
 }
 
-// parseBootDevices 从 XML 中解析所有可引导设备
+// parseBootDevices 从 XML 中解析所有可引导设备。
+// Order 字段使用组合值：typePriority*1000 + positionWithinType，
+// 确保同类型设备（如多个 cdrom）也有唯一顺序，前端排序可区分。
+// 对于 SATA/IDE 设备，按 <address> 中的 unit 编号排序以反映真实启动顺序。
 func parseBootDevices(xmlStr string, bootOrder []string) []BootDevice {
 	var devices []BootDevice
 
 	// 构建 boot order set（用于标记哪些设备类型被启用）
-	bootOrderSet := make(map[string]int) // dev_type -> order
+	bootOrderSet := make(map[string]int) // dev_type -> order (1-based)
 	for i, dev := range bootOrder {
 		bootOrderSet[dev] = i + 1
 	}
 
-	// 解析磁盘设备
+	// 同类型设备位置计数器：key -> 当前已分配数量
+	typePositions := make(map[string]int)
+
+	// 解析磁盘设备，同时记录每个设备的 address unit
 	diskRe := regexp.MustCompile(`(?s)<disk type='[^']*' device='([^']*)'>(.*?)</disk>`)
 	sourceFileRe := regexp.MustCompile(`<source file='([^']*)'`)
 	targetRe := regexp.MustCompile(`<target dev='([^']*)' bus='([^']*)'`)
+	addrUnitRe := regexp.MustCompile(`<address\s+[^>]*\bunit=['"](\d+)['"]`)
+
+	// 临时存储 unit，用于后期排序
+	type diskWithUnit struct {
+		bd   BootDevice
+		unit int // -1 表示没有 unit
+	}
+	var diskDevices []diskWithUnit
 
 	diskMatches := diskRe.FindAllStringSubmatch(xmlStr, -1)
 	for _, m := range diskMatches {
@@ -325,18 +340,60 @@ func parseBootDevices(xmlStr string, bootOrder []string) []BootDevice {
 			bd.Bus = tm[2]
 		}
 
-		// 根据 OS 级别 boot order 判断是否启用及顺序
-		// disk -> hd, cdrom -> cdrom
+		// 获取 address unit
+		unit := -1
+		if um := addrUnitRe.FindStringSubmatch(deviceContent); len(um) > 1 {
+			fmt.Sscanf(um[1], "%d", &unit)
+		}
+
+		// 根据 OS 级别 boot order 判断是否启用
 		bootKey := "hd"
 		if bd.Type == "cdrom" {
 			bootKey = "cdrom"
 		}
-		if order, ok := bootOrderSet[bootKey]; ok {
+		if _, ok := bootOrderSet[bootKey]; ok {
 			bd.Enabled = true
-			bd.Order = order
 		}
 
-		devices = append(devices, bd)
+		diskDevices = append(diskDevices, diskWithUnit{bd: bd, unit: unit})
+	}
+
+	// 对 SATA/IDE 设备按 unit 编号排序（反映真实硬件启动顺序）
+	// 注意：排序后 enabled 的在前、同类型按 unit 升序
+	sort.SliceStable(diskDevices, func(i, j int) bool {
+		di, dj := diskDevices[i], diskDevices[j]
+		// enabled 的排前面
+		if di.bd.Enabled != dj.bd.Enabled {
+			return di.bd.Enabled
+		}
+		if !di.bd.Enabled && !dj.bd.Enabled {
+			return false
+		}
+		// 同类型比较 typePriority
+		ti := bootOrderSet[deviceBootKey(di.bd)]
+		tj := bootOrderSet[deviceBootKey(dj.bd)]
+		if ti != tj {
+			return ti < tj
+		}
+		// 同类型、都有 unit 编号时按 unit 排序
+		if di.unit >= 0 && dj.unit >= 0 {
+			return di.unit < dj.unit
+		}
+		return false
+	})
+
+	// 分配 Order
+	for i := range diskDevices {
+		d := &diskDevices[i]
+		if !d.bd.Enabled {
+			devices = append(devices, d.bd)
+			continue
+		}
+		bootKey := deviceBootKey(d.bd)
+		typePriority := bootOrderSet[bootKey]
+		typePositions[bootKey]++
+		d.bd.Order = typePriority*1000 + typePositions[bootKey]
+		devices = append(devices, d.bd)
 	}
 
 	// 解析网络接口
@@ -353,13 +410,24 @@ func parseBootDevices(xmlStr string, bootOrder []string) []BootDevice {
 			bd.File = mm[1]
 		}
 
-		if order, ok := bootOrderSet["network"]; ok {
+		if typePriority, ok := bootOrderSet["network"]; ok {
 			bd.Enabled = true
-			bd.Order = order
+			typePositions["network"]++
+			bd.Order = typePriority*1000 + typePositions["network"]
 		}
 
 		devices = append(devices, bd)
 	}
 
 	return devices
+}
+
+func deviceBootKey(d BootDevice) string {
+	if d.Type == "cdrom" {
+		return "cdrom"
+	}
+	if d.Type == "network" {
+		return "network"
+	}
+	return "hd"
 }

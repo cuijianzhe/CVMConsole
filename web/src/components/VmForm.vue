@@ -3552,6 +3552,18 @@ const buildBootOrderFromDevices = () => {
   return order.length > 0 ? order : ['hd']
 }
 
+// 从 editBootDevices 生成设备级排序列表（用于提交到后端重排 XML 设备顺序）
+const buildDeviceOrderFromDevices = () => {
+  const order = []
+  for (const dev of editBootDevices.value) {
+    if (!dev.enabled) continue
+    if (dev.device) {
+      order.push(dev.device)
+    }
+  }
+  return order
+}
+
 // 验证规则
 const createRules = computed(() => {
   const base = {
@@ -4685,6 +4697,10 @@ const submitForm = async () => {
           const computedBootOrder = editBootDevices.value.length > 0
             ? buildBootOrderFromDevices()
             : form.boot_order
+          // 设备级排序列表（用于后端重排 XML 设备顺序，如多个 cdrom 的先后）
+          const computedDeviceOrder = editBootDevices.value.length > 0
+            ? buildDeviceOrderFromDevices()
+            : []
           const editPayload = {
             vcpu: form.vcpu,
             max_vcpu: cpuHotplugMaxVCPU.value,
@@ -4699,6 +4715,7 @@ const submitForm = async () => {
             guest_agent: buildGuestAgentPayload(),
             smbios1: buildSMBIOS1Payload(),
             boot_order: computedBootOrder,
+            device_order: computedDeviceOrder,
             add_disks: form.add_disks.filter(d => d.size > 0),
           }
           // PCIe 热插槽数量（仅当用户修改后发送）

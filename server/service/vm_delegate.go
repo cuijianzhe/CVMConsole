@@ -96,6 +96,10 @@ func SetVMBootOrder(name string, bootOrder []string) error {
 	return vmpkg.SetVMBootOrder(name, bootOrder)
 }
 
+func ReorderVMDevices(name string, deviceOrder []string) error {
+	return vmpkg.ReorderVMDevices(name, deviceOrder)
+}
+
 func SetVMNicModel(name, nicModel string) error {
 	return vmpkg.SetVMNicModel(name, nicModel)
 }
@@ -677,10 +681,10 @@ func QemuInfoChain(path string) ([]QemuImgInfo, error) {
 // ── Constants re-exported ──
 
 const (
-	VMRTCOffsetUTC        = vmpkg.VMRTCOffsetUTC
-	VMRTCOffsetLocaltime  = vmpkg.VMRTCOffsetLocaltime
-	VMRTCOffsetAbsolute   = vmpkg.VMRTCOffsetAbsolute
-	VMRTCStartDateNow     = vmpkg.VMRTCStartDateNow
+	VMRTCOffsetUTC       = vmpkg.VMRTCOffsetUTC
+	VMRTCOffsetLocaltime = vmpkg.VMRTCOffsetLocaltime
+	VMRTCOffsetAbsolute  = vmpkg.VMRTCOffsetAbsolute
+	VMRTCStartDateNow    = vmpkg.VMRTCStartDateNow
 )
 
 const (

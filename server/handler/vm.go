@@ -670,6 +670,17 @@ func EditVm(c *gin.Context) {
 		}
 	}
 
+	// 重排设备顺序（设备级排序，如多个 cdrom 的先后）
+	if len(req.DeviceOrder) > 0 {
+		if err := service.ReorderVMDevices(name, req.DeviceOrder); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"code":    500,
+				"message": "重排设备顺序失败: " + err.Error(),
+			})
+			return
+		}
+	}
+
 	// 修改网卡类型
 	if req.NicModel != "" {
 		if err := service.SetVMNicModel(name, req.NicModel); err != nil {
