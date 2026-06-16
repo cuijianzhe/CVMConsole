@@ -101,23 +101,38 @@ func prepareLinuxNoCloudInit(params *CloneParams, cloneDisk string) error {
 		}
 	}
 
-	// 8. 用户名重命名（离线，通过 usermod；如目标用户名与模板用户名不同）
-	if params.User != "" && templateUser != "" && params.User != templateUser {
-		renameCmd := fmt.Sprintf(
-			`OLD=%s; NEW=%s; `+
-				`if id "$OLD" >/dev/null 2>&1 && ! id "$NEW" >/dev/null 2>&1; then `+
-				`usermod -l "$NEW" "$OLD" 2>/dev/null; `+
-				`usermod -d /home/"$NEW" -m "$NEW" 2>/dev/null; `+
-				`groupmod -n "$NEW" "$OLD" 2>/dev/null; `+
-				`find /etc/sudoers.d/ -type f -exec sed -i "s/$OLD/$NEW/g" {} \; 2>/dev/null || true; `+
-				`fi`,
-			utils.ShellSingleQuote(templateUser),
-			utils.ShellSingleQuote(params.User),
-		)
-		args = append(args, "--run-command", renameCmd)
-		// 重命名后再对新用户名设置一次密码（确保生效）
-		// 若新用户名为 root 则跳过（root 密码已在前面设置）
-		if params.Password != "" && params.User != "root" {
+	// 8. 用户名处理（离线）
+	if params.User != "" && params.User != "root" {
+		if templateUser != "" && templateUser != "root" && params.User != templateUser {
+			// 8a. 模板有非root用户 → 重命名为目标用户名
+			renameCmd := fmt.Sprintf(
+				`OLD=%s; NEW=%s; `+
+					`if id "$OLD" >/dev/null 2>&1 && ! id "$NEW" >/dev/null 2>&1; then `+
+					`usermod -l "$NEW" "$OLD" 2>/dev/null; `+
+					`usermod -d /home/"$NEW" -m "$NEW" 2>/dev/null; `+
+					`groupmod -n "$NEW" "$OLD" 2>/dev/null; `+
+					`find /etc/sudoers.d/ -type f -exec sed -i "s/$OLD/$NEW/g" {} \; 2>/dev/null || true; `+
+					`fi`,
+				utils.ShellSingleQuote(templateUser),
+				utils.ShellSingleQuote(params.User),
+			)
+			args = append(args, "--run-command", renameCmd)
+		} else if templateUser == "" || templateUser == "root" {
+			// 8b. 模板无非root用户（仅有root）→ 创建新用户
+			createCmd := fmt.Sprintf(
+				`NEW=%s; `+
+					`if ! id "$NEW" >/dev/null 2>&1; then `+
+					`useradd -m -s /bin/bash "$NEW" 2>/dev/null; `+
+					// 尝试加入 sudo/wheel 组（不同发行版组名不同）
+					`if getent group sudo >/dev/null 2>&1; then usermod -aG sudo "$NEW" 2>/dev/null; `+
+					`elif getent group wheel >/dev/null 2>&1; then usermod -aG wheel "$NEW" 2>/dev/null; fi; `+
+					`fi`,
+				utils.ShellSingleQuote(params.User),
+			)
+			args = append(args, "--run-command", createCmd)
+		}
+		// 为新/重命名后的用户设置密码
+		if params.Password != "" {
 			args = append(args, "--password", params.User+":password:"+params.Password)
 		}
 	}
