@@ -90,7 +90,7 @@ func deleteTemplateFiles(templateName string) error {
 
 func isValidTemplateType(templateType string) bool {
 	switch strings.ToLower(strings.TrimSpace(templateType)) {
-	case "linux", "windows", "fnos", "other":
+	case "linux", "windows", "fnos", "openwrt", "other":
 		return true
 	default:
 		return false
@@ -113,6 +113,9 @@ func detectTemplateTypeFromName(name string) string {
 	if strings.Contains(nameLower, "fnos") || strings.Contains(nameLower, "nas") {
 		return "fnos"
 	}
+	if strings.Contains(nameLower, "openwrt") || strings.Contains(nameLower, "lede") || strings.Contains(nameLower, "istoreos") {
+		return "openwrt"
+	}
 	return "linux"
 }
 
@@ -122,7 +125,7 @@ func normalizeTemplateCategory(templateType, category string) string {
 
 func normalizeTemplateCategoryForName(templateType, category, templateName string) string {
 	normalizedType := normalizeTemplateType(templateType)
-	if normalizedType != "linux" && normalizedType != "windows" {
+	if normalizedType != "linux" && normalizedType != "windows" && normalizedType != "openwrt" {
 		return ""
 	}
 	category = strings.TrimSpace(category)
@@ -130,13 +133,23 @@ func normalizeTemplateCategoryForName(templateType, category, templateName strin
 		if normalizedType == "windows" {
 			return detectWindowsTemplateCategoryFromName(templateName)
 		}
+		if normalizedType == "openwrt" {
+			return detectOpenWrtTemplateCategoryFromName(templateName)
+		}
 		return defaultLinuxTemplateCategory
 	}
-	allowedCategories := linuxTemplateCategories
-	defaultCategory := defaultLinuxTemplateCategory
-	if normalizedType == "windows" {
+	var allowedCategories []string
+	var defaultCategory string
+	switch normalizedType {
+	case "windows":
 		allowedCategories = windowsTemplateCategories
 		defaultCategory = detectWindowsTemplateCategoryFromName(templateName)
+	case "openwrt":
+		allowedCategories = openwrtTemplateCategories
+		defaultCategory = detectOpenWrtTemplateCategoryFromName(templateName)
+	default:
+		allowedCategories = linuxTemplateCategories
+		defaultCategory = defaultLinuxTemplateCategory
 	}
 	for _, allowed := range allowedCategories {
 		if strings.EqualFold(category, allowed) {
@@ -164,6 +177,14 @@ func detectWindowsTemplateCategoryFromName(templateName string) string {
 	default:
 		return defaultWindowsTemplateCategory
 	}
+}
+
+func detectOpenWrtTemplateCategoryFromName(templateName string) string {
+	nameLower := strings.ToLower(strings.TrimSpace(templateName))
+	if strings.Contains(nameLower, "istoreos") || strings.Contains(nameLower, "istore") {
+		return "iStoreOS"
+	}
+	return defaultOpenWrtTemplateCategory
 }
 
 func normalizeTemplateDefaultConfig(config *TemplateDefaultConfig) *TemplateDefaultConfig {

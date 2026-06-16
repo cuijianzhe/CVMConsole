@@ -67,6 +67,9 @@ type CloneVmRequest struct {
 	FnOSDeviceID         string                            `json:"fnos_device_id"`
 	SystemDiskIOPS       *service.DiskIOPSTune             `json:"system_disk_iops"`    // 系统盘 IOPS 限制（仅管理员）
 	DisableSystemInit    bool                              `json:"disable_system_init"` // 禁用系统初始化（跳过凭据校验和来宾系统修改）
+	StaticIP             string                            `json:"static_ip"`           // OpenWrt 静态 IP（CIDR 格式）
+	Gateway              string                            `json:"gateway"`             // OpenWrt 网关
+	DNS                  string                            `json:"dns"`                 // OpenWrt DNS
 }
 
 // BatchCloneRequest 批量克隆请求
@@ -106,6 +109,9 @@ type BatchCloneRequest struct {
 	SecurityGroupID     uint                            `json:"security_group_id"` // 安全组 ID
 	ExtraNics           []service.AddVMInterfaceRequest `json:"extra_nics"`
 	DisableSystemInit   bool                            `json:"disable_system_init"` // 禁用系统初始化
+	StaticIP            string                          `json:"static_ip"`           // OpenWrt 静态 IP（CIDR 格式）
+	Gateway             string                          `json:"gateway"`             // OpenWrt 网关
+	DNS                 string                          `json:"dns"`                 // OpenWrt DNS
 }
 
 // ReinstallRequest 重装系统请求
@@ -162,12 +168,26 @@ func CloneVm(c *gin.Context) {
 		cloudInitMode = strings.ToLower(strings.TrimSpace(meta.CloudInitMode))
 	}
 	requireCredentials := cloudInitMode != "none" && !req.DisableSystemInit
+	// OpenWrt 模板不需要常规凭据校验，但需要静态 IP
+	if templateType == "openwrt" {
+		requireCredentials = false
+	}
 	if err := clonepkg.ValidateCloneCredentialsForTemplate(templateType, req.Hostname, req.User, req.Password, requireCredentials); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": err.Error(),
 		})
 		return
+	}
+	// OpenWrt 模板校验静态 IP
+	if templateType == "openwrt" && !req.DisableSystemInit {
+		if err := clonepkg.ValidateOpenWrtStaticIP(req.StaticIP); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"code":    400,
+				"message": err.Error(),
+			})
+			return
+		}
 	}
 	if strings.TrimSpace(req.FnOSDeviceID) != "" {
 		if err := clonepkg.ValidateFnOSDeviceID(req.FnOSDeviceID); err != nil {
@@ -243,6 +263,9 @@ func CloneVm(c *gin.Context) {
 		PreserveFnOSDeviceID: req.PreserveFnOSDeviceID,
 		FnOSDeviceID:         req.FnOSDeviceID,
 		SystemDiskIOPS:       req.SystemDiskIOPS,
+		StaticIP:             req.StaticIP,
+		Gateway:              req.Gateway,
+		DNS:                  req.DNS,
 	}
 
 	params.IsAdmin = isAdmin
@@ -398,6 +421,9 @@ func BatchCloneVm(c *gin.Context) {
 		ExtraNics:           req.ExtraNics,
 		IsAdmin:             isAdmin,
 		DisableSystemInit:   req.DisableSystemInit,
+		StaticIP:            req.StaticIP,
+		Gateway:             req.Gateway,
+		DNS:                 req.DNS,
 	}
 
 	username, _ := c.Get("username")

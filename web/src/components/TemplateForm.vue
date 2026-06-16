@@ -24,11 +24,14 @@
           <el-radio value="fnos">
             <span style="display: flex; align-items: center; gap: 4px;">📦 FnOS</span>
           </el-radio>
+          <el-radio value="openwrt">
+            <span style="display: flex; align-items: center; gap: 4px;">🌐 OpenWrt</span>
+          </el-radio>
         </el-radio-group>
       </el-form-item>
 
-      <template v-if="form.type === 'linux' || form.type === 'windows'">
-        <el-form-item :label="form.type === 'windows' ? 'Windows 分类' : 'Linux 分类'">
+      <template v-if="form.type === 'linux' || form.type === 'windows' || form.type === 'openwrt'">
+        <el-form-item :label="form.type === 'windows' ? 'Windows 分类' : form.type === 'openwrt' ? 'OpenWrt 分类' : 'Linux 分类'">
           <el-select
             v-model="form.category"
             filterable
@@ -81,6 +84,14 @@
                 <span>🚫 不初始化</span>
               </el-radio>
             </template>
+            <template v-else-if="form.type === 'openwrt'">
+              <el-radio value="openwrt">
+                <span>🌐 UCI 配置注入（推荐）</span>
+              </el-radio>
+              <el-radio value="none">
+                <span>🚫 不初始化</span>
+              </el-radio>
+            </template>
           </el-radio-group>
           <div class="form-tip">
             <el-icon><InfoFilled /></el-icon>
@@ -92,6 +103,9 @@
             </span>
             <span v-else-if="form.init_mode === 'fnos'">
               克隆时通过 virt-customize 注入用户名、密码、hostname、设备 ID 等 FnOS 首次启动配置
+            </span>
+            <span v-else-if="form.init_mode === 'openwrt'">
+              克隆时通过 virt-customize 注入静态 IP、网关、DNS 和主机名等 OpenWrt UCI 配置
             </span>
             <span v-else>
               克隆时将直接完整复制模板磁盘，不做任何初始化操作
@@ -123,8 +137,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   DEFAULT_LINUX_TEMPLATE_CATEGORY,
   DEFAULT_WINDOWS_TEMPLATE_CATEGORY,
+  DEFAULT_OPENWRT_TEMPLATE_CATEGORY,
   LINUX_TEMPLATE_CATEGORY_OPTIONS,
   WINDOWS_TEMPLATE_CATEGORY_OPTIONS,
+  OPENWRT_TEMPLATE_CATEGORY_OPTIONS,
   normalizeTemplateCategory,
 } from '@/utils/templateCategory'
 
@@ -143,13 +159,21 @@ const form = reactive({
   template_user: '',
 })
 
-const categoryOptions = computed(() => form.type === 'windows' ? WINDOWS_TEMPLATE_CATEGORY_OPTIONS : LINUX_TEMPLATE_CATEGORY_OPTIONS)
-const categoryPlaceholder = computed(() => form.type === 'windows'
-  ? '默认归入 WindowsServer2022，可选择 WindowsServer2025 / Windows11 / Windows10 / WindowsServer2012R2 / 其它'
-  : '默认归入 Ubuntu，可选择 Debian、CentOS')
-const categoryTip = computed(() => form.type === 'windows'
-  ? 'Windows 模板按版本分类展示，2012 R2 会保留 BIOS/SATA 等默认配置用于克隆'
-  : 'Linux 模板按发行版分类展示')
+const categoryOptions = computed(() => {
+  if (form.type === 'windows') return WINDOWS_TEMPLATE_CATEGORY_OPTIONS
+  if (form.type === 'openwrt') return OPENWRT_TEMPLATE_CATEGORY_OPTIONS
+  return LINUX_TEMPLATE_CATEGORY_OPTIONS
+})
+const categoryPlaceholder = computed(() => {
+  if (form.type === 'windows') return '默认归入 WindowsServer2022，可选择 WindowsServer2025 / Windows11 / Windows10 / WindowsServer2012R2 / 其它'
+  if (form.type === 'openwrt') return '默认归入 OpenWrt'
+  return '默认归入 Ubuntu，可选择 Debian、CentOS'
+})
+const categoryTip = computed(() => {
+  if (form.type === 'windows') return 'Windows 模板按版本分类展示，2012 R2 会保留 BIOS/SATA 等默认配置用于克隆'
+  if (form.type === 'openwrt') return 'OpenWrt 模板克隆时支持配置静态 IP、网关和密码'
+  return 'Linux 模板按发行版分类展示'
+})
 
 watch(() => form.type, (type) => {
   if (type === 'windows') {
@@ -161,6 +185,9 @@ watch(() => form.type, (type) => {
   } else if (type === 'fnos') {
     form.category = ''
     form.init_mode = 'fnos'
+  } else if (type === 'openwrt') {
+    form.category = normalizeTemplateCategory('openwrt', DEFAULT_OPENWRT_TEMPLATE_CATEGORY)
+    form.init_mode = 'openwrt'
   }
 })
 
@@ -179,6 +206,7 @@ const initDividerTitle = computed(() => {
   if (form.type === 'linux') return 'Linux 模板配置'
   if (form.type === 'windows') return 'Windows 模板配置'
   if (form.type === 'fnos') return 'FnOS 模板配置'
+  if (form.type === 'openwrt') return 'OpenWrt 模板配置'
   return '模板配置'
 })
 
@@ -214,6 +242,16 @@ const onInitModeChange = async (value) => {
     } catch {
       form.init_mode = 'fnos'
     }
+  } else if (form.type === 'openwrt') {
+    try {
+      await ElMessageBox.confirm(
+        '选择「不初始化」意味着克隆此模板时不会注入任何网络配置。克隆出的 OpenWrt 将保留模板原始 IP 配置。\n\n请确保模板已完成必要的通用化处理。',
+        '⚠️ 风险确认：不初始化模板',
+        { confirmButtonText: '我已知晓风险，继续', cancelButtonText: '取消', type: 'warning' }
+      )
+    } catch {
+      form.init_mode = 'openwrt'
+    }
   }
 }
 
@@ -236,7 +274,7 @@ const handleSubmit = async () => {
       template_name: form.name,
       display_name: form.display_name || form.name,
       type: type,
-      category: ['linux', 'windows'].includes(type) ? normalizeTemplateCategory(type, form.category) : undefined,
+      category: ['linux', 'windows', 'openwrt'].includes(type) ? normalizeTemplateCategory(type, form.category) : undefined,
       cloud_init_mode: form.init_mode === 'none' ? 'none' : (form.init_mode || undefined),
       template_user: form.template_user || undefined,
     })

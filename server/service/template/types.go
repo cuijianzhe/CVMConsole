@@ -23,6 +23,7 @@ const (
 
 	defaultLinuxTemplateCategory   = "Ubuntu"
 	defaultWindowsTemplateCategory = "WindowsServer2022"
+	defaultOpenWrtTemplateCategory = "OpenWrt"
 )
 
 // VMCPUTopologyAuto mirrors the constant from service root to avoid import cycle.
@@ -46,6 +47,11 @@ var (
 		"Windows10",
 		"WindowsServer2012R2",
 		"其它",
+	}
+
+	openwrtTemplateCategories = []string{
+		defaultOpenWrtTemplateCategory,
+		"iStoreOS",
 	}
 )
 

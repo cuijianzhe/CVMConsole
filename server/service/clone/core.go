@@ -40,6 +40,32 @@ func CheckCanceled(ctx context.Context, vmName, diskPath string) error {
 	}
 }
 
+// detectTemplateDiskFormat 检测模板磁盘文件的实际格式（qcow2/raw）
+// 通过 qemu-img info 命令获取，检测失败时默认返回 "qcow2"
+func detectTemplateDiskFormat(templatePath string) string {
+	result := utils.ExecCommand("qemu-img", "info", "--output=json", "-U", templatePath)
+	if result.Error != nil {
+		return "qcow2"
+	}
+	// 简单解析 format 字段："format": "raw" 或 "format": "qcow2"
+	for _, line := range strings.Split(result.Stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.Contains(line, `"format"`) {
+			// 提取值："format": "raw" -> raw
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				val := strings.TrimSpace(parts[1])
+				val = strings.Trim(val, `",`)
+				val = strings.TrimSpace(val)
+				if val == "raw" || val == "qcow2" || val == "vmdk" || val == "vpc" {
+					return val
+				}
+			}
+		}
+	}
+	return "qcow2"
+}
+
 // CloneVM 链式克隆虚拟机（主逻辑，对应 vm-linked-clone.sh clone）
 func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, string)) (*CloneResult, error) {
 	if err := D.ValidateVMName(params.Name); err != nil {
@@ -137,12 +163,16 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 	isWindows := tplType == "windows"
 	isFnOS := tplType == "fnos"
 	isOther := tplType == "other"
+	isOpenWrt := tplType == "openwrt"
 	isNoInit := (meta != nil && strings.ToLower(strings.TrimSpace(meta.CloudInitMode)) == "none") || params.DisableSystemInit
 
 	// 克隆前存储空间预检查
 	if err := D.CheckStorageSpace(filepath.Dir(cloneDisk), int64(params.DiskSize)*1024+1024); err != nil {
 		return nil, err
 	}
+
+	// 检测模板磁盘格式（支持 qcow2 和 raw 格式的模板）
+	templateFormat := detectTemplateDiskFormat(templatePath)
 
 	if isOther {
 		// ===== Other 类型：直接复制模板磁盘，不做任何初始化 =====
@@ -161,26 +191,26 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 		progressFn(10, "创建完整克隆磁盘（脱离链式条件）...")
 		var convertCmd string
 		if params.DiskSize > 0 {
-			convertCmd = fmt.Sprintf("qemu-img convert -f qcow2 -O qcow2 %s %s && qemu-img resize %s %dG",
-				utils.ShellSingleQuote(templatePath), utils.ShellSingleQuote(cloneDisk), utils.ShellSingleQuote(cloneDisk), params.DiskSize)
+			convertCmd = fmt.Sprintf("qemu-img convert -f %s -O qcow2 %s %s && qemu-img resize %s %dG",
+				templateFormat, utils.ShellSingleQuote(templatePath), utils.ShellSingleQuote(cloneDisk), utils.ShellSingleQuote(cloneDisk), params.DiskSize)
 		} else {
-			convertCmd = fmt.Sprintf("qemu-img convert -f qcow2 -O qcow2 %s %s",
-				utils.ShellSingleQuote(templatePath), utils.ShellSingleQuote(cloneDisk))
+			convertCmd = fmt.Sprintf("qemu-img convert -f %s -O qcow2 %s %s",
+				templateFormat, utils.ShellSingleQuote(templatePath), utils.ShellSingleQuote(cloneDisk))
 		}
 		result := utils.ExecShellWithTimeout(convertCmd, 2*time.Hour)
 		if result.Error != nil {
 			return nil, fmt.Errorf("创建完整克隆磁盘失败: %s", result.Stderr)
 		}
 	} else {
-		// ===== 链式克隆（Linux/Windows/FnOS） =====
+		// ===== 链式克隆（Linux/Windows/FnOS/OpenWrt） =====
 		progressFn(10, "创建链式克隆磁盘...")
 		var createCmd string
 		if params.DiskSize > 0 {
-			createCmd = fmt.Sprintf("qemu-img create -f qcow2 -F qcow2 -b %s %s %dG",
-				utils.ShellSingleQuote(templatePath), utils.ShellSingleQuote(cloneDisk), params.DiskSize)
+			createCmd = fmt.Sprintf("qemu-img create -f qcow2 -F %s -b %s %s %dG",
+				templateFormat, utils.ShellSingleQuote(templatePath), utils.ShellSingleQuote(cloneDisk), params.DiskSize)
 		} else {
-			createCmd = fmt.Sprintf("qemu-img create -f qcow2 -F qcow2 -b %s %s",
-				utils.ShellSingleQuote(templatePath), utils.ShellSingleQuote(cloneDisk))
+			createCmd = fmt.Sprintf("qemu-img create -f qcow2 -F %s -b %s %s",
+				templateFormat, utils.ShellSingleQuote(templatePath), utils.ShellSingleQuote(cloneDisk))
 		}
 		result := utils.ExecShell(createCmd)
 		if result.Error != nil {
@@ -203,6 +233,13 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 				_ = os.Remove(cloneDisk)
 				return nil, err
 			}
+		}
+	}
+	if isOpenWrt && !isNoInit {
+		progressFn(25, "配置 OpenWrt 系统...")
+		if err := cloneOpenWrt(params, cloneDisk, progressFn); err != nil {
+			_ = os.Remove(cloneDisk)
+			return nil, err
 		}
 	}
 	if tplType == "linux" && !isNoInit {

@@ -58,6 +58,9 @@ type CloneParams struct {
 	SystemDiskIOPS        *DiskIOPSTune                  `json:"system_disk_iops,omitempty"` // 系统盘 IOPS 限制
 	IsAdmin               bool                           `json:"is_admin,omitempty"`
 	DisableSystemInit     bool                           `json:"disable_system_init,omitempty"` // 禁用系统初始化（跳过凭据校验和来宾系统修改）
+	StaticIP              string                         `json:"static_ip,omitempty"`           // OpenWrt 静态 IP（CIDR 格式，如 192.168.1.100/24）
+	Gateway               string                         `json:"gateway,omitempty"`             // OpenWrt 网关地址
+	DNS                   string                         `json:"dns,omitempty"`                 // OpenWrt DNS 服务器
 	LinuxIdentityPrepared bool                           `json:"-"`                             // Linux 首次启动前是否已离线重置 machine-id/DHCP 身份
 	PCIERootPorts         int                            `json:"pcie_root_ports,omitempty"`     // q35 预留 pcie-root-port 数量
 }
@@ -102,6 +105,9 @@ type BatchCloneParams struct {
 	ExtraNics           []AddVMInterfaceRequest    `json:"extra_nics,omitempty"`
 	IsAdmin             bool                       `json:"is_admin,omitempty"`            // 是否管理员
 	DisableSystemInit   bool                       `json:"disable_system_init,omitempty"` // 禁用系统初始化
+	StaticIP            string                     `json:"static_ip,omitempty"`           // OpenWrt 静态 IP
+	Gateway             string                     `json:"gateway,omitempty"`             // OpenWrt 网关
+	DNS                 string                     `json:"dns,omitempty"`                 // OpenWrt DNS
 }
 
 // ReinstallParams 重装系统参数

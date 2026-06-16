@@ -60,12 +60,26 @@ func NormalizeCloneUsernameForTemplate(templateType, username string) string {
 	if trimmedTemplateType == "windows" && trimmedUsername == "" {
 		return windowsCloneDefaultUsername
 	}
+	if trimmedTemplateType == "openwrt" {
+		return "root"
+	}
 	return trimmedUsername
 }
 
 // ValidateCloneCredentialsForTemplate 校验模板克隆使用的主机名、用户名和密码
 func ValidateCloneCredentialsForTemplate(templateType, hostname, username, password string, requireCredentials bool) error {
 	trimmedTemplateType := strings.ToLower(strings.TrimSpace(templateType))
+	// OpenWrt 模板不需要用户名/密码校验（只需 root 密码可选 + 静态 IP）
+	if trimmedTemplateType == "openwrt" {
+		trimmedHostname := strings.TrimSpace(hostname)
+		if trimmedHostname != "" && !cloneHostnameRegexp.MatchString(trimmedHostname) {
+			return fmt.Errorf("主机名只能包含字母、数字和短横线，且不能以短横线开头或结尾")
+		}
+		if password != "" {
+			return ValidateStrongPassword(password)
+		}
+		return nil
+	}
 	normalizedUsername := NormalizeCloneUsernameForTemplate(trimmedTemplateType, username)
 	if trimmedTemplateType == "windows" && normalizedUsername != windowsCloneDefaultUsername {
 		return fmt.Errorf("Windows 模板用户名固定为 administrator，不支持修改")
@@ -142,6 +156,36 @@ func GenerateRandomStrongPassword() string {
 }
 
 // ---- 重装验证相关 ----
+
+// ValidateOpenWrtStaticIP 校验 OpenWrt 静态 IP 地址（CIDR 格式）
+func ValidateOpenWrtStaticIP(staticIP string) error {
+	staticIP = strings.TrimSpace(staticIP)
+	if staticIP == "" {
+		return fmt.Errorf("OpenWrt 模板克隆需要指定静态 IP 地址")
+	}
+	// 支持 CIDR 格式（如 192.168.1.100/24）或纯 IP
+	ip := staticIP
+	if strings.Contains(staticIP, "/") {
+		parts := strings.SplitN(staticIP, "/", 2)
+		ip = parts[0]
+		mask, err := strconv.Atoi(parts[1])
+		if err != nil || mask < 1 || mask > 32 {
+			return fmt.Errorf("子网掩码无效，应为 1-32 之间的数字")
+		}
+	}
+	// 简单校验 IPv4 格式
+	octets := strings.Split(ip, ".")
+	if len(octets) != 4 {
+		return fmt.Errorf("静态 IP 地址格式无效，应为 IPv4 CIDR 格式（如 192.168.1.100/24）")
+	}
+	for _, octet := range octets {
+		val, err := strconv.Atoi(octet)
+		if err != nil || val < 0 || val > 255 {
+			return fmt.Errorf("静态 IP 地址格式无效，应为 IPv4 CIDR 格式（如 192.168.1.100/24）")
+		}
+	}
+	return nil
+}
 
 type reinstallSystemDiskInfo struct {
 	Path      string

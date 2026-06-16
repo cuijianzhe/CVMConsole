@@ -811,7 +811,7 @@
                   </el-alert>
                 </div>
               </div>
-              <div v-else-if="!isNoInitTemplate" class="form-section-card">
+              <div v-else-if="!isNoInitTemplate && !isOpenWrtTemplate" class="form-section-card">
                 <div class="form-section-card-header">
                   <el-icon><User /></el-icon>
                   <span>登录凭据</span>
@@ -884,6 +884,49 @@
                     <div class="form-tip">
                       <el-icon><InfoFilled /></el-icon>
                       适合需要特殊使用设备ID的授权场景；
+                    </div>
+                  </el-form-item>
+                </div>
+              </div>
+              <div v-if="isOpenWrtTemplate && !disableSystemInit" class="form-section-card">
+                <div class="form-section-card-header">
+                  <el-icon><Connection /></el-icon>
+                  <span>OpenWrt 网络配置</span>
+                </div>
+                <div class="form-section-card-body">
+                  <el-form-item label="主机名">
+                    <el-input v-model="form.hostname" placeholder="自动随机生成">
+                      <template #append><el-button @click="handleGenerateTemplateHostname">随机生成</el-button></template>
+                    </el-input>
+                  </el-form-item>
+                  <el-form-item label="静态 IP" required>
+                    <el-input v-model="form.static_ip" placeholder="如 192.168.1.100/24">
+                      <template #prepend>🌐</template>
+                    </el-input>
+                    <div class="form-tip">
+                      <el-icon><InfoFilled /></el-icon>
+                      克隆后第一个网卡（eth0/br-lan）将被设置为此静态 IP，格式为 IP/子网掩码
+                    </div>
+                  </el-form-item>
+                  <el-row :gutter="20">
+                    <el-col :span="12">
+                      <el-form-item label="网关">
+                        <el-input v-model="form.gateway" placeholder="如 192.168.1.1" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="12">
+                      <el-form-item label="DNS">
+                        <el-input v-model="form.dns" placeholder="如 8.8.8.8,114.114.114.114" />
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                  <el-form-item label="Root 密码">
+                    <el-input v-model="form.import_password" placeholder="留空则保持模板原始密码" type="password" show-password autocomplete="new-password">
+                      <template #append><el-button @click="handleGenerateTemplatePassword">生成强密码</el-button></template>
+                    </el-input>
+                    <div class="form-tip">
+                      <el-icon><InfoFilled /></el-icon>
+                      OpenWrt 默认只有 root 账户，密码可选（留空则不修改）
                     </div>
                   </el-form-item>
                 </div>
@@ -2434,7 +2477,8 @@ const allRequiredFilled = computed(() => {
     }
   } else if (isTemplateSourceMode.value) {
     if (!form.template || form.disk_size <= 0) return false
-    if (!registrationMode.value && !disableSystemInit.value && !isNoInitTemplate.value && (!form.import_user || (!form.import_password && form.batch_count <= 1))) return false
+    if (!registrationMode.value && !disableSystemInit.value && !isNoInitTemplate.value && !isOpenWrtTemplate.value && (!form.import_user || (!form.import_password && form.batch_count <= 1))) return false
+    if (isOpenWrtTemplate.value && !disableSystemInit.value && !form.static_ip) return false
     if (isFnOSTemplate.value && !disableSystemInit.value && form.fnos_device_id_mode === 'custom' && !hasCustomFnOSDeviceID.value) return false
   }
   return true
@@ -2457,9 +2501,12 @@ const allRequiredTip = computed(() => {
   } else if (isTemplateSourceMode.value) {
     if (!form.template) missing.push('模板')
     if (form.disk_size <= 0) missing.push('磁盘大小')
-    if (!registrationMode.value && !disableSystemInit.value && !isNoInitTemplate.value) {
+    if (!registrationMode.value && !disableSystemInit.value && !isNoInitTemplate.value && !isOpenWrtTemplate.value) {
       if (!form.import_user) missing.push('用户名')
       if (!form.import_password && form.batch_count <= 1) missing.push('密码')
+    }
+    if (isOpenWrtTemplate.value && !disableSystemInit.value && !form.static_ip) {
+      missing.push('静态 IP')
     }
     if (isFnOSTemplate.value && !disableSystemInit.value && form.fnos_device_id_mode === 'custom' && !hasCustomFnOSDeviceID.value) {
       missing.push('FnOS 设备 ID')
@@ -2573,6 +2620,7 @@ const resolveTemplateDefaultFirstBootRebootMode = (tpl) => {
   return ['normal', 'cold'].includes(mode) ? mode : ''
 }
 const isFnOSTemplate = computed(() => isTemplateSourceMode.value && form.template_type === 'fnos')
+const isOpenWrtTemplate = computed(() => isTemplateSourceMode.value && form.template_type === 'openwrt')
 const selectedTemplate = computed(() => templates.value.find(tpl => tpl.name === form.template) || null)
 const isNoInitTemplate = computed(() => isTemplateSourceMode.value && selectedTemplate.value?.cloud_init_mode === 'none')
 const templateMinDiskSize = computed(() => parseTemplateDiskSizeGB(selectedTemplate.value?.virtual_size))
@@ -3496,6 +3544,10 @@ const form = reactive({
   preserve_fnos_device_id: false,
   fnos_device_id_mode: 'regenerate',
   fnos_device_id: '',
+  // OpenWrt 网络配置字段
+  static_ip: '',
+  gateway: '',
+  dns: '',
   storage_pool_id: '',
   traffic_down_gb: 0,
   traffic_up_gb: 0,
@@ -5006,6 +5058,10 @@ const submitForm = async () => {
               switch_id: nicsPayload.primarySwitchId,
               security_group_id: nicsPayload.primarySecurityGroupId,
               extra_nics: nicsPayload.extraNics,
+              // OpenWrt 网络配置
+              static_ip: isOpenWrtTemplate.value ? form.static_ip : undefined,
+              gateway: isOpenWrtTemplate.value ? form.gateway : undefined,
+              dns: isOpenWrtTemplate.value ? form.dns : undefined,
             }
             const cpuLimitPercent = buildCPULimitPercentPayload()
             if (cpuLimitPercent !== undefined) { batchPayload.cpu_limit_percent = cpuLimitPercent }
@@ -5068,6 +5124,10 @@ const submitForm = async () => {
             })),
             host_devices: form.host_devices,
             pcie_root_ports: form.pcie_root_ports,
+            // OpenWrt 网络配置
+            static_ip: isOpenWrtTemplate.value ? form.static_ip : undefined,
+            gateway: isOpenWrtTemplate.value ? form.gateway : undefined,
+            dns: isOpenWrtTemplate.value ? form.dns : undefined,
           }
           const cpuLimitPercent = buildCPULimitPercentPayload()
           if (cpuLimitPercent !== undefined) {

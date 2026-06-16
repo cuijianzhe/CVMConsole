@@ -1,5 +1,6 @@
 export const DEFAULT_LINUX_TEMPLATE_CATEGORY = 'Ubuntu'
 export const DEFAULT_WINDOWS_TEMPLATE_CATEGORY = 'WindowsServer2022'
+export const DEFAULT_OPENWRT_TEMPLATE_CATEGORY = 'OpenWrt'
 
 export const LINUX_TEMPLATE_CATEGORY_OPTIONS = [
   'Ubuntu',
@@ -16,21 +17,36 @@ export const WINDOWS_TEMPLATE_CATEGORY_OPTIONS = [
   '其它',
 ]
 
+export const OPENWRT_TEMPLATE_CATEGORY_OPTIONS = [
+  'OpenWrt',
+  'iStoreOS',
+]
+
 export const normalizeTemplateType = (type) => (type || '').toString().trim().toLowerCase()
 
 export const templateTypeLabel = (type) => ({
   windows: 'Windows',
   fnos: 'FnOS',
+  openwrt: 'OpenWrt',
 }[normalizeTemplateType(type)] || 'Linux')
 
 export const normalizeTemplateCategory = (type, category) => {
   const normalizedType = normalizeTemplateType(type)
-  if (normalizedType !== 'linux' && normalizedType !== 'windows') {
+  if (normalizedType !== 'linux' && normalizedType !== 'windows' && normalizedType !== 'openwrt') {
     return ''
   }
   const normalized = (category || '').toString().trim()
-  const options = normalizedType === 'windows' ? WINDOWS_TEMPLATE_CATEGORY_OPTIONS : LINUX_TEMPLATE_CATEGORY_OPTIONS
-  const defaultCategory = normalizedType === 'windows' ? DEFAULT_WINDOWS_TEMPLATE_CATEGORY : DEFAULT_LINUX_TEMPLATE_CATEGORY
+  let options, defaultCategory
+  if (normalizedType === 'windows') {
+    options = WINDOWS_TEMPLATE_CATEGORY_OPTIONS
+    defaultCategory = DEFAULT_WINDOWS_TEMPLATE_CATEGORY
+  } else if (normalizedType === 'openwrt') {
+    options = OPENWRT_TEMPLATE_CATEGORY_OPTIONS
+    defaultCategory = DEFAULT_OPENWRT_TEMPLATE_CATEGORY
+  } else {
+    options = LINUX_TEMPLATE_CATEGORY_OPTIONS
+    defaultCategory = DEFAULT_LINUX_TEMPLATE_CATEGORY
+  }
   if (!normalized) {
     return defaultCategory
   }
@@ -40,7 +56,7 @@ export const normalizeTemplateCategory = (type, category) => {
 
 export const templateCategoryLabel = (type, category) => {
   const normalizedType = normalizeTemplateType(type)
-  if (normalizedType !== 'linux' && normalizedType !== 'windows') {
+  if (normalizedType !== 'linux' && normalizedType !== 'windows' && normalizedType !== 'openwrt') {
     return ''
   }
   return normalizeTemplateCategory(normalizedType, category)
