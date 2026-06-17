@@ -63,6 +63,8 @@ type CloneParams struct {
 	DNS                   string                         `json:"dns,omitempty"`                 // OpenWrt DNS 服务器
 	LinuxIdentityPrepared bool                           `json:"-"`                             // Linux 首次启动前是否已离线重置 machine-id/DHCP 身份
 	PCIERootPorts         int                            `json:"pcie_root_ports,omitempty"`     // q35 预留 pcie-root-port 数量
+	PostBootCommand       string                         `json:"post_boot_command,omitempty"`   // Linux 模板启动后执行的自定义命令
+	PostBootBlocking      bool                           `json:"post_boot_blocking,omitempty"`  // 启动后命令阻塞模式
 }
 
 // BatchCloneParams 批量克隆参数

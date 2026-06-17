@@ -99,6 +99,12 @@ func buildReinstallCloneParams(params *ReinstallParams, diskBus string, template
 	if cloneParams.TemplateUser == "" {
 		cloneParams.TemplateUser = templateMeta.TemplateUser
 	}
+	if cloneParams.PostBootCommand == "" {
+		cloneParams.PostBootCommand = templateMeta.PostBootCommand
+	}
+	if !cloneParams.PostBootBlocking {
+		cloneParams.PostBootBlocking = templateMeta.PostBootBlocking
+	}
 	if cloneParams.DiskBus == "" {
 		cloneParams.DiskBus = "virtio"
 	}

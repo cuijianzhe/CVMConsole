@@ -29,6 +29,8 @@ func UpdateTemplatePublish(templateName string, params *UpdateTemplatePublishPar
 	meta.CloneVisible = params.CloneVisible
 	meta.Disabled = params.Disabled
 	meta.Category = normalizeTemplateCategoryForName(meta.Type, params.Category, templateName)
+	meta.PostBootCommand = params.PostBootCommand
+	meta.PostBootBlocking = params.PostBootBlocking
 	meta.DefaultConfig = normalizeTemplateDefaultConfig(&TemplateDefaultConfig{
 		VCPU:                params.VCPU,
 		RAM:                 params.RAM,
@@ -58,5 +60,7 @@ func UpdateTemplateMeta(templateName string, params *UpdateTemplateMetaParams) e
 		VideoModel:          params.VideoModel,
 		CPUTopologyMode:     params.CPUTopologyMode,
 		FirstBootRebootMode: params.FirstBootRebootMode,
+		PostBootCommand:     params.PostBootCommand,
+		PostBootBlocking:    params.PostBootBlocking,
 	})
 }

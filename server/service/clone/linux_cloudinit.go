@@ -156,6 +156,29 @@ func prepareLinuxNoCloudInit(params *CloneParams, cloneDisk string) error {
 		}
 	}
 
+	// 9. 阻塞式启动后命令：注入 systemd oneshot 服务，在 SSH 启动前执行用户命令
+	// 服务配置为 Before=sshd/ssh，确保命令完成前 SSH 不可用
+	if strings.TrimSpace(params.PostBootCommand) != "" && params.PostBootBlocking {
+		scriptContent := buildPostBootBlockingScript(params.PostBootCommand)
+		unitContent := buildPostBootBlockingUnit()
+
+		scriptPath := filepath.Join(tmpDir, "qvm-post-boot.sh")
+		unitPath := filepath.Join(tmpDir, "qvm-post-boot.service")
+		if err := os.WriteFile(scriptPath, []byte(scriptContent), 0755); err != nil {
+			return fmt.Errorf("写入阻塞启动脚本失败: %w", err)
+		}
+		if err := os.WriteFile(unitPath, []byte(unitContent), 0644); err != nil {
+			return fmt.Errorf("写入阻塞启动服务单元失败: %w", err)
+		}
+
+		args = append(args,
+			"--upload", scriptPath+":/opt/qvm-post-boot.sh",
+			"--upload", unitPath+":/etc/systemd/system/qvm-post-boot.service",
+			"--run-command", "chmod +x /opt/qvm-post-boot.sh",
+			"--run-command", "ln -sf /etc/systemd/system/qvm-post-boot.service /etc/systemd/system/multi-user.target.wants/qvm-post-boot.service",
+		)
+	}
+
 	result := utils.ExecCommandLongRunning("virt-customize", args...)
 	if result.Error != nil {
 		return fmt.Errorf("Linux 克隆离线初始化失败: %s", D.FirstNonEmpty(result.Stderr, result.Error.Error()))
@@ -229,5 +252,63 @@ func buildNoCloudUserData(params *CloneParams) string {
 	sb.WriteString("        fi\n")
 	sb.WriteString("      fi\n")
 	sb.WriteString("    fi\n")
+
+	// 启动后执行的自定义命令（来自模板元数据）
+	// 非阻塞模式：放在 cloud-init runcmd 中，不影响 SSH 启动
+	if strings.TrimSpace(params.PostBootCommand) != "" && !params.PostBootBlocking {
+		// 使用 bash heredoc 包装，确保 bash 特有语法（如进程替换 <(...))在 /bin/sh 环境下正常执行
+		sb.WriteString("  - |\n")
+		sb.WriteString("    /bin/bash <<'QVMPOSTBOOT'\n")
+		for _, line := range strings.Split(params.PostBootCommand, "\n") {
+			sb.WriteString("    " + line + "\n")
+		}
+		sb.WriteString("    QVMPOSTBOOT\n")
+	}
+
 	return sb.String()
+}
+
+// buildPostBootBlockingScript 生成阻塞式启动后命令的 shell 脚本内容
+// 脚本执行完毕后自动禁用服务并清理自身，确保仅首次启动时运行
+func buildPostBootBlockingScript(command string) string {
+	var sb strings.Builder
+	sb.WriteString("#!/bin/bash\n")
+	sb.WriteString("# QVMConsole 阻塞式启动后命令 - 仅首次启动时执行\n")
+	sb.WriteString("# 此服务在 SSH 启动前运行，阻塞系统启动直到命令完成\n\n")
+	// 执行用户自定义命令
+	for _, line := range strings.Split(command, "\n") {
+		sb.WriteString(line + "\n")
+	}
+	sb.WriteString("\n")
+	// 执行完毕后自动禁用服务并清理文件
+	sb.WriteString("# 清理：禁用服务并删除自身\n")
+	sb.WriteString("systemctl disable qvm-post-boot.service 2>/dev/null || true\n")
+	sb.WriteString("rm -f /etc/systemd/system/qvm-post-boot.service\n")
+	sb.WriteString("rm -f /etc/systemd/system/multi-user.target.wants/qvm-post-boot.service\n")
+	sb.WriteString("rm -f /opt/qvm-post-boot.sh\n")
+	sb.WriteString("systemctl daemon-reload 2>/dev/null || true\n")
+	return sb.String()
+}
+
+// buildPostBootBlockingUnit 生成 systemd oneshot 服务单元文件内容
+// 配置为 Before=sshd.service ssh.service，确保命令完成前 SSH 不可用
+func buildPostBootBlockingUnit() string {
+	return `[Unit]
+Description=QVMConsole Post-Boot Initialization (blocking)
+After=network-online.target
+Before=sshd.service ssh.service
+Wants=network-online.target
+ConditionPathExists=/opt/qvm-post-boot.sh
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+ExecStart=/bin/bash /opt/qvm-post-boot.sh
+TimeoutStartSec=infinity
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+`
 }

@@ -120,6 +120,26 @@
             克隆时若目标用户名与模板用户名不同，自动离线重命名
           </div>
         </el-form-item>
+
+        <el-form-item v-if="form.type === 'linux' && form.init_mode !== 'none'" label="启动后命令">
+          <el-input
+            v-model="form.post_boot_command"
+            type="textarea"
+            :rows="3"
+            placeholder="克隆后首次启动时执行的自定义 Shell 命令（可多行）"
+          />
+          <div class="form-tip">
+            <el-icon><InfoFilled /></el-icon>
+            命令将以 root 权限执行，仅首次启动时运行
+          </div>
+          <el-checkbox v-model="form.post_boot_blocking" :disabled="!form.post_boot_command" style="margin-top: 6px;">
+            等待命令执行完毕后再启动 SSH
+          </el-checkbox>
+          <div v-if="form.post_boot_blocking" class="form-tip" style="color: #E6A23C;">
+            <el-icon><InfoFilled /></el-icon>
+            启用后系统启动期间将显示“正在启动 QVM 初始化服务”，用户在此期间无法通过 SSH 登录
+          </div>
+        </el-form-item>
       </template>
     </el-form>
 
@@ -157,6 +177,8 @@ const form = reactive({
   category: DEFAULT_LINUX_TEMPLATE_CATEGORY,
   init_mode: 'nocloud',
   template_user: '',
+  post_boot_command: '',
+  post_boot_blocking: false,
 })
 
 const categoryOptions = computed(() => {
@@ -199,6 +221,8 @@ const open = (name) => {
   form.category = DEFAULT_LINUX_TEMPLATE_CATEGORY
   form.init_mode = 'nocloud'
   form.template_user = ''
+  form.post_boot_command = ''
+  form.post_boot_blocking = false
   visible.value = true
 }
 
@@ -277,6 +301,8 @@ const handleSubmit = async () => {
       category: ['linux', 'windows', 'openwrt'].includes(type) ? normalizeTemplateCategory(type, form.category) : undefined,
       cloud_init_mode: form.init_mode === 'none' ? 'none' : (form.init_mode || undefined),
       template_user: form.template_user || undefined,
+      post_boot_command: form.post_boot_command || undefined,
+      post_boot_blocking: form.post_boot_blocking || undefined,
     })
     ElMessage.success('制作模板任务已提交，请在任务中查看进度')
     visible.value = false

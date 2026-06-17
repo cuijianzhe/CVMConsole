@@ -63,18 +63,20 @@ func PrepareTemplate(params *PrepareTemplateParams) error {
 	}
 	defaultConfig := collectVMTemplateDefaultConfig(params.VMName)
 	meta := &TemplateMeta{
-		Type:          tplType,
-		Category:      normalizeTemplateCategoryForName(tplType, params.Category, params.TemplateName),
-		BootType:      bootType,
-		RootPassword:  params.RootPassword,
-		TemplateUser:  params.TemplateUser,
-		CloudInitMode: params.CloudInitMode,
-		DefaultConfig: defaultConfig,
-		NodeID:        generateTemplateID("node"),
-		AdminName:     adminName,
-		DisplayName:   displayName,
-		CreatedFromVM: params.VMName,
-		CreatedAt:     time.Now().Format(time.RFC3339),
+		Type:             tplType,
+		Category:         normalizeTemplateCategoryForName(tplType, params.Category, params.TemplateName),
+		BootType:         bootType,
+		RootPassword:     params.RootPassword,
+		TemplateUser:     params.TemplateUser,
+		CloudInitMode:    params.CloudInitMode,
+		PostBootCommand:  params.PostBootCommand,
+		PostBootBlocking: params.PostBootBlocking,
+		DefaultConfig:    defaultConfig,
+		NodeID:           generateTemplateID("node"),
+		AdminName:        adminName,
+		DisplayName:      displayName,
+		CreatedFromVM:    params.VMName,
+		CreatedAt:        time.Now().Format(time.RFC3339),
 	}
 	if bootType == "uefi" {
 		meta.NVRAMPath = copyTemplateNVRAMFromVM(params.VMName, destPath)

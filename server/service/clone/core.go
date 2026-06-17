@@ -150,6 +150,12 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 	if params.TemplateUser == "" && meta.TemplateUser != "" {
 		params.TemplateUser = meta.TemplateUser
 	}
+	if params.PostBootCommand == "" && meta.PostBootCommand != "" {
+		params.PostBootCommand = meta.PostBootCommand
+	}
+	if !params.PostBootBlocking && meta.PostBootBlocking {
+		params.PostBootBlocking = meta.PostBootBlocking
+	}
 	params.User = NormalizeCloneUsernameForTemplate(tplType, params.User)
 	if err := ValidateCloneCredentialsForTemplate(tplType, params.Hostname, params.User, params.Password, false); err != nil {
 		return nil, err

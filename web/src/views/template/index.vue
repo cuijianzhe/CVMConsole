@@ -298,6 +298,19 @@
           </el-select>
           <div class="form-tip"><el-icon><InfoFilled /></el-icon>Windows 模板 OOBE 自动重启黑屏时可设置为宿主冷启动</div>
         </el-form-item>
+        <el-form-item v-if="publishForm.type === 'linux'" label="启动后命令">
+          <el-input
+            v-model="publishForm.post_boot_command"
+            type="textarea"
+            :rows="3"
+            placeholder="克隆后首次启动时执行的自定义 Shell 命令（可多行）"
+          />
+          <div class="form-tip"><el-icon><InfoFilled /></el-icon>命令将以 root 权限执行，仅首次启动时运行</div>
+          <el-checkbox v-model="publishForm.post_boot_blocking" :disabled="!publishForm.post_boot_command" style="margin-top: 6px;">
+            等待命令执行完毕后再启动 SSH
+          </el-checkbox>
+          <div v-if="publishForm.post_boot_blocking" class="form-tip" style="color: #E6A23C;"><el-icon><InfoFilled /></el-icon>启用后系统启动期间将显示“正在启动 QVM 初始化服务”，用户在此期间无法通过 SSH 登录</div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="publishDialogVisible = false">取消</el-button>
@@ -440,6 +453,8 @@ const publishForm = ref({
   video_model: '',
   cpu_topology_mode: '',
   first_boot_reboot_mode: '',
+  post_boot_command: '',
+  post_boot_blocking: false,
 })
 
 const deleteDialogVisible = ref(false)
@@ -908,6 +923,8 @@ const openPublishDialog = (row) => {
     video_model: defaults.video_model || '',
     cpu_topology_mode: defaults.cpu_topology_mode || '',
     first_boot_reboot_mode: defaults.first_boot_reboot_mode || '',
+    post_boot_command: row.post_boot_command || '',
+    post_boot_blocking: row.post_boot_blocking || false,
   }
   publishDialogVisible.value = true
 }
@@ -935,6 +952,8 @@ const handleSavePublish = async () => {
       video_model: publishForm.value.video_model || '',
       cpu_topology_mode: publishForm.value.cpu_topology_mode || '',
       first_boot_reboot_mode: publishForm.value.first_boot_reboot_mode || '',
+      post_boot_command: publishForm.value.post_boot_command || '',
+      post_boot_blocking: publishForm.value.post_boot_blocking || false,
     })
     ElMessage.success('模板发布设置已保存')
     publishDialogVisible.value = false

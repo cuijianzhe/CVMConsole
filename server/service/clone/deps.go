@@ -113,14 +113,16 @@ type Deps struct {
 
 // TemplateMeta mirrors service.TemplateMeta for use within the clone package.
 type TemplateMeta struct {
-	Type          string                 `json:"type"`
-	Category      string                 `json:"category"` // 二级分类（如 WindowsServer2025/WindowsServer2022 等）
-	BootType      string                 `json:"boot_type"`
-	RootPassword  string                 `json:"root_password"`   // 已废弃，保留兼容旧元数据
-	TemplateUser  string                 `json:"template_user"`   // 模板中的普通用户名（用于用户名重命名）
-	CloudInitMode string                 `json:"cloud_init_mode"` // 初始化模式: "nocloud"/"configdrive"/"fnos"/"none"
-	NVRAMPath     string                 `json:"nvram_path"`
-	DefaultConfig *TemplateDefaultConfig `json:"default_config,omitempty"`
+	Type             string                 `json:"type"`
+	Category         string                 `json:"category"` // 二级分类（如 WindowsServer2025/WindowsServer2022 等）
+	BootType         string                 `json:"boot_type"`
+	RootPassword     string                 `json:"root_password"`      // 已废弃，保留兼容旧元数据
+	TemplateUser     string                 `json:"template_user"`      // 模板中的普通用户名（用于用户名重命名）
+	CloudInitMode    string                 `json:"cloud_init_mode"`    // 初始化模式: "nocloud"/"configdrive"/"fnos"/"none"
+	PostBootCommand  string                 `json:"post_boot_command"`  // Linux 模板启动后执行的自定义命令
+	PostBootBlocking bool                   `json:"post_boot_blocking"` // 启动后命令阻塞模式
+	NVRAMPath        string                 `json:"nvram_path"`
+	DefaultConfig    *TemplateDefaultConfig `json:"default_config,omitempty"`
 }
 
 // TemplateDefaultConfig mirrors service.TemplateDefaultConfig.
