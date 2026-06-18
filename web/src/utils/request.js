@@ -159,6 +159,9 @@ service.interceptors.response.use(
       if (res.code === 401) {
         const userStore = useUserStore()
         userStore.logout()
+        if ((res.message || '').includes('登录环境发生变化')) {
+          ElMessage.warning('登录环境发生变化，请重新登录')
+        }
         router.push('/login')
       }
       return Promise.reject(new Error(res.message || '请求失败'))
@@ -197,7 +200,11 @@ service.interceptors.response.use(
 
     if (error.response?.status === 401) {
       const userStore = useUserStore()
+      const serverMsg = error.response?.data?.message || ''
       userStore.logout()
+      if (serverMsg.includes('登录环境发生变化')) {
+        ElMessage.warning('登录环境发生变化，请重新登录')
+      }
       router.push('/login')
     }
 

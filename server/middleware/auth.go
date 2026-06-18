@@ -21,7 +21,8 @@ type Claims struct {
 	Username  string `json:"username"`
 	Role      string `json:"role"`
 	TokenType string `json:"token_type"`
-	Operation string `json:"operation,omitempty"`
+	Operation   string `json:"operation,omitempty"`
+	Fingerprint string `json:"fp,omitempty"` // 会话指纹
 	jwt.RegisteredClaims
 }
 
@@ -33,20 +34,26 @@ func GenerateToken(userID uint, username, role string) (string, error) {
 
 // GenerateTokenWithTTL 生成指定类型和有效期的 Token
 func GenerateTokenWithTTL(userID uint, username, role, tokenType string, ttl time.Duration) (string, error) {
-	return GenerateTokenWithOperation(userID, username, role, tokenType, "", ttl)
+	return generateTokenInternal(userID, username, role, tokenType, "", "", ttl)
 }
 
 // GenerateTokenWithOperation 生成带操作范围的 Token
 func GenerateTokenWithOperation(userID uint, username, role, tokenType, operation string, ttl time.Duration) (string, error) {
+	return generateTokenInternal(userID, username, role, tokenType, operation, "", ttl)
+}
+
+// generateTokenInternal 内部 Token 生成，支持会话指纹
+func generateTokenInternal(userID uint, username, role, tokenType, operation, fingerprint string, ttl time.Duration) (string, error) {
 	if tokenType == "" {
 		tokenType = service.TokenTypeAccess
 	}
 	claims := &Claims{
-		UserID:    userID,
-		Username:  username,
-		Role:      role,
-		TokenType: tokenType,
-		Operation: operation,
+		UserID:      userID,
+		Username:    username,
+		Role:        role,
+		TokenType:   tokenType,
+		Operation:   operation,
+		Fingerprint: fingerprint,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -56,6 +63,21 @@ func GenerateTokenWithOperation(userID uint, username, role, tokenType, operatio
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(config.GlobalConfig.JWTSecret))
+}
+
+// GenerateTokenWithContext 生成带会话指纹的 Token（从 gin.Context 提取 IP 和 User-Agent）
+func GenerateTokenWithContext(c *gin.Context, userID uint, username, role, tokenType string, ttl time.Duration) (string, error) {
+	fp := ""
+	if isSessionFingerprintEnabled() {
+		fp = GenerateSessionFingerprint(c.ClientIP(), c.GetHeader("User-Agent"))
+	}
+	return generateTokenInternal(userID, username, role, tokenType, "", fp, ttl)
+}
+
+// GenerateAccessTokenWithContext 生成带会话指纹的访问 Token
+func GenerateAccessTokenWithContext(c *gin.Context, userID uint, username, role string) (string, error) {
+	ttl := time.Duration(config.GlobalConfig.JWTExpireHours) * time.Hour
+	return GenerateTokenWithContext(c, userID, username, role, service.TokenTypeAccess, ttl)
 }
 
 // ParseToken 解析 JWT Token
@@ -183,6 +205,19 @@ func tokenTypeMiddleware(allowAPIKey bool, allowedTypes ...string) gin.HandlerFu
 			})
 			c.Abort()
 			return
+		}
+
+		// 指纹校验（仅JWT认证，API Key跳过）
+		if claims.Fingerprint != "" && isSessionFingerprintEnabled() {
+			currentFP := GenerateSessionFingerprint(c.ClientIP(), c.GetHeader("User-Agent"))
+			if claims.Fingerprint != currentFP {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"code":    401,
+					"message": "登录环境发生变化，请重新登录",
+				})
+				c.Abort()
+				return
+			}
 		}
 
 		var user model.User

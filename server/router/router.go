@@ -26,11 +26,13 @@ func Setup() *gin.Engine {
 		r.SetTrustedProxies(nil) // 不信任任何代理头
 	}
 
-	r.Use(middleware.RequestLoggerMiddleware(), gin.Recovery())
+	r.Use(middleware.RequestLoggerMiddleware(), middleware.SafeRecoveryMiddleware())
 
 	// 全局中间件
 	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.SecurityHeadersMiddleware())
+	r.Use(middleware.RequestFilterMiddleware())
+	r.Use(middleware.RequestGuardMiddleware())
 
 	// 全局 API 限频
 	rlConfig := middleware.RateLimitConfig{
@@ -546,7 +548,7 @@ func setupStaticFileServing(r *gin.Engine) {
 
 		// API 路由不回退
 		if strings.HasPrefix(path, "/api") {
-			c.JSON(http.StatusNotFound, gin.H{"error": "接口不存在"})
+			c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "Not Found"})
 			return
 		}
 

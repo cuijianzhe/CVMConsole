@@ -21,6 +21,12 @@ func SecurityHeadersMiddleware() gin.HandlerFunc {
 			c.Header("Pragma", "no-cache")
 		}
 
+		// 非API路径设置 Content-Security-Policy
+		if !strings.HasPrefix(c.Request.URL.Path, "/api") {
+			c.Header("Content-Security-Policy",
+				"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss: ws:")
+		}
+
 		c.Next()
 	}
 }

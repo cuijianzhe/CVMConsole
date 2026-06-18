@@ -157,6 +157,14 @@ type Config struct {
 	LogMaxBackups   int    `json:"log_max_backups"` // 日志最大归档备份数（0=不限制）
 	// 禁用网络等待就绪检测（解决 OVS 桥接后开机卡 systemd-networkd-wait-online.service）
 	NetworkWaitOnlineDisabled bool `json:"network_wait_online_disabled"`
+	// 请求过滤开关
+	RequestFilterEnabled bool `json:"request_filter_enabled"`
+	// API 请求体最大大小（MB）
+	APIMaxBodySizeMB int `json:"api_max_body_size_mb"`
+	// 错误响应中是否包含详细错误信息
+	ErrorDetailInResponse bool `json:"error_detail_in_response"`
+	// 会话指纹绑定开关（默认开启）
+	SessionFingerprintEnabled bool `json:"session_fingerprint_enabled"`
 }
 
 // GlobalConfig 全局配置实例
@@ -247,6 +255,10 @@ func Init() {
 		LogMaxSizeMB:                          getEnvInt("KVM_LOG_MAX_SIZE_MB", 100),
 		LogMaxBackups:                         getEnvInt("KVM_LOG_MAX_BACKUPS", 0),
 		NetworkWaitOnlineDisabled:             getEnvBool("KVM_NETWORK_WAIT_ONLINE_DISABLED", false),
+		RequestFilterEnabled:                  getEnvBool("KVM_REQUEST_FILTER_ENABLED", true),
+		APIMaxBodySizeMB:                       getEnvInt("KVM_API_MAX_BODY_SIZE_MB", 2),
+		ErrorDetailInResponse:                 getEnvBool("KVM_ERROR_DETAIL_IN_RESPONSE", false),
+		SessionFingerprintEnabled:             getEnvBool("KVM_SESSION_FINGERPRINT_ENABLED", true),
 		CORSAllowedOrigins:                    getEnv("KVM_CORS_ALLOWED_ORIGINS", ""),
 	}
 	// 解析可信代理列表
@@ -725,6 +737,16 @@ func (c *Config) LoadFromDB(settings map[string]string) {
 			if v, err := strconv.ParseBool(value); err == nil {
 				c.NetworkWaitOnlineDisabled = v
 			}
+		case "session_fingerprint_enabled":
+			c.SessionFingerprintEnabled = value != "false"
+		case "request_filter_enabled":
+			c.RequestFilterEnabled = value != "false"
+		case "api_max_body_size_mb":
+			if n, err := strconv.Atoi(value); err == nil && n > 0 {
+				c.APIMaxBodySizeMB = n
+			}
+		case "error_detail_in_response":
+			c.ErrorDetailInResponse = value == "true"
 		}
 	}
 }

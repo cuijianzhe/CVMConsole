@@ -789,6 +789,27 @@
         </el-form-item>
 
             <el-divider content-position="left">
+          <el-icon style="margin-right: 4px;"><Lock /></el-icon>
+          安全防护
+        </el-divider>
+
+        <el-form-item label="会话指纹绑定">
+          <el-switch v-model="form.session_fingerprint_enabled" />
+          <div class="form-tip">
+            <el-icon><InfoFilled /></el-icon>
+            开启后，Token 将绑定客户端特征（IP段+浏览器），被盗用后无法跨设备使用 | 环境变量: KVM_SESSION_FINGERPRINT_ENABLED
+          </div>
+        </el-form-item>
+
+        <el-form-item label="请求过滤">
+          <el-switch v-model="form.request_filter_enabled" />
+          <div class="form-tip">
+            <el-icon><InfoFilled /></el-icon>
+            开启后，自动拦截路径穿越、扫描器探测等危险请求 | 环境变量: KVM_REQUEST_FILTER_ENABLED
+          </div>
+        </el-form-item>
+
+        <el-divider content-position="left">
           <el-icon style="margin-right: 4px;"><Warning /></el-icon>
           JWT 密钥管理
         </el-divider>
@@ -1106,7 +1127,7 @@
 
 <script setup>
 import { computed, ref, reactive, onMounted, watch } from 'vue'
-import { Check, Connection, CopyDocument, Cpu, Delete, Download, FirstAidKit, FolderOpened, InfoFilled, Message, Odometer, Plus, Refresh, Warning } from '@element-plus/icons-vue'
+import { Check, Connection, CopyDocument, Cpu, Delete, Download, FirstAidKit, FolderOpened, InfoFilled, Lock, Message, Odometer, Plus, Refresh, Warning } from '@element-plus/icons-vue'
 import { getHostKSMStatus, getHostKVMUnrestrictedGuestStatus, getHostZRAMStatus, getSettings, getCPUAffinityPresets, getUserStorageISOPath, rotateJWTSecret, saveCPUAffinityPresets, testSMTP, updateHostKSMProfile, updateHostKVMUnrestrictedGuest, updateHostZRAMProfile, updateSettings, getLogStatus, deleteLogs, exportLogs, trimUserStorage } from '@/api/settings'
 import { getAllISOs } from '@/api/infra'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -1194,6 +1215,8 @@ const form = reactive({
   public_base_url: '',
   site_title: 'QVMConsole',
   development_mode: false,
+  session_fingerprint_enabled: true,
+  request_filter_enabled: true,
   maintenance_mode: false,
   maintenance_service_units: defaultMaintenanceServiceUnits,
   maintenance_vm_shutdown_timeout_seconds: 40,
@@ -1654,6 +1677,8 @@ const buildPayload = () => ({
   public_base_url: form.public_base_url,
   site_title: form.site_title?.trim() || 'QVMConsole',
   development_mode: form.development_mode,
+  session_fingerprint_enabled: form.session_fingerprint_enabled,
+  request_filter_enabled: form.request_filter_enabled,
   maintenance_mode: form.maintenance_mode,
   maintenance_service_units: form.maintenance_service_units?.trim() || defaultMaintenanceServiceUnits,
   maintenance_vm_shutdown_timeout_seconds: form.maintenance_vm_shutdown_timeout_seconds,

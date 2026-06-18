@@ -136,7 +136,7 @@ func Login(c *gin.Context) {
 
 	security := service.BuildSecurityState(&user)
 	if service.CanEnterBootstrap(&user) {
-		token, err := middleware.GenerateTokenWithTTL(user.ID, user.Username, user.Role, service.TokenTypeBootstrap, 30*time.Minute)
+		token, err := middleware.GenerateTokenWithContext(c, user.ID, user.Username, user.Role, service.TokenTypeBootstrap, 30*time.Minute)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "生成引导令牌失败"})
 			return
@@ -157,7 +157,7 @@ func Login(c *gin.Context) {
 	}
 
 	if service.NeedsLoginVerification(&user) {
-		token, err := middleware.GenerateTokenWithTTL(user.ID, user.Username, user.Role, service.TokenTypeLogin, 15*time.Minute)
+		token, err := middleware.GenerateTokenWithContext(c, user.ID, user.Username, user.Role, service.TokenTypeLogin, 15*time.Minute)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "生成登录验证令牌失败"})
 			return
@@ -192,7 +192,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	accessToken, err := middleware.GenerateToken(user.ID, user.Username, user.Role)
+	accessToken, err := middleware.GenerateAccessTokenWithContext(c, user.ID, user.Username, user.Role)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "生成 Token 失败"})
 		return
@@ -310,7 +310,7 @@ func ChangeUsername(c *gin.Context) {
 		return
 	}
 
-	newToken, err := middleware.GenerateToken(user.ID, newUsername, user.Role)
+	newToken, err := middleware.GenerateAccessTokenWithContext(c, user.ID, newUsername, user.Role)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "用户名已更新，但 Token 生成失败，请重新登录"})
 		return
@@ -413,7 +413,7 @@ func VerifyLoginStage(c *gin.Context) {
 			return
 		}
 	}
-	accessToken, err := middleware.GenerateToken(user.ID, user.Username, user.Role)
+	accessToken, err := middleware.GenerateAccessTokenWithContext(c, user.ID, user.Username, user.Role)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "生成访问令牌失败"})
 		return
@@ -510,7 +510,7 @@ func BindEmail(c *gin.Context) {
 	}
 	tokenType, _ := c.Get("token_type")
 	if tokenType == service.TokenTypeBootstrap && !service.CanEnterBootstrap(freshUser) {
-		accessToken, err := middleware.GenerateToken(freshUser.ID, freshUser.Username, freshUser.Role)
+		accessToken, err := middleware.GenerateAccessTokenWithContext(c, freshUser.ID, freshUser.Username, freshUser.Role)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "生成访问令牌失败"})
 			return
@@ -574,7 +574,7 @@ func EnableTOTP(c *gin.Context) {
 	}
 	tokenType, _ := c.Get("token_type")
 	if tokenType == service.TokenTypeBootstrap && freshUser.Role == "admin" {
-		accessToken, err := middleware.GenerateToken(freshUser.ID, freshUser.Username, freshUser.Role)
+		accessToken, err := middleware.GenerateAccessTokenWithContext(c, freshUser.ID, freshUser.Username, freshUser.Role)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "生成访问令牌失败"})
 			return
@@ -778,7 +778,7 @@ func CompleteInvite(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
-	accessToken, err := middleware.GenerateToken(user.ID, user.Username, user.Role)
+	accessToken, err := middleware.GenerateAccessTokenWithContext(c, user.ID, user.Username, user.Role)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "注册成功，但自动登录失败"})
 		return
@@ -984,7 +984,7 @@ func SkipBootstrap(c *gin.Context) {
 		return
 	}
 
-	accessToken, err := middleware.GenerateToken(refreshed.ID, refreshed.Username, refreshed.Role)
+	accessToken, err := middleware.GenerateAccessTokenWithContext(c, refreshed.ID, refreshed.Username, refreshed.Role)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "生成访问令牌失败"})
 		return
