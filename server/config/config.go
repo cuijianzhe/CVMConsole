@@ -882,6 +882,8 @@ func (c *Config) ToSettingsMap() map[string]string {
 		"log_max_size_mb":                           strconv.Itoa(c.LogMaxSizeMB),
 		"log_max_backups":                           strconv.Itoa(c.LogMaxBackups),
 		"network_wait_online_disabled":              strconv.FormatBool(c.NetworkWaitOnlineDisabled),
+		"session_fingerprint_enabled":               strconv.FormatBool(c.SessionFingerprintEnabled),
+		"request_filter_enabled":                    strconv.FormatBool(c.RequestFilterEnabled),
 	}
 }
 

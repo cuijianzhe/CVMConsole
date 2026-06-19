@@ -85,6 +85,9 @@ type SettingsResponse struct {
 	// 网络等待就绪检测
 	NetworkWaitOnlineDisabled bool   `json:"network_wait_online_disabled"`
 	NetworkWaitOnlineSummary  string `json:"network_wait_online_summary"`
+	// 安全防护
+	SessionFingerprintEnabled bool `json:"session_fingerprint_enabled"`
+	RequestFilterEnabled      bool `json:"request_filter_enabled"`
 }
 
 // UpdateSettingsRequest 更新设置请求
@@ -146,6 +149,9 @@ type UpdateSettingsRequest struct {
 	LogMaxBackups *int `json:"log_max_backups"`
 	// 网络等待就绪检测
 	NetworkWaitOnlineDisabled *bool `json:"network_wait_online_disabled"`
+	// 安全防护
+	SessionFingerprintEnabled *bool `json:"session_fingerprint_enabled"`
+	RequestFilterEnabled      *bool `json:"request_filter_enabled"`
 }
 
 type TestSMTPRequest struct {
@@ -253,6 +259,8 @@ func GetSettings(c *gin.Context) {
 			LogMaxBackups:                         cfg.LogMaxBackups,
 			NetworkWaitOnlineDisabled:             cfg.NetworkWaitOnlineDisabled,
 			NetworkWaitOnlineSummary:              networkWaitOnlineSummary(cfg.NetworkWaitOnlineDisabled),
+			SessionFingerprintEnabled:             cfg.SessionFingerprintEnabled,
+			RequestFilterEnabled:                  cfg.RequestFilterEnabled,
 		},
 	})
 }
@@ -548,6 +556,12 @@ func UpdateSettings(c *gin.Context) {
 	if req.NetworkWaitOnlineDisabled != nil {
 		networkWaitOnlineChanged = *req.NetworkWaitOnlineDisabled != cfg.NetworkWaitOnlineDisabled
 		cfg.NetworkWaitOnlineDisabled = *req.NetworkWaitOnlineDisabled
+	}
+	if req.SessionFingerprintEnabled != nil {
+		cfg.SessionFingerprintEnabled = *req.SessionFingerprintEnabled
+	}
+	if req.RequestFilterEnabled != nil {
+		cfg.RequestFilterEnabled = *req.RequestFilterEnabled
 	}
 
 	if cfg.AutoPortStart >= cfg.AutoPortEnd {
