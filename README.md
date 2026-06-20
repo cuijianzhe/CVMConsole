@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![](https://images.xiaozhuhouses.asia/i/2026/06/06/sudbsi.png)
+<img width="2403" height="1257" alt="sudbsi" src="https://github.com/user-attachments/assets/965011d7-9cf3-4ef4-b39e-7b22fe99a1c8" />
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/qvmconsole/qvmconsole?style=social)](https://github.com/qvmconsole/qvmconsole)
