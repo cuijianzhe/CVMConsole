@@ -174,6 +174,182 @@ press_enter() {
     read -r
 }
 
+# ---- 功能 4: 修改服务端口 ----
+change_port() {
+    echo ""
+    echo -e "${BOLD}========================================${NC}"
+    echo -e "${BOLD}   修改服务端口${NC}"
+    echo -e "${BOLD}========================================${NC}"
+    echo ""
+
+    # 获取当前端口
+    local current_port="${KVM_PORT:-8080}"
+    echo -e "当前端口: ${CYAN}${current_port}${NC}"
+    echo ""
+
+    # 输入新端口
+    echo -ne "${CYAN}请输入新端口号 (1-65535): ${NC}"
+    read -r new_port
+
+    # 验证端口
+    if [ -z "$new_port" ]; then
+        echo -e "${RED}端口号不能为空${NC}"
+        press_enter
+        return
+    fi
+
+    if ! [[ "$new_port" =~ ^[0-9]+$ ]] || [ "$new_port" -lt 1 ] || [ "$new_port" -gt 65535 ]; then
+        echo -e "${RED}无效的端口号: $new_port，请输入 1-65535 之间的数字${NC}"
+        press_enter
+        return
+    fi
+
+    if [ "$new_port" = "$current_port" ]; then
+        echo -e "${YELLOW}新端口与当前端口相同，无需修改${NC}"
+        press_enter
+        return
+    fi
+
+    echo ""
+    echo -e "当前端口: ${RED}${current_port}${NC} → 新端口: ${GREEN}${new_port}${NC}"
+    echo -e "${YELLOW}注意: 修改后需要重启服务才能生效${NC}"
+    echo ""
+
+    # UFW 检测
+    local ufw_active=false
+    if command -v ufw &>/dev/null; then
+        if ufw status 2>/dev/null | grep -q "Status: active"; then
+            ufw_active=true
+            echo -e "${YELLOW}检测到 UFW 防火墙已启用，将自动更新防火墙规则${NC}"
+        else
+            echo -e "${YELLOW}UFW 已安装但未启用，跳过防火墙规则更新${NC}"
+        fi
+    else
+        echo -e "${YELLOW}未检测到 UFW 防火墙${NC}"
+    fi
+    echo ""
+
+    if ! confirm_action "确认修改端口?"; then
+        return
+    fi
+
+    # 更新 .env 文件中的 KVM_PORT
+    if [ ! -f "$ENV_FILE" ]; then
+        echo -e "${RED}错误: .env 文件不存在: ${ENV_FILE}${NC}"
+        press_enter
+        return
+    fi
+
+    echo ""
+    echo -ne "正在更新 .env 文件..."
+    if grep -q "^KVM_PORT=" "$ENV_FILE"; then
+        sed -i "s/^KVM_PORT=.*/KVM_PORT=${new_port}/" "$ENV_FILE"
+    else
+        echo "KVM_PORT=${new_port}" >> "$ENV_FILE"
+    fi
+    echo -e " ${GREEN}完成${NC}"
+    echo -e "${GREEN}✓ KVM_PORT 已更新为 ${new_port}${NC}"
+
+    # UFW 规则更新
+    if $ufw_active; then
+        echo ""
+        # 检查 root 权限（UFW 需要 root）
+        if [ "$(id -u)" -ne 0 ]; then
+            echo -e "${YELLOW}当前非 root 用户，无法自动操作 UFW 防火墙${NC}"
+            echo -e "${YELLOW}请手动执行以下命令:${NC}"
+            echo -e "${CYAN}  sudo ufw allow ${new_port}/tcp${NC}"
+            if [ "$current_port" != "$new_port" ]; then
+                echo -e "${CYAN}  sudo ufw delete allow ${current_port}/tcp${NC}"
+            fi
+        else
+            # 先添加新端口规则（避免锁定自身）
+            echo -ne "正在添加新端口 ${new_port}/tcp 的 UFW 规则..."
+            if ufw allow "${new_port}/tcp" &>/dev/null; then
+                echo -e " ${GREEN}完成${NC}"
+            else
+                echo -e " ${RED}失败${NC}"
+                echo -e "${RED}请手动执行: ufw allow ${new_port}/tcp${NC}"
+            fi
+
+            # 删除旧端口规则（如果存在且不同于新端口）
+            if [ "$current_port" != "$new_port" ]; then
+                if ufw status | grep -qE "^${current_port}/tcp\s"; then
+                    echo -ne "正在删除旧端口 ${current_port}/tcp 的 UFW 规则..."
+                    if ufw delete allow "${current_port}/tcp" &>/dev/null; then
+                        echo -e " ${GREEN}完成${NC}"
+                    else
+                        echo -e " ${YELLOW}删除失败，请手动检查: ufw delete allow ${current_port}/tcp${NC}"
+                    fi
+                else
+                    echo -e "${YELLOW}未找到旧端口 ${current_port}/tcp 的 UFW 规则，跳过删除${NC}"
+                fi
+            fi
+        fi
+    fi
+
+    echo ""
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}  端口修改完成！${NC}"
+    echo -e "${GREEN}  新端口: ${new_port}${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo ""
+
+    # 询问是否立即重启服务
+    local service_name="${KVM_SERVICE_UNIT_NAME:-kvm-console.service}"
+    echo -e "${YELLOW}端口修改需要重启服务才能生效${NC}"
+    echo ""
+
+    if confirm_action "是否立即重启服务?"; then
+        echo ""
+        echo -ne "正在重启服务 ${service_name}..."
+
+        # 检查 root 权限（systemctl restart 需要 root）
+        if [ "$(id -u)" -eq 0 ]; then
+            if systemctl restart "$service_name" &>/dev/null; then
+                echo -e " ${GREEN}完成${NC}"
+                echo -e "${GREEN}✓ 服务已重启，新端口 ${new_port} 已生效${NC}"
+                echo ""
+                # 等待服务完全启动
+                echo -ne "等待服务就绪..."
+                sleep 3
+                if systemctl is-active --quiet "$service_name" 2>/dev/null; then
+                    echo -e " ${GREEN}服务运行中${NC}"
+                    echo -e "${GREEN}✓ 现在可通过 http://<IP>:${new_port} 访问面板${NC}"
+                else
+                    echo -e " ${RED}服务未正常运行${NC}"
+                    echo -e "${YELLOW}请检查: systemctl status ${service_name}${NC}"
+                fi
+            else
+                echo -e " ${RED}重启失败${NC}"
+                echo -e "${YELLOW}请手动执行: systemctl restart ${service_name}${NC}"
+            fi
+        else
+            echo -e "${YELLOW}当前非 root 用户，尝试使用 sudo 重启...${NC}"
+            if sudo systemctl restart "$service_name" &>/dev/null; then
+                echo -e " ${GREEN}完成${NC}"
+                echo -e "${GREEN}✓ 服务已重启，新端口 ${new_port} 已生效${NC}"
+                echo ""
+                sleep 3
+                if systemctl is-active --quiet "$service_name" 2>/dev/null; then
+                    echo -e "${GREEN}✓ 现在可通过 http://<IP>:${new_port} 访问面板${NC}"
+                else
+                    echo -e "${YELLOW}请检查: systemctl status ${service_name}${NC}"
+                fi
+            else
+                echo -e " ${RED}重启失败${NC}"
+                echo -e "${YELLOW}请手动执行: sudo systemctl restart ${service_name}${NC}"
+            fi
+        fi
+    else
+        echo ""
+        echo -e "${YELLOW}请在方便时手动重启服务:${NC}"
+        echo -e "${CYAN}  systemctl restart ${service_name}${NC}"
+    fi
+    echo ""
+
+    press_enter
+}
+
 # ---- 功能 1: 重置默认管理员密码 ----
 reset_admin_password() {
     echo ""
@@ -358,10 +534,11 @@ show_menu() {
     echo -e "  ${BOLD}${GREEN}1${NC}. 重置默认管理员密码 (并清除 TOTP/邮箱绑定)"
     echo -e "  ${BOLD}${GREEN}2${NC}. 清除 TOTP 令牌认证 (选择账户)"
     echo -e "  ${BOLD}${GREEN}3${NC}. 查看所有用户"
+    echo -e "  ${BOLD}${GREEN}4${NC}. 修改服务端口 (自动更新 UFW 防火墙规则)"
     echo ""
     echo -e "  ${BOLD}${RED}0${NC}. 退出"
     echo ""
-    echo -ne "${CYAN}请输入选项 [0-3]: ${NC}"
+    echo -ne "${CYAN}请输入选项 [0-4]: ${NC}"
 }
 
 # ---- 主流程 ----
@@ -377,6 +554,7 @@ main() {
             1) reset_admin_password ;;
             2) clear_totp ;;
             3) list_users ;;
+            4) change_port ;;
             0)
                 echo ""
                 echo -e "${GREEN}再见!${NC}"
