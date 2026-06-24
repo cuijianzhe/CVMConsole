@@ -198,3 +198,31 @@ export function trimUserStorage() {
     method: 'post'
   })
 }
+
+// 获取诊断类别列表
+export function getDiagnosticCategories() {
+  return request({
+    url: '/settings/diagnostics/categories',
+    method: 'get'
+  })
+}
+
+// 导出诊断信息（返回 blob，使用原始 axios 实例避免 JSON 拦截器干扰）
+export async function exportDiagnostics(data) {
+  const baseURL = import.meta.env.VITE_APP_BASE_API || '/api'
+  const { useUserStore } = await import('@/store/user')
+  const userStore = useUserStore()
+  const headers = {}
+  if (userStore.token) {
+    headers.Authorization = `Bearer ${userStore.token}`
+  }
+  const response = await axios({
+    url: baseURL + '/settings/diagnostics/export',
+    method: 'post',
+    data,
+    responseType: 'blob',
+    headers,
+    timeout: 120000 // 诊断收集可能耗时较长
+  })
+  return response.data
+}

@@ -6,7 +6,7 @@
         <el-text type="info">常规配置保存后立即生效并持久化到数据库（重启保留）。宿主机级兼容性选项会写入系统配置文件；若配置了环境变量，环境变量优先。</el-text>
       </div>
 
-      <el-form :model="form" ref="formRef" label-width="180px" style="max-width: 700px;">
+      <el-form :model="form" ref="formRef" label-width="180px">
 
         <el-tabs v-model="activeTab" class="settings-tabs">
           <el-tab-pane label="基础设置" name="basic">
@@ -973,6 +973,52 @@
             </el-form-item>
           </el-tab-pane>
 
+          <el-tab-pane label="诊断导出" name="diagnostics">
+            <el-alert
+              title="此功能收集系统及面板诊断信息用于排查问题。所有数据仅用于诊断分析，不会修改任何系统状态。"
+              type="info"
+              :closable="false"
+              style="margin-bottom: 18px;"
+            />
+
+            <el-form-item label="诊断类别">
+              <div style="width: 100%;">
+                <div style="margin-bottom: 12px;">
+                  <el-button size="small" text @click="toggleAllDiagCategories">
+                    {{ diagSelectedCategories.length === diagCategories.length ? '取消全选' : '全选' }}
+                  </el-button>
+                </div>
+                <el-checkbox-group v-model="diagSelectedCategories" style="display: flex; flex-direction: column; gap: 10px;">
+                  <el-checkbox
+                    v-for="cat in diagCategories"
+                    :key="cat.id"
+                    :value="cat.id"
+                    :label="cat.id"
+                  >
+                    <span style="font-weight: 500;">{{ cat.label }}</span>
+                    <span style="color: var(--el-text-color-secondary); font-size: 12px; margin-left: 8px;">{{ cat.description }}</span>
+                  </el-checkbox>
+                </el-checkbox-group>
+              </div>
+            </el-form-item>
+
+            <el-form-item>
+              <el-button
+                type="primary"
+                :loading="diagExporting"
+                :disabled="diagSelectedCategories.length === 0"
+                @click="handleExportDiagnostics"
+              >
+                <el-icon style="margin-right: 4px;"><Download /></el-icon>
+                收集并导出
+              </el-button>
+              <span v-if="diagExporting" style="margin-left: 12px; color: var(--el-color-primary);">
+                <el-icon class="is-loading"><Loading /></el-icon>
+                正在收集诊断信息，请耐心等待...
+              </span>
+            </el-form-item>
+          </el-tab-pane>
+
           <el-tab-pane label="存储管理" name="storage">
             <el-divider content-position="left">
               <el-icon style="margin-right: 4px;"><FolderOpened /></el-icon>
@@ -1135,8 +1181,8 @@
 
 <script setup>
 import { computed, ref, reactive, onMounted, watch } from 'vue'
-import { Check, Connection, CopyDocument, Cpu, Delete, Download, FirstAidKit, FolderOpened, InfoFilled, Lock, Message, Odometer, Plus, Refresh, Warning } from '@element-plus/icons-vue'
-import { getHostKSMStatus, getHostKVMUnrestrictedGuestStatus, getHostZRAMStatus, getSettings, getCPUAffinityPresets, getUserStorageISOPath, rotateJWTSecret, saveCPUAffinityPresets, testSMTP, updateHostKSMProfile, updateHostKVMUnrestrictedGuest, updateHostZRAMProfile, updateSettings, getLogStatus, deleteLogs, exportLogs, trimUserStorage } from '@/api/settings'
+import { Check, Connection, CopyDocument, Cpu, Delete, Download, FirstAidKit, FolderOpened, InfoFilled, Loading, Lock, Message, Odometer, Plus, Refresh, Warning } from '@element-plus/icons-vue'
+import { getHostKSMStatus, getHostKVMUnrestrictedGuestStatus, getHostZRAMStatus, getSettings, getCPUAffinityPresets, getUserStorageISOPath, rotateJWTSecret, saveCPUAffinityPresets, testSMTP, updateHostKSMProfile, updateHostKVMUnrestrictedGuest, updateHostZRAMProfile, updateSettings, getLogStatus, deleteLogs, exportLogs, trimUserStorage, getDiagnosticCategories, exportDiagnostics } from '@/api/settings'
 import { getAllISOs } from '@/api/infra'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { setSiteTitle } from '@/utils/site'
@@ -1270,6 +1316,11 @@ const exportTableRef = ref(null)
 // 存储回收状态
 const trimming = ref(false)
 const trimResult = ref(null)
+
+// 诊断导出状态
+const diagCategories = ref([])
+const diagSelectedCategories = ref([])
+const diagExporting = ref(false)
 
 const ksmProfileOptions = computed(() => ksmStatus.value?.profiles?.length ? ksmStatus.value.profiles : fallbackKSMProfiles)
 const zramProfileOptions = computed(() => zramStatus.value?.profiles?.length ? zramStatus.value.profiles : fallbackZRAMProfiles)
@@ -1938,10 +1989,64 @@ const handleTrimStorage = async () => {
   }
 }
 
+// ==================== 诊断导出 ====================
+
+const fetchDiagnosticCategories = async () => {
+  try {
+    const res = await getDiagnosticCategories()
+    if (res.code === 200 && res.data) {
+      diagCategories.value = res.data
+      // 默认全选
+      diagSelectedCategories.value = res.data.map(c => c.id)
+    }
+  } catch (err) {
+    console.error('获取诊断类别失败', err)
+  }
+}
+
+const toggleAllDiagCategories = () => {
+  if (diagSelectedCategories.value.length === diagCategories.value.length) {
+    diagSelectedCategories.value = []
+  } else {
+    diagSelectedCategories.value = diagCategories.value.map(c => c.id)
+  }
+}
+
+const handleExportDiagnostics = async () => {
+  if (diagSelectedCategories.value.length === 0) {
+    ElMessage.warning('请至少选择一个诊断类别')
+    return
+  }
+
+  diagExporting.value = true
+  try {
+    const blob = await exportDiagnostics({ categories: diagSelectedCategories.value })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const now = new Date()
+    const dateStr = now.toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    a.href = url
+    a.download = `qvmconsole-diagnostics-${dateStr}.zip`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    ElMessage.success('诊断信息导出成功')
+  } catch (err) {
+    console.error('导出诊断信息失败', err)
+    ElMessage.error('导出诊断信息失败')
+  } finally {
+    diagExporting.value = false
+  }
+}
+
 // 切换到日志管理标签页时自动加载日志状态
 watch(activeTab, (tab) => {
   if (tab === 'log' && logStatus.files.length === 0) {
     fetchLogStatus()
+  }
+  if (tab === 'diagnostics' && diagCategories.value.length === 0) {
+    fetchDiagnosticCategories()
   }
 })
 
@@ -1951,6 +2056,9 @@ onMounted(fetchData)
 <style scoped>
 .settings-container { padding: 10px; }
 h2 { margin: 0 0 8px 0; font-size: 18px; color: var(--el-text-color-primary); }
+.settings-tabs :deep(.el-tab-pane) {
+  max-width: 700px;
+}
 .form-tip {
   display: flex; align-items: center; gap: 4px;
   margin-top: 4px; font-size: 12px; color: #909399;

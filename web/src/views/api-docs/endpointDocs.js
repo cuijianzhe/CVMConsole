@@ -202,6 +202,15 @@ export const endpointGroups = [
         body: 'JSON: files[] 文件名列表',
         response: 'application/zip 二进制流',
         notes: [admin, '将选中的日志文件打包为 ZIP 压缩包下载']
+      }),
+      ep('GET', '/settings/diagnostics/categories', '获取诊断类别列表', {
+        response: 'data: categories[{id,label,description}]',
+        notes: [admin, '返回可用的诊断信息收集类别']
+      }),
+      ep('POST', '/settings/diagnostics/export', '导出诊断信息', {
+        body: 'JSON: categories[] 类别ID列表',
+        response: 'application/zip 二进制流',
+        notes: [admin, '收集选中类别的系统及面板诊断信息，打包为ZIP下载']
       })
     ]
   },
