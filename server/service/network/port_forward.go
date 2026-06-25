@@ -234,19 +234,38 @@ func AddPortForward(params *PortForwardAddParams) error {
 		// 目标端口格式转换
 		destPort := strings.Replace(params.VMPort, ":", "-", 1)
 
-		// DNAT 规则
+		// DNAT 规则 (PREROUTING - 外部流量)
 		cmd := fmt.Sprintf("iptables -t nat -A PREROUTING -d %s -p %s --dport %s -j DNAT --to-destination %s:%s",
 			utils.ShellSingleQuote(hostIP), utils.ShellSingleQuote(proto), utils.ShellSingleQuote(params.HostPort), utils.ShellSingleQuote(params.VMIP), destPort)
 		result := utils.ExecShell(cmd)
 		if result.Error != nil {
-			return fmt.Errorf("添加 %s NAT 规则失败: %s", proto, result.Stderr)
+			return fmt.Errorf("添加 %s PREROUTING NAT 规则失败: %s", proto, result.Stderr)
+		}
+
+		// DNAT 规则 (OUTPUT - 宿主机本地流量，解决本地访问端口转发不生效问题)
+		outputCmd := fmt.Sprintf("iptables -t nat -A OUTPUT -d %s -p %s --dport %s -j DNAT --to-destination %s:%s",
+			utils.ShellSingleQuote(hostIP), utils.ShellSingleQuote(proto), utils.ShellSingleQuote(params.HostPort), utils.ShellSingleQuote(params.VMIP), destPort)
+		outputResult := utils.ExecShell(outputCmd)
+		if outputResult.Error != nil {
+			// 回滚已添加的 PREROUTING DNAT 规则
+			utils.ExecShell(fmt.Sprintf("iptables -t nat -D PREROUTING -d %s -p %s --dport %s -j DNAT --to-destination %s:%s 2>/dev/null",
+				utils.ShellSingleQuote(hostIP), utils.ShellSingleQuote(proto), utils.ShellSingleQuote(params.HostPort), utils.ShellSingleQuote(params.VMIP), destPort))
+			return fmt.Errorf("添加 %s OUTPUT NAT 规则失败: %s", proto, outputResult.Stderr)
 		}
 
 		// 非 VPC 转发继续使用传统 FORWARD 放行；VPC 转发必须经过安全组 ACL。
 		if !isVPCManagedIP(params.VMIP) {
 			fwdCmd := fmt.Sprintf("iptables -I FORWARD -d %s -p %s --dport %s -j ACCEPT",
 				utils.ShellSingleQuote(params.VMIP), utils.ShellSingleQuote(proto), destPort)
-			utils.ExecShell(fwdCmd)
+			fwdResult := utils.ExecShell(fwdCmd)
+			if fwdResult.Error != nil {
+				// 回滚已添加的 PREROUTING 和 OUTPUT DNAT 规则
+				utils.ExecShell(fmt.Sprintf("iptables -t nat -D PREROUTING -d %s -p %s --dport %s -j DNAT --to-destination %s:%s 2>/dev/null",
+					utils.ShellSingleQuote(hostIP), utils.ShellSingleQuote(proto), utils.ShellSingleQuote(params.HostPort), utils.ShellSingleQuote(params.VMIP), destPort))
+				utils.ExecShell(fmt.Sprintf("iptables -t nat -D OUTPUT -d %s -p %s --dport %s -j DNAT --to-destination %s:%s 2>/dev/null",
+					utils.ShellSingleQuote(hostIP), utils.ShellSingleQuote(proto), utils.ShellSingleQuote(params.HostPort), utils.ShellSingleQuote(params.VMIP), destPort))
+				return fmt.Errorf("添加 %s FORWARD 放行规则失败: %s", proto, fwdResult.Stderr)
+			}
 		}
 
 		// 无论宿主机防火墙当前是否启用，都写入 UFW 持久规则，避免下次开启后拦截已有端口转发。
@@ -407,8 +426,15 @@ func deletePortForwardWithOptions(ruleID int, preserveProbeState bool) error {
 		DestPort: destPort,
 	}.StableKey()
 
-	// 删除 NAT 规则
+	// 删除 NAT 规则 (PREROUTING)
 	utils.ExecShell(fmt.Sprintf("iptables -t nat -D PREROUTING %d", ruleID))
+
+	// 删除 NAT 规则 (OUTPUT - 清理本地流量 DNAT)
+	if hostPort != "" {
+		utils.ExecShell(fmt.Sprintf(
+			"iptables -t nat -D OUTPUT -d %s -p %s --dport %s -j DNAT --to-destination %s:%s 2>/dev/null",
+			utils.ShellSingleQuote(getHostIP()), utils.ShellSingleQuote(proto), utils.ShellSingleQuote(hostPort), utils.ShellSingleQuote(destIP), utils.ShellSingleQuote(destPort)))
+	}
 
 	// 删除 FORWARD 规则
 	if destIP != "" && destPort != "" {

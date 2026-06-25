@@ -33,15 +33,22 @@ func idempotentIPTablesAddLine(line string) string {
 
 func normalizePortForwardIPTablesLine(line string) string {
 	line = strings.TrimSpace(line)
-	if !strings.Contains(line, " PREROUTING") || !strings.Contains(line, " DNAT") || strings.Contains(line, " -t nat ") {
+	if !strings.Contains(line, " DNAT") || strings.Contains(line, " -t nat ") {
 		return line
 	}
-	replacer := strings.NewReplacer(
-		"iptables -A PREROUTING", "iptables -t nat -A PREROUTING",
-		"iptables -C PREROUTING", "iptables -t nat -C PREROUTING",
-		"iptables -D PREROUTING", "iptables -t nat -D PREROUTING",
-	)
-	return replacer.Replace(line)
+	// 为 PREROUTING 和 OUTPUT 链的 DNAT 规则补充 -t nat
+	if strings.Contains(line, " PREROUTING") || strings.Contains(line, " OUTPUT") {
+		replacer := strings.NewReplacer(
+			"iptables -A PREROUTING", "iptables -t nat -A PREROUTING",
+			"iptables -C PREROUTING", "iptables -t nat -C PREROUTING",
+			"iptables -D PREROUTING", "iptables -t nat -D PREROUTING",
+			"iptables -A OUTPUT", "iptables -t nat -A OUTPUT",
+			"iptables -C OUTPUT", "iptables -t nat -C OUTPUT",
+			"iptables -D OUTPUT", "iptables -t nat -D OUTPUT",
+		)
+		return replacer.Replace(line)
+	}
+	return line
 }
 
 func restorePortForwardCommand(line, hostIP string) error {
@@ -129,11 +136,23 @@ func SavePortForwardRules() error {
 	// 导出规则
 	script := fmt.Sprintf("#!/bin/bash\n# KVM 端口转发规则 - 自动生成\nHOST_IP=\"%s\"\n\n", hostIP)
 
-	// DNAT 规则
-	script += "# === DNAT 转发规则 ===\n"
+	// DNAT 规则 (PREROUTING - 外部流量)
+	script += "# === DNAT 转发规则 (PREROUTING - 外部流量) ===\n"
 	dnatResult := utils.ExecShellQuiet("iptables -t nat -S PREROUTING 2>/dev/null | grep DNAT")
 	if dnatResult.Stdout != "" {
 		for _, line := range strings.Split(dnatResult.Stdout, "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				script += idempotentIPTablesAddLine("iptables -t nat "+line) + "\n"
+			}
+		}
+	}
+
+	// DNAT 规则 (OUTPUT - 宿主机本地流量)
+	script += "\n# === DNAT 转发规则 (OUTPUT - 宿主机本地流量) ===\n"
+	outputDnatResult := utils.ExecShellQuiet("iptables -t nat -S OUTPUT 2>/dev/null | grep DNAT")
+	if outputDnatResult.Stdout != "" {
+		for _, line := range strings.Split(outputDnatResult.Stdout, "\n") {
 			line = strings.TrimSpace(line)
 			if line != "" {
 				script += idempotentIPTablesAddLine("iptables -t nat "+line) + "\n"

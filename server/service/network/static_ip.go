@@ -585,8 +585,15 @@ func RemovePortForwardsForIP(targetIP string) {
 			}
 		}
 
-		// 删除 NAT 规则
+		// 删除 NAT 规则 (PREROUTING)
 		utils.ExecShell(fmt.Sprintf("iptables -t nat -D PREROUTING %d", id))
+
+		// 删除 NAT 规则 (OUTPUT - 本地流量 DNAT)
+		if hostPort != "" {
+			utils.ExecShell(fmt.Sprintf(
+				"iptables -t nat -D OUTPUT -d %s -p %s --dport %s -j DNAT --to-destination %s:%s 2>/dev/null",
+				utils.ShellSingleQuote(getHostIP()), utils.ShellSingleQuote(proto), utils.ShellSingleQuote(hostPort), utils.ShellSingleQuote(targetIP), utils.ShellSingleQuote(destPort)))
+		}
 
 		// 删除 FORWARD 规则
 		if destPort != "" {
