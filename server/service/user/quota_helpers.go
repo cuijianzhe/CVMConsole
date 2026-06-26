@@ -27,14 +27,15 @@ func GetVMCPUAndMemory(vmName string) (cpu int, memMB int) {
 	return cpu, memMB
 }
 
-// getVMDiskCapacityGB 获取VM的磁盘配置容量（GB）
+// getVMDiskCapacityGB 获取VM的所有磁盘配置容量之和（GB）
 func getVMDiskCapacityGB(vmName string) int {
-	// 获取主磁盘路径
+	// 获取磁盘列表
 	blkResult := utils.ExecCommand("virsh", "domblklist", vmName)
 	if blkResult.Error != nil {
 		return 0
 	}
 
+	totalGB := 0
 	lines := strings.Split(blkResult.Stdout, "\n")
 	for _, line := range lines {
 		fields := strings.Fields(line)
@@ -44,29 +45,12 @@ func getVMDiskCapacityGB(vmName string) int {
 				continue
 			}
 
-			// 使用 qemu-img info 获取虚拟大小（配置容量）
-			imgResult := utils.ExecShell(fmt.Sprintf(
-				"qemu-img info -U %s 2>/dev/null | grep 'virtual size'", utils.ShellSingleQuote(diskPath)))
-			if imgResult.Error == nil && imgResult.Stdout != "" {
-				// 格式: virtual size: 50 GiB (53687091200 bytes)
-				re := regexp.MustCompile(`virtual size:\s*([\d.]+)\s*(GiB|GB|MiB|MB|TiB|TB)`)
-				if matches := re.FindStringSubmatch(imgResult.Stdout); len(matches) > 2 {
-					sizeFloat, _ := strconv.ParseFloat(matches[1], 64)
-					switch matches[2] {
-					case "TiB", "TB":
-						return int(sizeFloat * 1024)
-					case "GiB", "GB":
-						return int(sizeFloat)
-					case "MiB", "MB":
-						return int(sizeFloat / 1024)
-					}
-				}
-			}
-			break // 只统计第一个非ISO磁盘
+			// 累加每个非ISO磁盘的配置容量
+			totalGB += getDiskFileCapacityGB(diskPath)
 		}
 	}
 
-	return 0
+	return totalGB
 }
 
 // GetVMDiskDevCapacityGB 获取指定VM的指定磁盘设备的虚拟容量（GB）
