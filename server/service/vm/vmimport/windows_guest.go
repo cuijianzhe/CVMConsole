@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"kvm_console/config"
 	"kvm_console/service"
 	"kvm_console/service/arch"
 	vm_memory "kvm_console/service/vm/memory"
@@ -160,6 +161,12 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 	if err != nil {
 		_ = os.Remove(destDiskPath)
 		return err
+	}
+
+	// SPICE graphics（默认本地监听），与 VNC 共存
+	if config.GlobalConfig.SpiceEnabledByDefault {
+		vmXML = service.InjectSPICEGraphicsToDomainXML(vmXML, "", "127.0.0.1")
+		vmXML = service.EnsureQXLVideo(vmXML)
 	}
 
 	xmlPath := fmt.Sprintf("/tmp/_vm-import-%s.xml", params.Name)
@@ -319,6 +326,12 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 	if err != nil {
 		_ = os.Remove(destDiskPath)
 		return err
+	}
+
+	// SPICE graphics（默认本地监听），与 VNC 共存
+	if config.GlobalConfig.SpiceEnabledByDefault {
+		vmXML = service.InjectSPICEGraphicsToDomainXML(vmXML, "", "127.0.0.1")
+		vmXML = service.EnsureQXLVideo(vmXML)
 	}
 
 	xmlPath := fmt.Sprintf("/tmp/_vm-importd-%s.xml", params.Name)
