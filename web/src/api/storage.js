@@ -26,25 +26,61 @@ export function getStorageFiles(category) {
   })
 }
 
-// 上传文件
-export function uploadStorageFile(category, formData, onProgress) {
+// ---- 分片上传（断点续传 + 秒传）----
+
+// 初始化/恢复上传会话（含秒传判断）
+export function storageUploadInit(data) {
   return request({
-    url: `/self/storage/upload/${category}`,
+    url: '/self/storage/upload/init',
     method: 'post',
-    data: formData,
-    timeout: 0, // 大文件上传不超时
-    maxContentLength: Infinity, // 不限制请求体大小
-    maxBodyLength: Infinity,    // 不限制请求体大小
-    onUploadProgress: onProgress
+    data
   })
 }
 
-// 大文件上传检测：查询服务器是否因 /tmp 空间不足启用了落盘模式
-export function checkLargeUpload(fileSize) {
+// 上传单个分片（multipart: file, session_key, index）
+export function storageUploadChunk(formData) {
   return request({
-    url: '/self/storage/upload-check',
+    url: '/self/storage/upload/chunk',
+    method: 'post',
+    data: formData,
+    timeout: 0, // 单分片不超时
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity
+  })
+}
+
+// 全部分片到齐后完成校验
+export function storageUploadComplete(data) {
+  return request({
+    url: '/self/storage/upload/complete',
+    method: 'post',
+    data
+  })
+}
+
+// 查询上传进度（断点续传/继续上传）
+export function storageUploadStatus(path) {
+  return request({
+    url: '/self/storage/upload/status',
     method: 'get',
-    params: { size: fileSize }
+    params: { path }
+  })
+}
+
+// 取消上传（删除未完成文件与会话）
+export function storageUploadCancel(path) {
+  return request({
+    url: '/self/storage/upload',
+    method: 'delete',
+    params: { path }
+  })
+}
+
+// 列出未完成的上传会话（主动恢复）
+export function getPendingUploads() {
+  return request({
+    url: '/self/storage/upload/pending',
+    method: 'get'
   })
 }
 
@@ -120,18 +156,5 @@ export function importVM(data) {
     url: '/self/vm/import',
     method: 'post',
     data
-  })
-}
-
-// 上传磁盘文件
-export function uploadDiskFile(formData, onProgress) {
-  return request({
-    url: '/self/storage/upload/disk',
-    method: 'post',
-    data: formData,
-    timeout: 0, // 大文件上传不超时
-    maxContentLength: Infinity, // 不限制请求体大小
-    maxBodyLength: Infinity,    // 不限制请求体大小
-    onUploadProgress: onProgress
   })
 }

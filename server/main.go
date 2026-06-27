@@ -100,6 +100,7 @@ func main() {
 	service.StartPortForwardHTTPProbeScheduler()
 	service.StartVMScheduleRunner()
 	service.StartJWTSecretRotator()
+	service.StartExpiredUploadSessionCleanup() // 清理过期分片上传会话
 
 	// 同步 SSH 拒绝配置（确保与数据库状态一致）
 	service.SyncSSHDenyConfig()

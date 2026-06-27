@@ -22,7 +22,8 @@ var largeBodyPaths = []string{
 
 // largeBodyPrefixes 允许大请求体的路径前缀（用于动态路径参数的接口，如文件上传 /api/self/storage/upload/:category）
 var largeBodyPrefixes = []string{
-	"/api/self/storage/upload/",
+	"/api/self/storage/upload/chunk",
+	"/api/template/upload/chunk",
 }
 
 func RequestGuardMiddleware() gin.HandlerFunc {

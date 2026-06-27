@@ -64,7 +64,10 @@ func InitDB() {
 	}
 
 	var err error
-	DB, err = gorm.Open(sqlite.Open(config.GlobalConfig.DBPath), &gorm.Config{
+	// SQLite 并发写配置：WAL 模式 + busy_timeout + 立即事务锁。
+	// 默认配置下并发写会立即返回 SQLITE_BUSY；分片上传等并发写入必须等待重试，而非静默失败。
+	dsn := config.GlobalConfig.DBPath + "?_busy_timeout=5000&_journal_mode=WAL&_txlock=immediate"
+	DB, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: &gormAppLogger{},
 	})
 	if err != nil {
@@ -89,7 +92,7 @@ func InitDB() {
 	if err := DB.AutoMigrate(&User{}, &UserAPIKey{}, &VmStatsRecord{}, &PortForwardIP{}, &PortForwardWhitelist{}, &PortForwardProbeState{}, &HostStatsRecord{}, &UserTrafficDaily{}, &SystemSetting{}, &VMCredential{}, &VMCache{}, &AuthActionToken{}, &SecurityChallenge{}, &SchedulerEvent{}, &VMSchedule{}, &NetworkBridge{}, &HostStoragePool{}, &HostNode{},
 		&LightweightVMQuota{}, &LightweightVMTrafficMonthly{}, &LightweightVMRegistration{},
 		&VPCSwitch{}, &VPCSecurityGroup{}, &VPCSecurityGroupRule{}, &VPCVMBinding{}, &VPCSwitchTrafficMonthly{}, &PublicIP{}, &PublicIPBinding{},
-		&VMLock{}); err != nil {
+		&VMLock{}, &UploadSession{}); err != nil {
 		logger.App.Error("数据库迁移失败", "error", err)
 		os.Exit(1)
 	}

@@ -133,7 +133,7 @@
       </div>
     </div>
 
-    <el-dialog v-model="importDialogVisible" title="导入模板包" width="860px" :close-on-click-modal="false" append-to-body>
+    <el-dialog v-model="importDialogVisible" title="导入模板包" width="860px" :close-on-click-modal="false" append-to-body @close="onImportDialogClose">
       <el-form :model="importForm" label-width="110px">
         <el-form-item label="导入来源" required>
           <el-radio-group v-model="importForm.import_mode">
@@ -408,6 +408,8 @@ import {
   confirmImportTemplate,
   exportTemplate,
 } from '@/api/vm'
+import { templateUploadInit, templateUploadChunk, templateUploadComplete, templateUploadCancel } from '@/api/template'
+import { ChunkUploader } from '@/utils/chunkUploader'
 import {
   LINUX_TEMPLATE_CATEGORY_OPTIONS,
   WINDOWS_TEMPLATE_CATEGORY_OPTIONS,
@@ -433,6 +435,8 @@ const importProgress = ref(0)
 const importFileList = ref([])
 const importRawFile = ref(null)
 const importPreview = ref(null)
+const currentTemplateUploader = ref(null)
+const templateSessionKey = ref('') // 分片上传产出的临时包路径，未导入而关闭时据此清理
 const importForm = ref({ import_mode: 'upload', source_path: '' })
 
 const publishDialogVisible = ref(false)
@@ -769,6 +773,7 @@ const resetImportForm = () => {
   importUploading.value = false
   importProgress.value = 0
   importPreview.value = null
+  templateSessionKey.value = ''
   importForm.value = { import_mode: 'upload', source_path: '' }
 }
 
@@ -779,7 +784,17 @@ const openImportDialog = () => {
 
 const closeImportDialog = () => {
   if (importSubmitting.value || importConfirming.value) return
-  importDialogVisible.value = false
+  importDialogVisible.value = false // 关闭后由 onImportDialogClose 统一清理临时包并重置
+}
+
+// 对话框关闭（取消按钮 / X / ESC / 确认导入后）统一回调：
+// 若尚未确认导入，则清理已上传的临时模板包，避免残留。
+const onImportDialogClose = () => {
+  const path = templateSessionKey.value
+  if (path) {
+    templateSessionKey.value = ''
+    templateUploadCancel(path).catch(() => {})
+  }
   resetImportForm()
 }
 
@@ -803,37 +818,44 @@ const handleImportFileExceed = (files) => {
   ElMessage.warning('一次只能选择一个文件，已替换为最新选择')
 }
 
-const buildImportFormData = () => {
-  const formData = new FormData()
-  if (importForm.value.import_mode === 'upload') {
-    if (!importRawFile.value) {
-      ElMessage.warning('请选择模板包')
-      return null
-    }
-    formData.append('file', importRawFile.value)
-  } else {
-    const sourcePath = (importForm.value.source_path || '').trim()
-    if (!sourcePath || !sourcePath.startsWith('/')) {
-      ElMessage.warning('请输入宿主机上的绝对路径')
-      return null
-    }
-    formData.append('source_path', sourcePath)
-  }
-  return formData
-}
-
 const handleImportPreview = async () => {
-  const formData = buildImportFormData()
-  if (!formData) return
   importSubmitting.value = true
-  importUploading.value = importForm.value.import_mode === 'upload'
-  importProgress.value = 0
   try {
-    const res = await previewImportTemplate(formData, importUploading.value
-      ? (event) => {
-          if (event.total > 0) importProgress.value = Math.min(100, Math.round((event.loaded / event.total) * 100))
-        }
-      : undefined)
+    let sourcePath = ''
+    if (importForm.value.import_mode === 'upload') {
+      if (!importRawFile.value) {
+        ElMessage.warning('请选择模板包')
+        return
+      }
+      importUploading.value = true
+      importProgress.value = 0
+      // 分片上传模板包到导入临时目录（断点续传 + 秒传）
+      const uploader = new ChunkUploader({
+        init: templateUploadInit,
+        chunk: templateUploadChunk,
+        complete: templateUploadComplete,
+      })
+      currentTemplateUploader.value = uploader
+      const { sessionKey } = await uploader.upload(importRawFile.value, {}, {
+        onUploadProgress: (ratio) => {
+          importProgress.value = Math.round(ratio * 100)
+        },
+      })
+      sourcePath = sessionKey
+      templateSessionKey.value = sessionKey // 记录临时包路径，未导入而关闭时清理
+      importUploading.value = false
+    } else {
+      sourcePath = (importForm.value.source_path || '').trim()
+      if (!sourcePath || !sourcePath.startsWith('/')) {
+        ElMessage.warning('请输入宿主机上的绝对路径')
+        return
+      }
+    }
+
+    // 解析预览：以分片上传产出的临时路径（或主机路径）作为来源
+    const formData = new FormData()
+    formData.append('source_path', sourcePath)
+    const res = await previewImportTemplate(formData)
     importPreview.value = res.data?.preview || null
     ElMessage.success(res.message || '模板包解析完成')
   } catch (err) {
@@ -841,6 +863,7 @@ const handleImportPreview = async () => {
   } finally {
     importSubmitting.value = false
     importUploading.value = false
+    currentTemplateUploader.value = null
   }
 }
 
@@ -853,8 +876,8 @@ const handleImportConfirm = async () => {
   try {
     const res = await confirmImportTemplate(importPreview.value.token)
     ElMessage.success(res.message || '模板导入任务已提交，请在任务中心查看进度')
+    templateSessionKey.value = '' // 已导入，临时包交给导入任务，onImportDialogClose 不再清理
     importDialogVisible.value = false
-    resetImportForm()
     fetchData()
   } catch (err) {
     console.error('确认导入模板失败', err)

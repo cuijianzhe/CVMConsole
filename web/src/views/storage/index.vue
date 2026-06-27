@@ -11,6 +11,23 @@
 
     <!-- 已初始化 -->
     <template v-if="storageInfo.initialized">
+      <!-- 未完成的上传（断点续传 · 主动恢复） -->
+      <el-card v-if="pendingUploads.length" class="quota-card">
+        <template #header>
+          <span>未完成的上传（可继续或取消）</span>
+        </template>
+        <div v-for="item in pendingUploads" :key="item.session_key" style="display:flex; align-items:center; gap:12px; padding:6px 0;">
+          <el-tag size="small" :type="item.category === 'iso' ? 'success' : item.category === 'disk' ? 'warning' : 'info'">
+            {{ categoryLabel(item.category) }}
+          </el-tag>
+          <span style="flex-shrink:0; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" :title="item.file_name">{{ item.file_name }}</span>
+          <el-progress :percentage="item.progress" :stroke-width="10" style="flex:1; min-width:120px;" />
+          <el-button size="small" type="primary" @click="resumeUpload(item)">继续</el-button>
+          <el-button size="small" type="danger" plain @click="cancelPending(item)">取消</el-button>
+        </div>
+      </el-card>
+      <input ref="resumeFileInput" type="file" style="display:none" @change="onResumeFileChange" />
+
       <!-- 配额概览 -->
       <el-card class="quota-card">
         <template #header>
@@ -168,14 +185,26 @@
     </template>
 
     <!-- 上传进度对话框 -->
-    <el-dialog v-model="uploadDialogVisible" title="上传文件" width="450px" :close-on-click-modal="false" append-to-body>
+    <el-dialog v-model="uploadDialogVisible" title="上传文件" width="480px" :close-on-click-modal="false" :before-close="onUploadDialogClose" append-to-body>
       <div v-if="uploadingFile" style="text-align: center;">
-        <p style="margin-bottom: 12px;">{{ uploadingFile.name }}</p>
-        <el-progress :percentage="uploadProgress" :status="uploadProgress >= 100 && uploadStatus !== 'writing' ? 'success' : ''" />
-        <p v-if="uploadStatus === 'writing'" style="margin-top: 12px; color: var(--el-color-warning);">
+        <p style="margin-bottom: 12px; word-break: break-all;">{{ uploadingFile.name }}</p>
+        <el-progress :percentage="uploadProgress" :status="uploadProgress >= 100 ? 'success' : ''" />
+        <p v-if="uploadStatus === 'hashing'" style="margin-top: 12px; color: var(--el-text-color-secondary);">
           <el-icon style="vertical-align: middle;"><Loading /></el-icon>
-          正在写入物理磁盘，请稍等...
+          正在校验文件，准备分片上传...
         </p>
+        <p v-else-if="uploadStatus === 'uploading'" style="margin-top: 12px; color: var(--el-text-color-secondary);">
+          分片上传中（1MB / 片，并发 3）{{ uploadPaused ? ' · 已暂停' : '' }}
+        </p>
+        <p v-else-if="uploadStatus === 'done'" style="margin-top: 12px; color: var(--el-color-success);">
+          上传完成，正在校验并落盘...
+        </p>
+        <div v-if="uploadStatus === 'uploading' || uploadStatus === 'hashing'" style="margin-top: 16px;">
+          <el-button v-if="uploadStatus === 'uploading'" size="small" @click="togglePauseUpload">
+            {{ uploadPaused ? '继续' : '暂停' }}
+          </el-button>
+          <el-button size="small" type="danger" plain @click="cancelUpload">取消</el-button>
+        </div>
       </div>
     </el-dialog>
 
@@ -238,7 +267,8 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getStorageInfo, initStorage, getStorageFiles, uploadStorageFile, deleteStorageFile, getStorageDownloadUrl, mountStorage, unmountStorage, getUserMounts, checkLargeUpload } from '@/api/storage'
+import { getStorageInfo, initStorage, getStorageFiles, storageUploadInit, storageUploadChunk, storageUploadComplete, storageUploadCancel, getPendingUploads, deleteStorageFile, getStorageDownloadUrl, mountStorage, unmountStorage, getUserMounts } from '@/api/storage'
+import { ChunkUploader } from '@/utils/chunkUploader'
 import { getSelfVMs } from '@/api/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
@@ -247,6 +277,51 @@ import { copyTextWithFallback } from '@/utils/clipboard'
 // 存储池信息
 const storageInfo = ref({})
 const initLoading = ref(false)
+
+// 未完成上传（断点续传主动恢复）
+const pendingUploads = ref([])
+const resumeCategory = ref('')
+const resumeFileInput = ref(null)
+
+const loadPendingUploads = async () => {
+  try {
+    const res = await getPendingUploads()
+    pendingUploads.value = res.data || []
+  } catch (err) {
+    console.error(err)
+  }
+}
+
+const categoryLabel = (cat) => ({ iso: 'ISO', share: '共享', disk: '磁盘' }[cat] || cat)
+
+// 继续上传：弹出文件选择器，用户选回同一文件后走 handleUpload（init 会校验 hash 并续传）
+const resumeUpload = (item) => {
+  resumeCategory.value = item.category
+  const accept = item.category === 'iso' ? '.iso'
+    : item.category === 'disk' ? '.qcow2,.raw,.vmdk,.vhd,.vhdx,.img' : ''
+  if (resumeFileInput.value) {
+    resumeFileInput.value.setAttribute('accept', accept)
+    resumeFileInput.value.value = ''
+    resumeFileInput.value.click()
+  }
+}
+
+const onResumeFileChange = (e) => {
+  const file = e.target.files && e.target.files[0]
+  if (file) {
+    handleUpload({ raw: file }, resumeCategory.value).finally(() => loadPendingUploads())
+  }
+}
+
+const cancelPending = async (item) => {
+  try {
+    await ElMessageBox.confirm(`取消上传「${item.file_name}」并删除已传部分？`, '提示', { type: 'warning' })
+    await storageUploadCancel(item.session_key)
+    ElMessage.success('已取消')
+    loadPendingUploads()
+    loadStorageInfo()
+  } catch {}
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -271,7 +346,9 @@ const filesLoading = ref(false)
 const uploadDialogVisible = ref(false)
 const uploadingFile = ref(null)
 const uploadProgress = ref(0)
-const uploadStatus = ref('uploading') // 'uploading' | 'writing'
+const uploadStatus = ref('idle') // hashing | uploading | done
+const uploadPaused = ref(false)
+const currentUploader = ref(null) // ChunkUploader 实例
 
 // 挂载
 const mountDialogVisible = ref(false)
@@ -354,7 +431,7 @@ const loadFiles = async (tab) => {
   }
 }
 
-// 上传文件
+// 上传文件（分片 + 断点续传 + 秒传）
 const handleUpload = async (uploadFile, category) => {
   const file = uploadFile.raw
   if (!file) return
@@ -386,50 +463,75 @@ const handleUpload = async (uploadFile, category) => {
     // 预检查失败不阻止上传，由后端兜底
   }
 
-  // 大文件落盘检测：如果服务器因 /tmp 为 tmpfs 启用了落盘模式，提示用户上传速度可能受限
-  try {
-    const checkRes = await checkLargeUpload(file.size)
-    const checkData = checkRes.data || {}
-    if (checkData.large_upload) {
-      await ElMessageBox.confirm(
-        checkData.warning || '由于文件较大，文件将实时改为落盘机制，上传速度可能会受限于磁盘写入速度。推荐在弱网环境下使用SFTP方式',
-        '大文件上传提示',
-        { confirmButtonText: '继续上传', cancelButtonText: '取消', type: 'warning' }
-      )
-    }
-  } catch (err) {
-    // 用户取消或 check API 失败时继续上传（失败不阻止）
-    if (err === 'cancel' || err === 'close') {
-      return
-    }
-  }
-
   uploadingFile.value = file
   uploadProgress.value = 0
-  uploadStatus.value = 'uploading'
+  uploadStatus.value = 'hashing'
+  uploadPaused.value = false
   uploadDialogVisible.value = true
 
-  const formData = new FormData()
-  formData.append('file', file)
+  const uploader = new ChunkUploader({
+    init: storageUploadInit,
+    chunk: storageUploadChunk,
+    complete: storageUploadComplete,
+  })
+  currentUploader.value = uploader
 
   try {
-    await uploadStorageFile(category, formData, (e) => {
-      if (e.total > 0) {
-        uploadProgress.value = Math.round((e.loaded / e.total) * 100)
-        // 上传字节完成后，后端正在 io.Copy + Sync 刷盘，切换为写入状态
-        if (e.loaded >= e.total) {
-          uploadStatus.value = 'writing'
-        }
-      }
+    await uploader.upload(file, { category }, {
+      onHashProgress: () => { uploadStatus.value = 'hashing' },
+      onUploadProgress: (ratio) => {
+        uploadStatus.value = 'uploading'
+        uploadProgress.value = Math.round(ratio * 100)
+      },
     })
+    uploadProgress.value = 100
+    uploadStatus.value = 'done'
     ElMessage.success('文件上传成功')
     uploadDialogVisible.value = false
     loadFiles(category)
     loadStorageInfo() // 刷新配额
+    loadPendingUploads() // 成功后会话已 completed，从未完成列表移除
   } catch (err) {
-    ElMessage.error('上传失败')
+    if (uploader.state === 'canceled') {
+      ElMessage.info('已取消上传')
+      if (uploader.sessionKey) {
+        storageUploadCancel(uploader.sessionKey).catch(() => {})
+      }
+    } else {
+      ElMessage.error('上传失败：' + (err?.message || '请重试'))
+    }
     uploadDialogVisible.value = false
+  } finally {
+    currentUploader.value = null
   }
+}
+
+// 暂停 / 继续
+const togglePauseUpload = () => {
+  const uploader = currentUploader.value
+  if (!uploader) return
+  if (uploadPaused.value) {
+    uploader.resume()
+    uploadPaused.value = false
+  } else {
+    uploader.pause()
+    uploadPaused.value = true
+  }
+}
+
+// 取消上传
+const cancelUpload = () => {
+  if (currentUploader.value) currentUploader.value.cancel()
+}
+
+// 对话框关闭拦截：上传中先取消，由 upload() 的 catch 负责关闭
+const onUploadDialogClose = (done) => {
+  const uploader = currentUploader.value
+  if (uploader && uploader.state !== 'done') {
+    uploader.cancel()
+    return
+  }
+  done()
 }
 
 // 删除文件
@@ -535,6 +637,7 @@ const handleUnmount = async (row) => {
 
 onMounted(() => {
   loadStorageInfo()
+  loadPendingUploads()
   // 延迟加载文件列表（等存储信息返回后再加载）
   setTimeout(() => {
     if (storageInfo.value.initialized) {
