@@ -159,6 +159,41 @@ detect_arch() {
     info "检测到 CPU 架构: ${ARCH}"
 }
 
+check_locale() {
+    local lang="${LANG:-}"
+    local lc_all="${LC_ALL:-}"
+    local current="${lc_all:-$lang}"
+
+    # 如果 LANG 和 LC_ALL 都为空，尝试用 locale 命令获取
+    if [ -z "$current" ]; then
+        current=$(locale 2>/dev/null | awk -F= '/^LANG=/ {print $2}' | tr -d '"' || true)
+    fi
+
+    if [[ "$current" =~ ^en_US\.UTF-8 ]] || [[ "$current" =~ ^C\.UTF-8 ]] || [[ "$current" =~ ^POSIX\.UTF-8 ]]; then
+        info "系统语言环境: ${current}"
+        return 0
+    fi
+
+    cat >&2 <<EOF
+
+[ERROR] 系统语言环境不是英文 UTF-8。
+
+当前检测到: LANG=${lang:-（空）}${lc_all:+ , LC_ALL=${lc_all}}
+
+QVMConsole 大部分功能依赖命令返回的信息进行正确识别，
+非英文环境下可能导致错误匹配逻辑失效。造成功能异常
+
+请将系统语言环境设置为 en_US.UTF-8 后重启系统再执行安装，例如：
+
+    sudo localectl set-locale LANG=en_US.UTF-8
+    # 或
+    export LANG=en_US.UTF-8
+
+然后重新运行此安装脚本。
+EOF
+    exit 1
+}
+
 check_arch() {
     detect_arch
 }
@@ -1154,6 +1189,7 @@ main() {
     check_root
     check_os
     check_arch
+    check_locale
     choose_mode
 
     case "$MODE" in
