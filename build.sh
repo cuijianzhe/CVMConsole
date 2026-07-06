@@ -186,6 +186,13 @@ if [ "$SKIP_BACKEND" = false ]; then
         info "构建 zig 兼容版..."
 
         # CGO 编译检测：优先使用 zig，回退到 gcc 交叉编译器
+        # 注意：必须显式设置 CGO_CFLAGS 禁止 FMA/AVX2 指令生成，否则新版 GCC 可能在
+        #       浮点运算中自动使用 vfmadd 等 FMA3 指令，导致 Ivy Bridge 等旧 CPU 上 SIGILL
+        compat_cgo_cflags="-O2"
+        if [ "$TARGET_ARCH" = "amd64" ]; then
+            compat_cgo_cflags="-O2 -mno-avx2 -mno-fma -mno-avx"
+        fi
+
         if [ "${CGO_ENABLED:-1}" = "1" ]; then
             if command -v zig &>/dev/null; then
                 if [ "$IS_CROSS_COMPILE" = true ]; then
@@ -218,7 +225,11 @@ if [ "$SKIP_BACKEND" = false ]; then
             fi
         fi
 
-        CGO_ENABLED=${CGO_ENABLED:-1} GOOS=linux GOARCH="$GOARCH_VALUE" \
+        # 清理 Go build cache 以确保 CC/CGO_CFLAGS 变更生效（防止复用 native 构建的缓存对象）
+        info "清理 Go build cache（确保兼容版独立编译）..."
+        go clean -cache
+
+        CGO_ENABLED=${CGO_ENABLED:-1} CGO_CFLAGS="$compat_cgo_cflags" GOOS=linux GOARCH="$GOARCH_VALUE" \
             go build \
             -ldflags="-s -w \
                 -X main.Version=${BUILD_VERSION} \

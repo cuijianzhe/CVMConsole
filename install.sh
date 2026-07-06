@@ -1566,10 +1566,17 @@ install_files() {
         fi
 
         if [ "$need_compat" = false ]; then
-            info "GLIBC ≥ 2.34，切换宿主机原生版为主程序（兼容版保留为 kvm-console-compat）"
-            mv -f "${INSTALL_DIR}/kvm-console" "${INSTALL_DIR}/kvm-console-compat"
-            mv -f "${INSTALL_DIR}/kvm-console-native" "${INSTALL_DIR}/kvm-console"
-            success "已切换为宿主机原生版"
+            # 额外检测 CPU 是否支持 AVX2+FMA（native 版可能使用这些指令）
+            # Ivy Bridge 等 CPU 仅支持 AVX1，运行含 FMA/AVX2 的二进制会 SIGILL 崩溃
+            if [ "$ARCH" = "x86_64" ] && ! grep -q 'avx2' /proc/cpuinfo 2>/dev/null; then
+                warn "CPU 不支持 AVX2/FMA 指令集，保留 zig 兼容版作为主程序（原生版可能崩溃）"
+                info "原生版保留为 kvm-console-native，可手动测试切换"
+            else
+                info "GLIBC ≥ 2.34 且 CPU 支持 AVX2，切换宿主机原生版为主程序（兼容版保留为 kvm-console-compat）"
+                mv -f "${INSTALL_DIR}/kvm-console" "${INSTALL_DIR}/kvm-console-compat"
+                mv -f "${INSTALL_DIR}/kvm-console-native" "${INSTALL_DIR}/kvm-console"
+                success "已切换为宿主机原生版"
+            fi
         else
             info "GLIBC < 2.34，继续使用 zig 兼容版作为主程序（原生版保留为 kvm-console-native）"
         fi
