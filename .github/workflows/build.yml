@@ -130,7 +130,11 @@ jobs:
   # ==================== ARM64 架构构建 ====================
   build-arm64:
     name: 构建 Linux arm64
-    if: contains(inputs.build_platforms, 'arm64')
+    needs: build
+    if: |
+      always() &&
+      contains(inputs.build_platforms, 'arm64') &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -165,15 +169,25 @@ jobs:
         run: |
           bash build.sh -v "${{ inputs.version }}"
 
+      # ==================== GitHub Artifacts 上传 ====================
+      - name: 上传构建产物 (GitHub)
+        if: inputs.artifact_storage == 'github'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kvm-console-linux-arm64
+          path: release/kvm-console-linux-arm64.tar.gz
+
       # ==================== 创建 GitHub Release (追加 arm64 产物) ====================
       - name: 上传 arm64 产物到 GitHub Release
-        if: inputs.create_release
+        if: inputs.create_release && inputs.artifact_storage == 'github'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ inputs.version }}
+          name: v${{ inputs.version }}
           files: release/kvm-console-linux-arm64.tar.gz
           generate_release_notes: false
-          # 如果 Release 已由 amd64 job 创建，此步会自动追加文件而不会重复创建
+          draft: false
+          prerelease: false
 
       # ==================== 阿里云 OSS 上传 ====================
       - name: 安装阿里云 ossutil
