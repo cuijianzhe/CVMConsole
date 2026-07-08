@@ -66,6 +66,7 @@ type CreateVMParams struct {
 	DirectBoot      *vm_xml.DirectBootConfig       `json:"direct_boot,omitempty"`     // 直接内核引导配置
 	KVMHidden       *bool                          `json:"kvm_hidden,omitempty"`      // 隐藏 KVM 标志（<kvm><hidden state='on'/></kvm>）
 	VendorID        string                         `json:"vendor_id,omitempty"`       // Hyper-V vendor_id 伪装（空表示不设置）
+	NestedVirt      *bool                          `json:"nested_virt,omitempty"`     // 嵌套虚拟化开关，nil/true 默认启用，false 关闭
 }
 
 // ExtraDiskParam is now defined in storage/disk package; alias in disk_compat.go.
@@ -512,6 +513,26 @@ func CreateVM(params *CreateVMParams, progressFn func(int, string)) (string, err
 	// Hyper-V vendor_id 伪装（在 <hyperv> 中注入 <vendor_id state='on' value='...'/>）
 	if params.VendorID != "" {
 		vmXML, err = vm_xml.ApplyVendorIDToHyperVBlock(vmXML, params.VendorID)
+		if err != nil {
+			_ = os.Remove(diskPath)
+			return "", err
+		}
+	}
+
+	// 嵌套虚拟化（在 <cpu> 中注入 vmx/svm feature，host-passthrough 下需 policy='disable' 覆盖）
+	if params.NestedVirt == nil || *params.NestedVirt {
+		featureName := vm_xml.DetectHostNestedVirtFeatureName()
+		enabled := true
+		vmXML, err = vm_xml.ApplyNestedVirtToDomainXML(vmXML, &enabled, featureName)
+		if err != nil {
+			_ = os.Remove(diskPath)
+			return "", err
+		}
+	} else {
+		// 显式关闭：注入 policy='disable' 覆盖 host-passthrough 的透传
+		featureName := vm_xml.DetectHostNestedVirtFeatureName()
+		disabled := false
+		vmXML, err = vm_xml.ApplyNestedVirtToDomainXML(vmXML, &disabled, featureName)
 		if err != nil {
 			_ = os.Remove(diskPath)
 			return "", err

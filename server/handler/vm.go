@@ -592,6 +592,17 @@ func EditVm(c *gin.Context) {
 		}
 	}
 
+	// 修改嵌套虚拟化
+	if req.NestedVirt != nil {
+		if err := service.SetVMNestedVirt(name, *req.NestedVirt); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"code":    500,
+				"message": "设置嵌套虚拟化失败: " + err.Error(),
+			})
+			return
+		}
+	}
+
 	// 修改自动启动
 	if req.Remark != nil {
 		if err := service.SetVMRemark(name, *req.Remark); err != nil {

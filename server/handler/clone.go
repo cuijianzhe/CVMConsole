@@ -72,6 +72,9 @@ type CloneVmRequest struct {
 	Gateway              string                            `json:"gateway"`                   // OpenWrt 网关
 	DNS                  string                            `json:"dns"`                       // OpenWrt DNS
 	PCIERootPorts        int                               `json:"pcie_root_ports,omitempty"` // q35 预留 pcie-root-port 数量
+	NestedVirt           *bool                             `json:"nested_virt,omitempty"`     // 嵌套虚拟化开关
+	KVMHidden            *bool                             `json:"kvm_hidden,omitempty"`      // 隐藏 KVM 标志
+	VendorID             string                            `json:"vendor_id,omitempty"`       // Hyper-V vendor_id 伪装
 }
 
 // BatchCloneRequest 批量克隆请求
@@ -116,6 +119,9 @@ type BatchCloneRequest struct {
 	Gateway             string                          `json:"gateway"`                   // OpenWrt 网关
 	DNS                 string                          `json:"dns"`                       // OpenWrt DNS
 	PCIERootPorts       int                             `json:"pcie_root_ports,omitempty"` // q35 预留 pcie-root-port 数量
+	NestedVirt          *bool                           `json:"nested_virt,omitempty"`     // 嵌套虚拟化开关
+	KVMHidden           *bool                           `json:"kvm_hidden,omitempty"`      // 隐藏 KVM 标志
+	VendorID            string                          `json:"vendor_id,omitempty"`       // Hyper-V vendor_id 伪装
 }
 
 // ReinstallRequest 重装系统请求
@@ -272,6 +278,9 @@ func CloneVm(c *gin.Context) {
 		Gateway:              req.Gateway,
 		DNS:                  req.DNS,
 		PCIERootPorts:        req.PCIERootPorts,
+		NestedVirt:           req.NestedVirt,
+		KVMHidden:            req.KVMHidden,
+		VendorID:             req.VendorID,
 	}
 
 	params.IsAdmin = isAdmin
@@ -432,6 +441,9 @@ func BatchCloneVm(c *gin.Context) {
 		Gateway:             req.Gateway,
 		DNS:                 req.DNS,
 		PCIERootPorts:       req.PCIERootPorts,
+		NestedVirt:          req.NestedVirt,
+		KVMHidden:           req.KVMHidden,
+		VendorID:            req.VendorID,
 	}
 
 	username, _ := c.Get("username")

@@ -366,6 +366,10 @@ func SetVMVendorID(name string, vendorID string) error {
 	return vmpkg.SetVMVendorID(name, vendorID)
 }
 
+func SetVMNestedVirt(name string, enabled bool) error {
+	return vmpkg.SetVMNestedVirt(name, enabled)
+}
+
 // ── SMBIOS ──
 
 func SetVMSMBIOS1Config(name string, cfg *vm_xml.VMSMBIOS1Config) error {

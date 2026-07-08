@@ -58,6 +58,7 @@ type CreateVmRequest struct {
 	DirectBoot      *service.DirectBootConfig         `json:"direct_boot,omitempty"`     // 直接内核引导配置
 	KVMHidden       *bool                             `json:"kvm_hidden,omitempty"`      // 隐藏 KVM 标志
 	VendorID        string                            `json:"vendor_id,omitempty"`       // Hyper-V vendor_id 伪装
+	NestedVirt      *bool                             `json:"nested_virt,omitempty"`     // 嵌套虚拟化开关，nil/true 默认启用，false 关闭
 	ExtraDisks      []struct {
 		Size          int    `json:"size"`
 		Format        string `json:"format"`
@@ -153,6 +154,7 @@ func CreateVm(c *gin.Context) {
 		DirectBoot:      req.DirectBoot,
 		KVMHidden:       req.KVMHidden,
 		VendorID:        req.VendorID,
+		NestedVirt:      req.NestedVirt,
 	}
 
 	// 额外磁盘

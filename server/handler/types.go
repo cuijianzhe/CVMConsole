@@ -56,8 +56,9 @@ type VmEditRequest struct {
 	// 直接内核引导配置
 	DirectBoot *service.DirectBootConfig `json:"direct_boot,omitempty"`
 	// KVM 虚拟化特性
-	KVMHidden *bool   `json:"kvm_hidden,omitempty"` // 隐藏 KVM 标志
-	VendorID  *string `json:"vendor_id,omitempty"`  // Hyper-V vendor_id 伪装（空字符串=清除）
+	KVMHidden  *bool   `json:"kvm_hidden,omitempty"`  // 隐藏 KVM 标志
+	VendorID   *string `json:"vendor_id,omitempty"`   // Hyper-V vendor_id 伪装（空字符串=清除）
+	NestedVirt *bool   `json:"nested_virt,omitempty"` // 嵌套虚拟化开关
 }
 
 // RescueVmRequest 救援系统请求

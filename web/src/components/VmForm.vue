@@ -384,6 +384,22 @@
                   常用于绕过特定软件（如 N 卡驱动）的虚拟化检测；仅 x86_64 架构生效
                 </div>
               </el-form-item>
+              <el-form-item label="嵌套虚拟化">
+                <div class="advanced-field-row">
+                  <el-switch v-model="form.nested_virt" active-text="启用" inactive-text="关闭" :disabled="editVmStatus === 'running' || editVmStatus === 'paused'" />
+                  <el-tooltip content="启用后在 CPU 配置中注入 vmx（Intel）或 svm（AMD）特性，允许虚拟机内再运行虚拟机" placement="top" effect="dark">
+                    <el-icon class="help-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </div>
+                <div v-if="editVmStatus === 'running' || editVmStatus === 'paused'" class="form-tip">
+                  <el-icon><WarningFilled /></el-icon>
+                  修改嵌套虚拟化需要先关机
+                </div>
+                <div v-else class="form-tip">
+                  <el-icon><InfoFilled /></el-icon>
+                  默认启用；若宿主机未开启 KVM 嵌套模块（kvm_intel nested=1 或 kvm_amd nested=1），该选项实际不生效
+                </div>
+              </el-form-item>
               <el-form-item label="CPU 拓扑">
                 <el-select v-model="form.cpu_topology_mode" style="width: 280px;" :disabled="editVmStatus === 'running' || editVmStatus === 'paused'">
                   <el-option v-for="item in cpuTopologyModeOptions" :key="item.value" :label="item.label" :value="item.value" />
@@ -1781,6 +1797,18 @@
                 <div class="form-tip">
                   <el-icon><InfoFilled /></el-icon>
                   常用于绕过特定软件（如 N 卡驱动）的虚拟化检测；仅 x86_64 架构生效
+                </div>
+              </el-form-item>
+              <el-form-item label="嵌套虚拟化">
+                <div class="advanced-field-row">
+                  <el-switch v-model="form.nested_virt" active-text="启用" inactive-text="关闭" />
+                  <el-tooltip content="启用后在 CPU 配置中注入 vmx（Intel）或 svm（AMD）特性，允许虚拟机内再运行虚拟机" placement="top" effect="dark">
+                    <el-icon class="help-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </div>
+                <div class="form-tip">
+                  <el-icon><InfoFilled /></el-icon>
+                  默认启用；若宿主机未开启 KVM 嵌套模块（kvm_intel nested=1 或 kvm_amd nested=1），该选项实际不生效
                 </div>
               </el-form-item>
               <el-form-item label="CPU 拓扑">
@@ -3642,6 +3670,7 @@ const form = reactive({
   // KVM 虚拟化特性
   kvm_hidden: false,          // 隐藏 KVM 标志
   vendor_id: '',               // Hyper-V vendor_id 伪装（自定义值）
+  nested_virt: true,           // 嵌套虚拟化开关，默认启用
   // 编辑模式 - 新增磁盘
   add_disks: [],
   // 创建模式 - 额外磁盘
@@ -3862,6 +3891,7 @@ const captureEditFormSnapshot = () => {
     cpu_affinity: isAdmin.value ? (form.cpu_affinity || '').trim() : null,
     kvm_hidden: form.kvm_hidden,
     vendor_id: form.vendor_id || '',
+    nested_virt: !!form.nested_virt,
   }
 }
 
@@ -4430,6 +4460,7 @@ const applyEditVmDetail = (detail, row = {}) => {
   form.direct_boot_cmdline = (detail.direct_boot && detail.direct_boot.cmdline) || ''
   form.kvm_hidden = !!detail.kvm_hidden
   form.vendor_id = detail.vendor_id || ''
+  form.nested_virt = detail.nested_virt !== undefined ? !!detail.nested_virt : true
   form.video_model = detail.video_model || getRecommendedVideoModel(detail.os_type || 'linux')
   form.cpu_topology_mode = detail.cpu_topology_mode || 'auto'
   form.boot_order = detail.boot_order && detail.boot_order.length > 0 ? [...detail.boot_order] : ['hd']
@@ -4654,6 +4685,7 @@ const open = async (row, mode, options = {}) => {
       template: '', template_type: '', preserve_fnos_device_id: false, fnos_device_id_mode: 'regenerate', fnos_device_id: '',
       traffic_down_gb: 0, traffic_up_gb: 0, bandwidth_down_mbps: 0, bandwidth_up_mbps: 0, max_port_forwards: 10, max_runtime_hours: 0, batch_count: 1,
       import_os_category: '', system_init_enabled: true,
+      nested_virt: true,
     })
     Object.assign(form.guest_agent, createEmptyGuestAgentConfig())
     Object.assign(form.smbios1, createEmptySMBIOS1Config())
@@ -5120,6 +5152,9 @@ const submitForm = async () => {
           if (curVendorID !== snap.vendor_id) {
             editPayload.vendor_id = curVendorID
           }
+          if (!!form.nested_virt !== snap.nested_virt) {
+            editPayload.nested_virt = !!form.nested_virt
+          }
           // RTC 配置：任一字段变化即一起发送
           const curRtcStartdate = normalizeRTCStartDate(form.rtc_startdate)
           if (form.rtc_offset !== snap.rtc_offset || curRtcStartdate !== snap.rtc_startdate) {
@@ -5277,6 +5312,7 @@ const submitForm = async () => {
               } : undefined,
               kvm_hidden: form.kvm_hidden || undefined,
               vendor_id: form.vendor_id || undefined,
+              nested_virt: form.nested_virt !== undefined ? form.nested_virt : true,
             }
             const cpuLimitPercent = buildCPULimitPercentPayload()
             if (cpuLimitPercent !== undefined) { importPayload.cpu_limit_percent = cpuLimitPercent }
@@ -5321,6 +5357,7 @@ const submitForm = async () => {
             extra_nics: nicsPayload.extraNics,
             kvm_hidden: form.kvm_hidden || undefined,
             vendor_id: form.vendor_id || undefined,
+            nested_virt: form.nested_virt !== undefined ? form.nested_virt : true,
           }
           const cpuLimitPercent = buildCPULimitPercentPayload()
           if (cpuLimitPercent !== undefined) {
@@ -5384,6 +5421,7 @@ const submitForm = async () => {
               dns: isOpenWrtTemplate.value ? form.dns : undefined,
               kvm_hidden: form.kvm_hidden || undefined,
               vendor_id: form.vendor_id || undefined,
+              nested_virt: form.nested_virt !== undefined ? form.nested_virt : true,
             }
             const cpuLimitPercent = buildCPULimitPercentPayload()
             if (cpuLimitPercent !== undefined) { batchPayload.cpu_limit_percent = cpuLimitPercent }
@@ -5453,6 +5491,7 @@ const submitForm = async () => {
             dns: isOpenWrtTemplate.value ? form.dns : undefined,
             kvm_hidden: form.kvm_hidden || undefined,
             vendor_id: form.vendor_id || undefined,
+            nested_virt: form.nested_virt !== undefined ? form.nested_virt : true,
           }
           const cpuLimitPercent = buildCPULimitPercentPayload()
           if (cpuLimitPercent !== undefined) {
@@ -5568,6 +5607,7 @@ const submitForm = async () => {
             direct_boot: form.direct_boot_enabled ? { enabled: true, cmdline: form.direct_boot_cmdline || '' } : undefined,
             kvm_hidden: form.kvm_hidden || undefined,
             vendor_id: form.vendor_id || undefined,
+            nested_virt: form.nested_virt !== undefined ? form.nested_virt : true,
           }
           const cpuLimitPercent = buildCPULimitPercentPayload()
           if (cpuLimitPercent !== undefined) {

@@ -107,6 +107,7 @@ type VmDetail struct {
 	DirectBoot             *vm_xml.DirectBootConfig      `json:"direct_boot,omitempty"` // 直接内核引导配置
 	KVMHidden              bool                          `json:"kvm_hidden"`            // 隐藏 KVM 标志
 	VendorID               string                        `json:"vendor_id"`             // Hyper-V vendor_id 伪装值
+	NestedVirt             bool                          `json:"nested_virt"`           // 嵌套虚拟化开关
 }
 
 // VmStats 虚拟机资源使用统计

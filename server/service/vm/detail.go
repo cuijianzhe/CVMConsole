@@ -116,6 +116,7 @@ func GetVM(name string) (*VmDetail, error) {
 	vm.DirectBoot = vm_xml.DetectDirectBootFromDomainXML(xmlStr)
 	vm.KVMHidden = vm_xml.ParseKVMHiddenFromDomainXML(xmlStr)
 	vm.VendorID = vm_xml.ParseVendorIDFromDomainXML(xmlStr)
+	vm.NestedVirt = vm_xml.ParseNestedVirtFromDomainXML(xmlStr)
 	vm.CPUTopologyMode = D.ParseVMCPUTopologyModeFromDomainXML(xmlStr)
 	vm.CPULimitPercent = D.ParseVMCPULimitPercentFromDomainXML(xmlStr, vm.VCPU)
 	vm.CPUAffinity = D.ParseCPUAffinityFromDomainXML(xmlStr)
