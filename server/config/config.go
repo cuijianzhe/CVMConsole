@@ -94,6 +94,13 @@ type Config struct {
 	PublicBaseURL string `json:"public_base_url"`
 	// 网站标题，用于登录页、浏览器标签页等展示
 	SiteTitle string `json:"site_title"`
+	// UI 自定义配置
+	SystemHomeIcon string `json:"system_home_icon"` // 系统首页图标（base64）
+	HomeTitle      string `json:"home_title"`       // 首页标题/产品名称
+	LoginPageIcon  string `json:"login_page_icon"`  // 登录页面图标（base64）
+	ProductName    string `json:"product_name"`     // 产品名称（登录页面显示）
+	BrowserFavicon string `json:"browser_favicon"`  // 浏览器Favicon图标（base64）
+	BrowserTitle   string `json:"browser_title"`    // 浏览器标题
 	// 开发环境模式，启用后绕过安全验证
 	DevelopmentMode bool `json:"development_mode"`
 	// systemd 中当前面板服务的 unit 名称
@@ -244,6 +251,12 @@ func Init() {
 		SpiceEnabledByDefault:                 getEnvBool("KVM_SPICE_ENABLED_BY_DEFAULT", false),
 		PublicBaseURL:                         getEnv("KVM_PUBLIC_BASE_URL", ""),
 		SiteTitle:                             getEnv("KVM_SITE_TITLE", DefaultSiteTitle),
+		SystemHomeIcon:                        getEnv("KVM_SYSTEM_HOME_ICON", ""),
+		HomeTitle:                             getEnv("KVM_HOME_TITLE", "QVMConsole"),
+		LoginPageIcon:                         getEnv("KVM_LOGIN_PAGE_ICON", ""),
+		ProductName:                           getEnv("KVM_PRODUCT_NAME", ""),
+		BrowserFavicon:                        getEnv("KVM_BROWSER_FAVICON", ""),
+		BrowserTitle:                          getEnv("KVM_BROWSER_TITLE", "QVMConsole"),
 		DevelopmentMode:                       getEnvBool("KVM_DEVELOPMENT_MODE", false),
 		ServiceUnitName:                       getEnv("KVM_SERVICE_UNIT_NAME", "kvm-console.service"),
 		MaintenanceMode:                       getEnvBool("KVM_MAINTENANCE_MODE", false),
@@ -483,6 +496,12 @@ var PersistableKeys = []string{
 	"rescue_iso",
 	"public_base_url",
 	"site_title",
+	"system_home_icon",
+	"home_title",
+	"login_page_icon",
+	"product_name",
+	"browser_favicon",
+	"browser_title",
 	"development_mode",
 	"maintenance_mode",
 	"maintenance_service_units",
@@ -558,6 +577,12 @@ var keyToEnvVar = map[string]string{
 	"rescue_iso":                "KVM_RESCUE_ISO",
 	"public_base_url":           "KVM_PUBLIC_BASE_URL",
 	"site_title":                "KVM_SITE_TITLE",
+	"system_home_icon":          "KVM_SYSTEM_HOME_ICON",
+	"home_title":                "KVM_HOME_TITLE",
+	"login_page_icon":           "KVM_LOGIN_PAGE_ICON",
+	"product_name":              "KVM_PRODUCT_NAME",
+	"browser_favicon":           "KVM_BROWSER_FAVICON",
+	"browser_title":             "KVM_BROWSER_TITLE",
 	"development_mode":          "KVM_DEVELOPMENT_MODE",
 	"maintenance_mode":          "KVM_MAINTENANCE_MODE",
 	"maintenance_service_units": "KVM_MAINTENANCE_SERVICE_UNITS",
@@ -679,6 +704,18 @@ func (c *Config) LoadFromDB(settings map[string]string) {
 			c.PublicBaseURL = value
 		case "site_title":
 			c.SiteTitle = value
+		case "system_home_icon":
+			c.SystemHomeIcon = value
+		case "home_title":
+			c.HomeTitle = value
+		case "login_page_icon":
+			c.LoginPageIcon = value
+		case "product_name":
+			c.ProductName = value
+		case "browser_favicon":
+			c.BrowserFavicon = value
+		case "browser_title":
+			c.BrowserTitle = value
 		case "development_mode":
 			if v, err := strconv.ParseBool(value); err == nil {
 				c.DevelopmentMode = v
@@ -874,6 +911,12 @@ func (c *Config) ToSettingsMap() map[string]string {
 		"spice_enabled_by_default":  strconv.FormatBool(c.SpiceEnabledByDefault),
 		"public_base_url":           c.PublicBaseURL,
 		"site_title":                c.SiteTitle,
+		"system_home_icon":          c.SystemHomeIcon,
+		"home_title":                c.HomeTitle,
+		"login_page_icon":           c.LoginPageIcon,
+		"product_name":              c.ProductName,
+		"browser_favicon":           c.BrowserFavicon,
+		"browser_title":             c.BrowserTitle,
 		"development_mode":          strconv.FormatBool(c.DevelopmentMode),
 		"maintenance_mode":          strconv.FormatBool(c.MaintenanceMode),
 		"maintenance_service_units": c.MaintenanceServiceUnits,

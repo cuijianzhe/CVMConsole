@@ -67,6 +67,92 @@
         </el-form-item>
           </el-tab-pane>
 
+          <el-tab-pane label="UI 自定义" name="ui_custom">
+            <el-divider content-position="left">
+              <el-icon style="margin-right: 4px;"><Brush /></el-icon>
+              平台设置
+            </el-divider>
+
+            <el-form-item label="系统首页图标">
+              <div class="ui-icon-upload">
+                <img v-if="form.system_home_icon" :src="form.system_home_icon" class="ui-icon-preview" />
+                <div v-else class="ui-icon-placeholder">
+                  <el-icon :size="48" color="#C0C4CC"><Picture /></el-icon>
+                  <span>暂无图标</span>
+                </div>
+                <el-button type="primary" @click="triggerFileUpload('system_home_icon')">请选择</el-button>
+              </div>
+              <div class="form-tip">
+                <el-icon><InfoFilled /></el-icon>
+                系统首页所包含的纯白色 logo 图片；仅支持 jpg、jpeg、png 格式（图片大小不超过 2M，建议尺寸 138*138px）
+              </div>
+            </el-form-item>
+
+            <el-form-item label="首页标题">
+              <el-input v-model="form.home_title" placeholder="请输入首页标题" maxlength="60" show-word-limit />
+              <div class="form-tip">
+                <el-icon><InfoFilled /></el-icon>
+                将用于系统首页展示的标题
+              </div>
+            </el-form-item>
+
+            <el-divider content-position="left">
+              <el-icon style="margin-right: 4px;"><UserFilled /></el-icon>
+              登录页面
+            </el-divider>
+
+            <el-form-item label="登录页面图标">
+              <div class="ui-icon-upload">
+                <img v-if="form.login_page_icon" :src="form.login_page_icon" class="ui-icon-preview" />
+                <div v-else class="ui-icon-placeholder">
+                  <el-icon :size="48" color="#C0C4CC"><Picture /></el-icon>
+                  <span>暂无图标</span>
+                </div>
+                <el-button type="primary" @click="triggerFileUpload('login_page_icon')">请选择</el-button>
+              </div>
+              <div class="form-tip">
+                <el-icon><InfoFilled /></el-icon>
+                登录页白色背景下所包含的 logo 图片；仅支持 jpg、jpeg、png 格式（图片大小不超过 2M）
+              </div>
+            </el-form-item>
+
+            <el-form-item label="产品名称">
+              <el-input v-model="form.product_name" placeholder="请设置不超过10个字的产品名称" maxlength="10" show-word-limit />
+              <div class="form-tip">
+                <el-icon><InfoFilled /></el-icon>
+                登录页面显示的产品名称
+              </div>
+            </el-form-item>
+
+            <el-divider content-position="left">
+              <el-icon style="margin-right: 4px;"><Monitor /></el-icon>
+              浏览器
+            </el-divider>
+
+            <el-form-item label="浏览器 Favicon 图标">
+              <div class="ui-icon-upload">
+                <img v-if="form.browser_favicon" :src="form.browser_favicon" class="ui-icon-preview" />
+                <div v-else class="ui-icon-placeholder">
+                  <el-icon :size="48" color="#C0C4CC"><Picture /></el-icon>
+                  <span>暂无图标</span>
+                </div>
+                <el-button type="primary" @click="triggerFileUpload('browser_favicon')">请选择</el-button>
+              </div>
+              <div class="form-tip">
+                <el-icon><InfoFilled /></el-icon>
+                浏览器网页图标；仅支持 ico 格式（图片大小不超过 2M）
+              </div>
+            </el-form-item>
+
+            <el-form-item label="浏览器标题">
+              <el-input v-model="form.browser_title" placeholder="请输入浏览器标题" maxlength="60" show-word-limit />
+              <div class="form-tip">
+                <el-icon><InfoFilled /></el-icon>
+                将用于浏览器标签页标题
+              </div>
+            </el-form-item>
+          </el-tab-pane>
+
           <el-tab-pane label="存储与网络" name="network">
             <!-- 存储路径 -->
         <el-divider content-position="left">
@@ -1318,17 +1404,26 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- UI 自定义图标上传 -->
+    <input
+      ref="fileInputRef"
+      type="file"
+      style="display: none;"
+      accept="image/jpeg,image/png,image/x-icon"
+      @change="handleFileChange"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, ref, reactive, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Check, Connection, CopyDocument, Cpu, Delete, Download, FirstAidKit, FolderOpened, InfoFilled, Loading, Lock, Message, Monitor, Odometer, Plus, Refresh, Warning } from '@element-plus/icons-vue'
+import { Check, Connection, CopyDocument, Cpu, Delete, Download, FirstAidKit, FolderOpened, Picture, InfoFilled, Loading, Lock, UserFilled, Message, Monitor, Odometer, Brush, Plus, Refresh, Warning } from '@element-plus/icons-vue'
 import { getHostKSMStatus, getHostKVMUnrestrictedGuestStatus, getHostZRAMStatus, getSettings, getCPUAffinityPresets, getUserStorageISOPath, rotateJWTSecret, saveCPUAffinityPresets, testSMTP, updateHostKSMProfile, updateHostKVMUnrestrictedGuest, updateHostZRAMProfile, updateSettings, getLogStatus, deleteLogs, exportLogs, trimUserStorage, getDiagnosticCategories, exportDiagnostics, getHardwarePassthroughStatus, enableIommu, loadVfioPci } from '@/api/settings'
 import { getAllISOs } from '@/api/infra'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { setSiteTitle } from '@/utils/site'
+import { setSiteTitle, systemHomeIcon, homeTitle, loginPageIcon, productName, browserFavicon, browserTitle } from '@/utils/site'
 
 const defaultMaintenanceServiceUnits = 'kvm-console.service,libvirtd.service,libvirtd.socket,libvirtd-ro.socket,libvirtd-admin.socket'
 const fallbackKSMProfiles = [
@@ -1370,6 +1465,41 @@ const kvmUnrestrictedGuestLoading = ref(false)
 const kvmUnrestrictedGuestSaving = ref(false)
 const kvmUnrestrictedGuestEnabled = ref(true)
 const kvmUnrestrictedGuestStatus = ref(null)
+
+// UI 自定义文件上传
+const fileInputRef = ref(null)
+const currentUploadField = ref('')
+
+const triggerFileUpload = (field) => {
+  currentUploadField.value = field
+  fileInputRef.value?.click()
+}
+
+const handleFileChange = (event) => {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  const field = currentUploadField.value
+  if (!field) return
+
+  const maxSize = 2 * 1024 * 1024
+  if (file.size > maxSize) {
+    ElMessage.error('图片大小不能超过 2MB')
+    event.target.value = ''
+    return
+  }
+
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const base64 = e.target?.result
+    if (base64 && typeof base64 === 'string') {
+      form[field] = base64
+    }
+  }
+  reader.readAsDataURL(file)
+
+  event.target.value = ''
+}
 
 // 硬件直通状态
 const hwPassthroughLoading = ref(false)
@@ -1425,6 +1555,12 @@ const form = reactive({
   rescue_iso: '',
   public_base_url: '',
   site_title: 'QVMConsole',
+  system_home_icon: '',
+  home_title: 'QVMConsole',
+  login_page_icon: '',
+  product_name: '',
+  browser_favicon: '',
+  browser_title: 'QVMConsole',
   development_mode: false,
   session_fingerprint_enabled: true,
   request_filter_enabled: true,
@@ -1920,6 +2056,27 @@ const handleSave = async () => {
   try {
     const res = await updateSettings(buildPayload())
     setSiteTitle(form.site_title)
+    systemHomeIcon.value = form.system_home_icon || ''
+    homeTitle.value = form.home_title || 'QVMConsole'
+    loginPageIcon.value = form.login_page_icon || ''
+    productName.value = form.product_name || ''
+    browserFavicon.value = form.browser_favicon || ''
+    browserTitle.value = form.browser_title || 'QVMConsole'
+    localStorage.setItem('system_home_icon', systemHomeIcon.value)
+    localStorage.setItem('home_title', homeTitle.value)
+    localStorage.setItem('login_page_icon', loginPageIcon.value)
+    localStorage.setItem('product_name', productName.value)
+    localStorage.setItem('browser_favicon', browserFavicon.value)
+    localStorage.setItem('browser_title', browserTitle.value)
+    if (typeof document !== 'undefined' && browserFavicon.value) {
+      const link = document.querySelector('link[rel="icon"]') || document.createElement('link')
+      link.rel = 'icon'
+      link.href = browserFavicon.value
+      document.head.appendChild(link)
+    }
+    if (typeof document !== 'undefined') {
+      document.title = browserTitle.value || 'QVMConsole'
+    }
     ElMessage.success(res.message || '设置已保存')
     await fetchData()
   } catch (err) {
@@ -1966,6 +2123,12 @@ const buildPayload = () => ({
   rescue_iso: form.rescue_iso,
   public_base_url: form.public_base_url,
   site_title: form.site_title?.trim() || 'QVMConsole',
+  system_home_icon: form.system_home_icon,
+  home_title: form.home_title?.trim() || 'QVMConsole',
+  login_page_icon: form.login_page_icon,
+  product_name: form.product_name?.trim(),
+  browser_favicon: form.browser_favicon,
+  browser_title: form.browser_title?.trim() || 'QVMConsole',
   development_mode: form.development_mode,
   session_fingerprint_enabled: form.session_fingerprint_enabled,
   request_filter_enabled: form.request_filter_enabled,
@@ -2374,5 +2537,34 @@ h2 { margin: 0 0 8px 0; font-size: 18px; color: var(--el-text-color-primary); }
   .settings-container :deep(.el-form) {
     max-width: 100% !important;
   }
+}
+
+.ui-icon-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ui-icon-preview {
+  width: 138px;
+  height: 138px;
+  object-fit: contain;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+}
+
+.ui-icon-placeholder {
+  width: 138px;
+  height: 138px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed #d9d9d9;
+  border-radius: 8px;
+  background: #fafafa;
+  color: #909399;
+  font-size: 12px;
 }
 </style>

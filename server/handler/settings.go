@@ -48,6 +48,12 @@ type SettingsResponse struct {
 	SpiceEnabledByDefault                 bool   `json:"spice_enabled_by_default"`
 	PublicBaseURL                         string `json:"public_base_url"`
 	SiteTitle                             string `json:"site_title"`
+	SystemHomeIcon                        string `json:"system_home_icon"`
+	HomeTitle                             string `json:"home_title"`
+	LoginPageIcon                         string `json:"login_page_icon"`
+	ProductName                           string `json:"product_name"`
+	BrowserFavicon                        string `json:"browser_favicon"`
+	BrowserTitle                          string `json:"browser_title"`
 	DevelopmentMode                       bool   `json:"development_mode"`
 	MaintenanceMode                       bool   `json:"maintenance_mode"`
 	MaintenanceServiceUnits               string `json:"maintenance_service_units"`
@@ -119,6 +125,12 @@ type UpdateSettingsRequest struct {
 	SpiceEnabledByDefault                 *bool   `json:"spice_enabled_by_default"`
 	PublicBaseURL                         *string `json:"public_base_url"`
 	SiteTitle                             *string `json:"site_title"`
+	SystemHomeIcon                        *string `json:"system_home_icon"`
+	HomeTitle                             *string `json:"home_title"`
+	LoginPageIcon                         *string `json:"login_page_icon"`
+	ProductName                           *string `json:"product_name"`
+	BrowserFavicon                        *string `json:"browser_favicon"`
+	BrowserTitle                          *string `json:"browser_title"`
 	DevelopmentMode                       *bool   `json:"development_mode"`
 	MaintenanceMode                       *bool   `json:"maintenance_mode"`
 	MaintenanceServiceUnits               *string `json:"maintenance_service_units"`
@@ -177,6 +189,12 @@ type TestSMTPRequest struct {
 
 type PublicSettingsResponse struct {
 	SiteTitle                  string `json:"site_title"`
+	SystemHomeIcon             string `json:"system_home_icon"`
+	HomeTitle                  string `json:"home_title"`
+	LoginPageIcon              string `json:"login_page_icon"`
+	ProductName                string `json:"product_name"`
+	BrowserFavicon             string `json:"browser_favicon"`
+	BrowserTitle               string `json:"browser_title"`
 	PasswordBreachCheckEnabled bool   `json:"password_breach_check_enabled"`
 	SpiceEnabledByDefault      bool   `json:"spice_enabled_by_default"` // 创建虚拟机 SPICE 开关的默认初始值
 }
@@ -192,6 +210,12 @@ func GetPublicSettings(c *gin.Context) {
 		"message": "ok",
 		"data": PublicSettingsResponse{
 			SiteTitle:                  siteTitle,
+			SystemHomeIcon:             config.GlobalConfig.SystemHomeIcon,
+			HomeTitle:                  config.GlobalConfig.HomeTitle,
+			LoginPageIcon:              config.GlobalConfig.LoginPageIcon,
+			ProductName:                config.GlobalConfig.ProductName,
+			BrowserFavicon:             config.GlobalConfig.BrowserFavicon,
+			BrowserTitle:               config.GlobalConfig.BrowserTitle,
 			PasswordBreachCheckEnabled: config.GlobalConfig.PasswordBreachCheckEnabled,
 			SpiceEnabledByDefault:      config.GlobalConfig.SpiceEnabledByDefault,
 		},
@@ -239,6 +263,12 @@ func GetSettings(c *gin.Context) {
 			SpiceEnabledByDefault:                 cfg.SpiceEnabledByDefault,
 			PublicBaseURL:                         cfg.PublicBaseURL,
 			SiteTitle:                             siteTitle,
+			SystemHomeIcon:                        cfg.SystemHomeIcon,
+			HomeTitle:                             cfg.HomeTitle,
+			LoginPageIcon:                         cfg.LoginPageIcon,
+			ProductName:                           cfg.ProductName,
+			BrowserFavicon:                        cfg.BrowserFavicon,
+			BrowserTitle:                          cfg.BrowserTitle,
 			DevelopmentMode:                       cfg.DevelopmentMode,
 			MaintenanceMode:                       cfg.MaintenanceMode,
 			MaintenanceServiceUnits:               maintenanceServiceUnits,
@@ -397,6 +427,30 @@ func UpdateSettings(c *gin.Context) {
 		cfg.SiteTitle = strings.TrimSpace(*req.SiteTitle)
 		if cfg.SiteTitle == "" {
 			cfg.SiteTitle = config.DefaultSiteTitle
+		}
+	}
+	if req.SystemHomeIcon != nil {
+		cfg.SystemHomeIcon = *req.SystemHomeIcon
+	}
+	if req.HomeTitle != nil {
+		cfg.HomeTitle = strings.TrimSpace(*req.HomeTitle)
+		if cfg.HomeTitle == "" {
+			cfg.HomeTitle = "QVMConsole"
+		}
+	}
+	if req.LoginPageIcon != nil {
+		cfg.LoginPageIcon = *req.LoginPageIcon
+	}
+	if req.ProductName != nil {
+		cfg.ProductName = strings.TrimSpace(*req.ProductName)
+	}
+	if req.BrowserFavicon != nil {
+		cfg.BrowserFavicon = *req.BrowserFavicon
+	}
+	if req.BrowserTitle != nil {
+		cfg.BrowserTitle = strings.TrimSpace(*req.BrowserTitle)
+		if cfg.BrowserTitle == "" {
+			cfg.BrowserTitle = "QVMConsole"
 		}
 	}
 	if req.DevelopmentMode != nil {

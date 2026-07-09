@@ -2,7 +2,8 @@
   <div class="login-container">
       <div class="login-box">
       <div class="card-header">
-        <img class="login-logo" src="@/assets/logo.png" alt="logo" />
+        <img class="login-logo" :src="loginPageIcon || defaultLogo" alt="logo" />
+        <h2 v-if="productName" class="login-product-name">{{ productName }}</h2>
       </div>
 
       <template v-if="stage === 'login'">
@@ -368,7 +369,8 @@ import QRCode from 'qrcode'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { copyTextWithFallback } from '@/utils/clipboard'
 import { useUserStore } from '@/store/user'
-import { siteTitle } from '@/utils/site'
+import { siteTitle, loginPageIcon, productName, syncPublicSiteTitle } from '@/utils/site'
+import defaultLogo from '@/assets/logo.png'
 import {
   bindEmail,
   changePassword,
@@ -399,6 +401,7 @@ onMounted(() => {
   if (localStorage.getItem(AGREEMENT_STORAGE_KEY) === 'true') {
     agreementChecked.value = true
   }
+  syncPublicSiteTitle()
 })
 
 watch(agreementChecked, (val) => {
@@ -1035,6 +1038,13 @@ const handleForgotCancel = () => {
   width: 84px;
   height: 84px;
   object-fit: contain;
+}
+
+.login-product-name {
+  font-size: 20px;
+  font-weight: 600;
+  color: #16324f;
+  margin-top: 8px;
 }
 
 .card-header span {

@@ -7,7 +7,8 @@
       :class="{ 'mobile-show': !isCollapse && isMobile, 'is-collapsed': isCollapse && !isMobile }"
     >
       <div class="logo">
-        <img class="sidebar-logo" src="@/assets/logo.png" alt="logo" />
+        <img class="sidebar-logo" :src="systemHomeIcon || defaultLogo" alt="logo" />
+        <span class="logo-title">{{ homeTitle }}</span>
         <el-icon v-if="isMobile" class="mobile-sidebar-close" @click="isCollapse = true"><Close /></el-icon>
       </div>
       <el-menu
@@ -446,7 +447,8 @@ import {
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { copyTextWithFallback } from '@/utils/clipboard'
-import { siteTitle } from '@/utils/site'
+import { siteTitle, systemHomeIcon, homeTitle } from '@/utils/site'
+import defaultLogo from '@/assets/logo.png'
 import { passwordValidator, checkPasswordBreachAsync } from '@/utils/validate'
 
 // 导入近期任务面板组件
@@ -1040,6 +1042,16 @@ const handleCommand = (command) => {
   height: 42px;
   flex-shrink: 0;
   object-fit: contain;
+}
+
+.logo-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+.is-collapsed .logo-title {
+  display: none;
 }
 
 .el-menu-vertical {
