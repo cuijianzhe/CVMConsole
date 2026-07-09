@@ -118,12 +118,7 @@
           </el-icon>
           <span class="page-title">{{ route.meta.title || displaySiteTitle }}</span>
         </div>
-        <div class="navbar-center">
-          <span class="beta-notice-link" @click="showBetaNoticeDialog">
-            <el-icon><Warning /></el-icon>
-            <span>公测期间，建议做好数据备份，避免不合适的操作造成数据丢失。</span>
-          </span>
-        </div>
+        <div class="navbar-center"></div>
         <div class="right-menu">
           <el-badge :value="activeTaskCount" :hidden="activeTaskCount === 0" :max="99" class="task-badge">
             <el-button text circle @click="toggleRecentTaskPanel" title="近期任务" class="task-toggle-btn">
@@ -206,50 +201,7 @@
       />
     </el-container>
 
-    <!-- 公测须知弹窗 -->
-    <el-dialog
-      v-model="betaNoticeVisible"
-      title="公测须知"
-      width="520px"
-      :close-on-click-modal="false"
-      :close-on-press-escape="false"
-      :show-close="false"
-      destroy-on-close
-      append-to-body
-    >
-      <div class="beta-notice-content">
-        <el-alert
-          type="warning"
-          :closable="false"
-          show-icon
-          class="beta-alert"
-        >
-          <template #title>
-            <span class="beta-alert-title">当前系统处于公测阶段</span>
-          </template>
-        </el-alert>
-        <div class="beta-notice-body">
-          <p>项目已完成内测，所有功能正常使用的情况下一般不会出现问题。但为了安全，还是建议您做好数据备份避免不合适的操作触发程序bug造成。</p>
-          <el-divider />
-          <div class="beta-notice-join">
-            <p>务必加入官方 QQ 群：</p>
-            <div class="beta-qq-group">
-              <span class="beta-qq-number">654641487</span>
-              <el-button type="primary" link @click="copyBetaQQ">
-                <el-icon><CopyDocument /></el-icon>
-                复制群号
-              </el-button>
-            </div>
-            <p class="beta-notice-tip">遇到问题及时反馈，反馈有效问题多的用户可以奖励 Pro 资格！</p>
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <el-button type="primary" @click="confirmBetaNotice" class="beta-confirm-btn">
-          我已知晓，继续使用
-        </el-button>
-      </template>
-    </el-dialog>
+
 
     <!-- 赞助支持弹窗 -->
     <el-dialog
@@ -620,9 +572,6 @@ onMounted(() => {
   }
   refreshSecurityInfo()
 
-  // 显示公测须知弹窗
-  showBetaNotice()
-
   // 检查赞助支持弹窗
   checkSponsorDialog()
 
@@ -707,34 +656,7 @@ const apiKeyLoading = ref(false)
 const apiKeyGenerating = ref(false)
 const apiKeyRevoking = ref(false)
 
-// ==================== 公测须知弹窗 ====================
-const betaNoticeVisible = ref(false)
 
-const showBetaNotice = () => {
-  // 每次登录都弹出，使用 sessionStorage 存储本次会话已确认状态
-  const confirmed = sessionStorage.getItem('beta_notice_confirmed')
-  if (!confirmed && isAdmin.value) {
-    betaNoticeVisible.value = true
-  }
-}
-
-const showBetaNoticeDialog = () => {
-  betaNoticeVisible.value = true
-}
-
-const confirmBetaNotice = () => {
-  sessionStorage.setItem('beta_notice_confirmed', '1')
-  betaNoticeVisible.value = false
-}
-
-const copyBetaQQ = async () => {
-  try {
-    await copyTextWithFallback('654641487')
-    ElMessage.success('群号已复制')
-  } catch (err) {
-    ElMessage.error('复制失败，请手动复制群号：654641487')
-  }
-}
 
 // ==================== 异步任务面板 ====================
 const recentTaskPanelRef = ref(null)
@@ -1366,31 +1288,7 @@ html.dark .navbar {
   overflow: hidden;
 }
 
-.beta-notice-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 6px;
-  background: var(--el-color-warning-light-9);
-  color: var(--el-color-warning);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
 
-.beta-notice-link:hover {
-  background: var(--el-color-warning-light-8);
-  color: var(--el-color-warning-dark-2);
-}
-
-.beta-notice-link .el-icon {
-  flex-shrink: 0;
-}
 
 .user-info {
   display: flex;
@@ -1633,60 +1531,7 @@ html.dark .navbar {
   display: none !important;
 }
 
-/* ===== 公测须知弹窗 ===== */
-.beta-notice-content {
-  padding: 0 4px;
-}
 
-.beta-alert {
-  margin-bottom: 16px;
-}
-
-.beta-alert-title {
-  font-weight: 600;
-}
-
-.beta-notice-body p {
-  margin: 8px 0;
-  line-height: 1.8;
-  color: var(--el-text-color-regular);
-}
-
-.beta-notice-body strong {
-  color: var(--el-color-warning);
-}
-
-.beta-notice-join {
-  background: var(--el-fill-color-light);
-  border-radius: 8px;
-  padding: 16px;
-  margin-top: 12px;
-}
-
-.beta-qq-group {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 8px 0;
-}
-
-.beta-qq-number {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--el-color-primary);
-  font-family: 'SF Mono', SFMono-Regular, Consolas, monospace;
-  letter-spacing: 1px;
-}
-
-.beta-notice-tip {
-  color: var(--el-color-success);
-  font-size: 13px;
-  margin-top: 8px !important;
-}
-
-.beta-confirm-btn {
-  width: 100%;
-}
 
 /* ===== 赞助支持弹窗 ===== */
 .sponsor-dialog :deep(.el-dialog__header) {

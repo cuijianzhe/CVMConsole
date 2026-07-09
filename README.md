@@ -10,8 +10,6 @@
 [![GitHub Issues](https://img.shields.io/github/issues/qvmconsole/qvmconsole)](https://github.com/qvmconsole/qvmconsole/issues)
 [![GitHub Pull Requests](https://img.shields.io/github/issues-pr/qvmconsole/qvmconsole)](https://github.com/qvmconsole/qvmconsole/pulls)
 
-[**官方网站**](https://www.qvmconsole.cn/) | [**文档站点**](https://qvmcdocs.xiaozhuhouses.asia/) | [**部署指南**](https://qvmcdocs.xiaozhuhouses.asia/docs/install/)
-
 </div>
 
 ## 项目简介
@@ -119,8 +117,8 @@ QVMConsole 是一个面向小型企业和个人私有云服务场景的开源虚
 如果您发现项目存在安全漏洞，无论严重程度如何，请勿在 GitHub Issues 中公开报告，以避免安全风险被恶意利用。
 
 **安全报告渠道**：
-- 作者QQ：3354416548
-- 电子邮件：xiaozhuhs@foxmail.com
+- 作者QQ：598941324
+- 电子邮件：598941324@qq.com
 
 ---
 
@@ -134,6 +132,5 @@ QVMConsole 是一个面向小型企业和个人私有云服务场景的开源虚
 
 **QVMConsole** - 让虚拟化管理更简单
 
-[官方网站](https://www.qvmconsole.cn/) | [文档站点](https://qvmcdocs.xiaozhuhouses.asia/) | [部署指南](https://qvmcdocs.xiaozhuhouses.asia/docs/install/)
 
 </div>
