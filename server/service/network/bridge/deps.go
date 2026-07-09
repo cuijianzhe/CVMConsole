@@ -12,6 +12,12 @@ var (
 	HookEnsureAllVPCSwitchRuntime func() error
 	HookWriteFileIfChanged        func(path string, content []byte, perm os.FileMode) (bool, error)
 	HookOvsBridgeName             func() string
+
+	HookListBridgeStaticHosts  func(bridgeName string) ([]BridgeStaticHost, error)
+	HookListBridgeDHCPLeases   func(bridgeName string) ([]BridgeDHCPLease, error)
+	HookUpsertBridgeStaticHost func(bridgeName, vmName, mac, ipAddr string) error
+	HookRemoveBridgeStaticHost func(bridgeName, vmName, mac string) (string, error)
+	HookReloadBridgeDNSMasq    func(bridgeName string) error
 )
 
 type BridgeStaticHost struct {
@@ -53,15 +59,77 @@ func ListBridgeStaticHosts(bridgeName string) ([]BridgeStaticHost, error) {
 			continue
 		}
 		fields := strings.Split(line, ",")
-		if len(fields) >= 3 {
-			hosts = append(hosts, BridgeStaticHost{
-				MAC:  strings.ToLower(strings.TrimSpace(fields[0])),
-				IP:   strings.TrimSpace(fields[1]),
-				VMName: strings.TrimSpace(fields[2]),
-			})
+		if len(fields) >= 2 {
+			host := BridgeStaticHost{
+				MAC: strings.ToLower(strings.TrimSpace(fields[0])),
+				IP:  strings.TrimSpace(fields[1]),
+			}
+			if len(fields) >= 3 {
+				host.VMName = strings.TrimSpace(fields[2])
+			}
+			hosts = append(hosts, host)
 		}
 	}
 	return hosts, nil
+}
+
+func writeBridgeStaticHosts(bridgeName string, hosts []BridgeStaticHost) error {
+	path := bridgeDHCPHostsPath(bridgeName)
+	var lines []string
+	for _, host := range hosts {
+		line := fmt.Sprintf("%s,%s,%s", host.MAC, host.IP, host.VMName)
+		lines = append(lines, line)
+	}
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+}
+
+func UpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr string) error {
+	hosts, err := ListBridgeStaticHosts(bridgeName)
+	if err != nil {
+		return err
+	}
+	mac = strings.ToLower(strings.TrimSpace(mac))
+	found := false
+	for i, host := range hosts {
+		if host.MAC == mac || host.VMName == vmName {
+			hosts[i] = BridgeStaticHost{
+				VMName: vmName,
+				MAC:    mac,
+				IP:     ipAddr,
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		hosts = append(hosts, BridgeStaticHost{
+			VMName: vmName,
+			MAC:    mac,
+			IP:     ipAddr,
+		})
+	}
+	return writeBridgeStaticHosts(bridgeName, hosts)
+}
+
+func RemoveBridgeStaticHost(bridgeName, vmName, mac string) (string, error) {
+	hosts, err := ListBridgeStaticHosts(bridgeName)
+	if err != nil {
+		return "", err
+	}
+	mac = strings.ToLower(strings.TrimSpace(mac))
+	var removedIP string
+	var next []BridgeStaticHost
+	for _, host := range hosts {
+		if host.MAC == mac || host.VMName == vmName {
+			removedIP = host.IP
+			continue
+		}
+		next = append(next, host)
+	}
+	if err := writeBridgeStaticHosts(bridgeName, next); err != nil {
+		return "", err
+	}
+	return removedIP, nil
 }
 
 func ListBridgeDHCPLeases(bridgeName string) ([]BridgeDHCPLease, error) {
@@ -84,8 +152,8 @@ func parseBridgeDHCPLeasesText(text string) []BridgeDHCPLease {
 			continue
 		}
 		lease := BridgeDHCPLease{
-			MAC:        strings.ToLower(fields[1]),
-			IP:         fields[2],
+			MAC: strings.ToLower(fields[1]),
+			IP:  fields[2],
 		}
 		if len(fields) >= 4 && fields[3] != "*" {
 			lease.Hostname = fields[3]

@@ -129,7 +129,7 @@ func findFreeIP() (string, error) {
 func findVPCFreeIP(sw model.VPCSwitch) (string, error) {
 	if HookSwitchUsesDirectBridge != nil && HookSwitchUsesDirectBridge(sw) {
 		if sw.BridgeIPMode == "preset" {
-			return findBridgeFreeIP(sw)
+			return FindBridgeFreeIP(sw)
 		}
 		return "", fmt.Errorf("上级路由分配模式下无法自动分配 IP，请手动指定 IP 地址")
 	}
@@ -157,7 +157,7 @@ func findVPCFreeIP(sw model.VPCSwitch) (string, error) {
 	return "", fmt.Errorf("交换机 %s 的 DHCP 地址池没有可用 IP", sw.Name)
 }
 
-func findBridgeFreeIP(sw model.VPCSwitch) (string, error) {
+func FindBridgeFreeIP(sw model.VPCSwitch) (string, error) {
 	var bridge model.NetworkBridge
 	bridgeName := sw.BridgeName
 	if bridgeName == "" {

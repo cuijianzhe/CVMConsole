@@ -103,6 +103,25 @@ func BindVMToVPC(username, vmName string, switchID, securityGroupID uint) error 
 		return err
 	}
 	if HookSwitchUsesDirectBridge(sw) {
+		if sw.BridgeIPMode == "preset" {
+			if mac := ip_resolver.GetFirstVMMAC(vmName); mac != "" {
+				bridgeName := HookBridgeNameForSwitch(sw)
+				if HookFindBridgeFreeIP != nil {
+					if ipAddr, err := HookFindBridgeFreeIP(sw); err == nil && ipAddr != "" {
+						if HookUpsertBridgeStaticHost != nil {
+							if err := HookUpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr); err != nil {
+								logger.App.Warn("桥接模式静态 IP 绑定失败", "vm", vmName, "error", err)
+							}
+						}
+						if HookReloadBridgeDNSMasq != nil {
+							if err := HookReloadBridgeDNSMasq(bridgeName); err != nil {
+								logger.App.Warn("重新加载桥接模式 DHCP 服务失败", "bridge", bridgeName, "error", err)
+							}
+						}
+					}
+				}
+			}
+		}
 		return nil
 	}
 	return ApplyVPCACLRules()

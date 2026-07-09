@@ -251,6 +251,39 @@ func init() {
 	vpcpkg.HookSwitchUsesDirectBridge = SwitchUsesDirectBridge
 	vpcpkg.HookBridgeModeForSwitch = BridgeModeForSwitch
 	vpcpkg.HookNormalizeBridgeMode = normalizeBridgeMode
+	vpcpkg.HookListBridgeStaticHosts = func(bridgeName string) ([]model.BridgeStaticHost, error) {
+		hosts, err := bridge.HookListBridgeStaticHosts(bridgeName)
+		if err != nil {
+			return nil, err
+		}
+		result := make([]model.BridgeStaticHost, len(hosts))
+		for i, h := range hosts {
+			result[i] = model.BridgeStaticHost{VMName: h.VMName, MAC: h.MAC, IP: h.IP}
+		}
+		return result, nil
+	}
+	vpcpkg.HookListBridgeDHCPLeases = func(bridgeName string) ([]model.BridgeDHCPLease, error) {
+		leases, err := bridge.HookListBridgeDHCPLeases(bridgeName)
+		if err != nil {
+			return nil, err
+		}
+		result := make([]model.BridgeDHCPLease, len(leases))
+		for i, l := range leases {
+			result[i] = model.BridgeDHCPLease{
+				ExpiryTime: l.ExpiryTime,
+				ExpiryUnix: l.ExpiryUnix,
+				MAC:        l.MAC,
+				IP:         l.IP,
+				Hostname:   l.Hostname,
+				ClientID:   l.ClientID,
+			}
+		}
+		return result, nil
+	}
+	vpcpkg.HookUpsertBridgeStaticHost = bridge.HookUpsertBridgeStaticHost
+	vpcpkg.HookRemoveBridgeStaticHost = bridge.HookRemoveBridgeStaticHost
+	vpcpkg.HookReloadBridgeDNSMasq = bridge.HookReloadBridgeDNSMasq
+	vpcpkg.HookFindBridgeFreeIP = netpkg.FindBridgeFreeIP
 	vpcpkg.HookAddOVSBandwidthMeter = addOVSBandwidthMeter
 	vpcpkg.HookGetOVSInterfaceOfPort = getOVSInterfaceOfPort
 	vpcpkg.HookApplyTCVPCSwitchDownlink = applyTCVPCSwitchDownlinkLimit

@@ -70,6 +70,13 @@ var (
 
 	HookStartBridgeDNSMasq func(bridge model.NetworkBridge) error
 
+	HookListBridgeStaticHosts  func(bridgeName string) ([]model.BridgeStaticHost, error)
+	HookListBridgeDHCPLeases   func(bridgeName string) ([]model.BridgeDHCPLease, error)
+	HookUpsertBridgeStaticHost func(bridgeName, vmName, mac, ipAddr string) error
+	HookRemoveBridgeStaticHost func(bridgeName, vmName, mac string) (string, error)
+	HookReloadBridgeDNSMasq    func(bridgeName string) error
+	HookFindBridgeFreeIP       func(sw model.VPCSwitch) (string, error)
+
 	HookAddOVSBandwidthMeter     func(bridge string, meterID uint32, rateKbit int) error
 	HookGetOVSInterfaceOfPort    func(vnetIF string) string
 	HookApplyTCVPCSwitchDownlink func(gwPort string, downMbps int)

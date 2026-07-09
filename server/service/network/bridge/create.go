@@ -16,6 +16,11 @@ import (
 
 func init() {
 	HookStartBridgeDNSMasq = startBridgeDNSMasq
+	HookListBridgeStaticHosts = ListBridgeStaticHosts
+	HookListBridgeDHCPLeases = ListBridgeDHCPLeases
+	HookUpsertBridgeStaticHost = UpsertBridgeStaticHost
+	HookRemoveBridgeStaticHost = RemoveBridgeStaticHost
+	HookReloadBridgeDNSMasq = reloadBridgeDNSMasq
 }
 
 func CreateNetworkBridge(req NetworkBridgeRequest) (*model.NetworkBridge, error) {
@@ -347,6 +352,7 @@ dhcp-range=%s,%s,%s,12h
 dhcp-option=option:router,%s
 dhcp-option=option:dns-server,%s
 dhcp-hostsfile=%s
+dhcp-ignore=tag:!known
 pid-file=%s
 dhcp-leasefile=%s
 log-dhcp
@@ -368,4 +374,24 @@ func stopBridgeDNSMasq(bridgeName string) {
 	utils.ExecCommand("pkill", "-f", fmt.Sprintf("dnsmasq.*%s", bridgeName))
 	pidPath := filepath.Join(bridgeConfigDir, fmt.Sprintf("dnsmasq-%s.pid", bridgeName))
 	_ = os.Remove(pidPath)
+}
+
+func reloadBridgeDNSMasq(bridgeName string) error {
+	pidPath := filepath.Join(bridgeConfigDir, fmt.Sprintf("dnsmasq-%s.pid", bridgeName))
+	data, err := os.ReadFile(pidPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("桥接网桥 %s 的 DHCP 服务未启动", bridgeName)
+		}
+		return err
+	}
+	pid := strings.TrimSpace(string(data))
+	if pid == "" {
+		return fmt.Errorf("无法读取桥接网桥 %s 的 DHCP 服务 PID", bridgeName)
+	}
+	result := utils.ExecCommand("kill", "-HUP", pid)
+	if result.Error != nil {
+		return fmt.Errorf("重新加载桥接网桥 %s 的 DHCP 服务失败: %s", bridgeName, result.Stderr)
+	}
+	return nil
 }

@@ -26,3 +26,18 @@ type NetworkBridge struct {
 func (NetworkBridge) TableName() string {
 	return "network_bridges"
 }
+
+type BridgeStaticHost struct {
+	VMName string
+	MAC    string
+	IP     string
+}
+
+type BridgeDHCPLease struct {
+	ExpiryTime string
+	ExpiryUnix int64
+	MAC        string
+	IP         string
+	Hostname   string
+	ClientID   string
+}
