@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img width="2403" height="1257" alt="sudbsi" src="images/1.png" />
+<img width="2403" height="1257" alt="sudbsi" src="pic/首页.png" />
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 </div>

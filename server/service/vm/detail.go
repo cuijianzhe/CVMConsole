@@ -19,6 +19,8 @@ import (
 	"kvm_console/utils"
 )
 
+var templateSourceNamePattern = regexp.MustCompile(`template_name=['"]([^'"]+)['"]`)
+
 // ==================== 虚拟机详情查询 ====================
 
 // GetVM 获取单个虚拟机详情
@@ -65,6 +67,16 @@ func GetVM(name string) (*VmDetail, error) {
 	vm.DiskPath = diskInfo.Path
 	vm.DiskSize = diskInfo.Size
 	vm.Template = diskInfo.Template
+
+	// 如果磁盘 backing file 没有模板信息，尝试从 XML 文件中读取 template-source 元数据
+	if vm.Template == "" {
+		xmlPath := fmt.Sprintf("/etc/libvirt/qemu/%s.xml", name)
+		if content, err := os.ReadFile(xmlPath); err == nil {
+			if match := templateSourceNamePattern.FindStringSubmatch(string(content)); len(match) >= 2 {
+				vm.Template = strings.TrimSpace(match[1])
+			}
+		}
+	}
 
 	// 检查系统盘完整性（仅检查第一块非 cdrom 磁盘）
 	if diskInfo.Path != "" {
