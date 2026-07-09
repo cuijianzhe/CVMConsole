@@ -188,9 +188,12 @@ func collectVMStatsRPC(name string) (*vmpkg.VmStats, error) {
 	memStats, err := libvirt_rpc.GetDomainMemoryStatsRPC(name)
 	if err == nil {
 		stats.MemTotal = int64(memStats["actual"])
-		stats.MemUsed = stats.MemTotal - int64(memStats["unused"])
-		if memStats["available"] > 0 {
+		if memStats["available"] > 0 && memStats["usable"] > 0 {
 			stats.MemUsed = stats.MemTotal - int64(memStats["usable"])
+		} else if memStats["unused"] > 0 {
+			stats.MemUsed = stats.MemTotal - int64(memStats["unused"])
+		} else if memStats["rss"] > 0 {
+			stats.MemUsed = int64(memStats["rss"])
 		}
 	}
 

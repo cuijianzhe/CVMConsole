@@ -96,9 +96,12 @@ func GetVMStats(name string) (*VmStats, error) {
 	if libvirt_rpc.IsLibvirtRPCAvailable() {
 		if memStats, err := libvirt_rpc.GetDomainMemoryStatsRPC(name); err == nil {
 			stats.MemTotal = int64(memStats["actual"])
-			stats.MemUsed = stats.MemTotal - int64(memStats["unused"])
-			if memStats["available"] > 0 {
+			if memStats["available"] > 0 && memStats["usable"] > 0 {
 				stats.MemUsed = stats.MemTotal - int64(memStats["usable"])
+			} else if memStats["unused"] > 0 {
+				stats.MemUsed = stats.MemTotal - int64(memStats["unused"])
+			} else if memStats["rss"] > 0 {
+				stats.MemUsed = int64(memStats["rss"])
 			}
 		} else {
 			logger.Libvirt.Warn("GetDomainMemoryStatsRPC 失败，降级为 virsh", "domain", name, "error", err)
@@ -108,9 +111,12 @@ func GetVMStats(name string) (*VmStats, error) {
 		memResult := utils.ExecCommand("virsh", "dommemstat", name)
 		if memResult.Error == nil {
 			stats.MemTotal = parseMemStat(memResult.Stdout, "actual")
-			stats.MemUsed = stats.MemTotal - parseMemStat(memResult.Stdout, "unused")
-			if parseMemStat(memResult.Stdout, "available") > 0 {
+			if parseMemStat(memResult.Stdout, "available") > 0 && parseMemStat(memResult.Stdout, "usable") > 0 {
 				stats.MemUsed = stats.MemTotal - parseMemStat(memResult.Stdout, "usable")
+			} else if parseMemStat(memResult.Stdout, "unused") > 0 {
+				stats.MemUsed = stats.MemTotal - parseMemStat(memResult.Stdout, "unused")
+			} else if parseMemStat(memResult.Stdout, "rss") > 0 {
+				stats.MemUsed = parseMemStat(memResult.Stdout, "rss")
 			}
 		}
 	}

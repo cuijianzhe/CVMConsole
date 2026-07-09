@@ -1,20 +1,15 @@
-# QVMConsole - 开源虚拟机管理控制台
+# CVMConsole - 开源虚拟机管理控制台
 
 <div align="center">
 
 <img width="2403" height="1257" alt="sudbsi" src="https://github.com/user-attachments/assets/965011d7-9cf3-4ef4-b39e-7b22fe99a1c8" />
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/qvmconsole/qvmconsole?style=social)](https://github.com/qvmconsole/qvmconsole)
-[![GitHub Forks](https://img.shields.io/github/forks/qvmconsole/qvmconsole?style=social)](https://github.com/qvmconsole/qvmconsole)
-[![GitHub Issues](https://img.shields.io/github/issues/qvmconsole/qvmconsole)](https://github.com/qvmconsole/qvmconsole/issues)
-[![GitHub Pull Requests](https://img.shields.io/github/issues-pr/qvmconsole/qvmconsole)](https://github.com/qvmconsole/qvmconsole/pulls)
-
 </div>
 
 ## 项目简介
 
-QVMConsole 是一个面向小型企业和个人私有云服务场景的开源虚拟机管理平台，基于 KVM/QEMU 虚拟化技术深度集成，提供从虚拟机生命周期管理、网络与存储编排、快照与克隆、防火墙与带宽治理，到 Web 控制台与 API 一体化交付的完整解决方案。
+CVMConsole 是一个面向小型企业和个人私有云服务场景的开源虚拟机管理平台，基于 KVM/QEMU 虚拟化技术深度集成，提供从虚拟机生命周期管理、网络与存储编排、快照与克隆、防火墙与带宽治理，到 Web 控制台与 API 一体化交付的完整解决方案。
 
 ### 核心价值
 
@@ -108,7 +103,7 @@ QVMConsole 是一个面向小型企业和个人私有云服务场景的开源虚
 - **依赖工具**: genisoimage（用于 Windows 虚拟机初始化）
 
 ### 开发贡献指南
-作为一个由独立开发者维护的大型开源项目，QVMConsole 需要社区贡献者的支持才能持续完善。我们欢迎并鼓励您使用 AI 等工具进行功能修复与开发，但请务必遵守以下准则：
+作为一个由独立开发者维护的大型开源项目，CVMConsole 需要社区贡献者的支持才能持续完善。我们欢迎并鼓励您使用 AI 等工具进行功能修复与开发，但请务必遵守以下准则：
 
 1. **规则遵守**：在使用 AI 工具时，必须将根目录的 `AGENTS.md` 文件作为核心提示词规则
 2. **场景通用性**：提交的功能应面向通用化使用场景，符合广大用户的需求。针对特定场景的定制功能建议自行 fork 仓库维护
@@ -124,13 +119,13 @@ QVMConsole 是一个面向小型企业和个人私有云服务场景的开源虚
 
 ## 致谢
 
-感谢所有为 QVMConsole 做出贡献的开发者！
+感谢所有为 CVMConsole 做出贡献的开发者！
 
 ---
 
 <div align="center">
 
-**QVMConsole** - 让虚拟化管理更简单
+**CVMConsole** - 让虚拟化管理更简单
 
 
 </div>
