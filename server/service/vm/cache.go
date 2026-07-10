@@ -132,44 +132,34 @@ func vmInfoFromCacheRecord(record model.VMCache, options VMListOptions) VmInfo {
 		IsLinkedClone: record.Template != "",
 	}
 
-	if options.IncludeIP {
-		vm.IP = record.CachedIP
-	}
-	if options.IncludeNetworkInfo {
-		// 优先从持久化数据库读取网络信息（包含所有网口）
-		dbInfos, err := GetVMNetworkInfoByVMName(record.Name)
-		if err == nil && len(dbInfos) > 0 {
-			// 使用主网口（interface_order = 0）的信息
-			for _, info := range dbInfos {
-				if info.InterfaceOrder == 0 {
-					vm.NicModel = info.NicModel
-					vm.MacAddress = info.MacAddress
-					if options.IncludeIP && info.IPAddress != "" {
-						vm.IP = info.IPAddress
-					}
-					break
+	// 默认返回缓存的 IP 和 MAC 地址（不触发实时查询）
+	vm.IP = record.CachedIP
+
+	// 优先从持久化数据库读取网络信息
+	dbInfos, err := GetVMNetworkInfoByVMName(record.Name)
+	if err == nil && len(dbInfos) > 0 {
+		for _, info := range dbInfos {
+			if info.InterfaceOrder == 0 {
+				vm.NicModel = info.NicModel
+				vm.MacAddress = info.MacAddress
+				if info.IPAddress != "" {
+					vm.IP = info.IPAddress
 				}
-			}
-		}
-		// 如果数据库中没有，尝试从缓存或实时查询获取
-		if vm.MacAddress == "" {
-			vm.NicModel = record.NicModel
-			vm.MacAddress = record.MacAddress
-			if vm.MacAddress == "" {
-				netInfo := GetVMNetworkInfo(record.Name)
-				vm.MacAddress = netInfo.MAC
-				if vm.NicModel == "" {
-					vm.NicModel = netInfo.NicModel
-				}
+				break
 			}
 		}
 	}
+	// 如果数据库中没有，从缓存记录中读取
+	if vm.MacAddress == "" {
+		vm.NicModel = record.NicModel
+		vm.MacAddress = record.MacAddress
+	}
+
+	// 仅在显式请求 include_ip 时才触发实时 IP 查询
 	if options.IncludeIP && vm.IP == "" {
-		// 实时查询获取 IP 地址
 		if strings.EqualFold(strings.TrimSpace(record.Status), "running") {
 			if ip, _, err := GetVMIPInfo(record.Name); err == nil && ip != "" {
 				vm.IP = ip
-				// 更新数据库中的 IP
 				if vm.MacAddress != "" {
 					_ = UpdateVMNetworkIPByMAC(vm.MacAddress, ip)
 				}

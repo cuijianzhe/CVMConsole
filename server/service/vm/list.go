@@ -141,7 +141,33 @@ func ListVMs(options ...VMListOptions) ([]VmInfo, error) {
 			vm.Remark = remark
 		}
 
-		if listOptions.IncludeIP {
+		// 默认获取网络信息（MAC 地址等，从 XML 解析，开销小）
+		netInfo := GetVMNetworkInfo(name)
+		vm.Network = netInfo.Network
+		vm.NicModel = netInfo.NicModel
+		vm.MacAddress = netInfo.MAC
+
+		// 优先从持久化数据库读取网络信息
+		dbInfos, err := GetVMNetworkInfoByVMName(name)
+		if err == nil && len(dbInfos) > 0 {
+			for _, info := range dbInfos {
+				if info.InterfaceOrder == 0 {
+					if info.MacAddress != "" {
+						vm.MacAddress = info.MacAddress
+					}
+					if info.NicModel != "" {
+						vm.NicModel = info.NicModel
+					}
+					if info.IPAddress != "" {
+						vm.IP = info.IPAddress
+					}
+					break
+				}
+			}
+		}
+
+		// 仅在显式请求 include_ip 时才触发实时 IP 查询
+		if listOptions.IncludeIP && vm.IP == "" {
 			vm.IP = ip_resolver.GetVMIP(name, vm.Status == "running")
 		}
 		vm.IPStatus = ip_resolver.GetVMIPStatus(name, vm.Status == "running")
@@ -152,13 +178,6 @@ func ListVMs(options ...VMListOptions) ([]VmInfo, error) {
 		vm.Template = diskInfo.Template
 		vm.IsLinkedClone = diskInfo.Template != ""
 
-		// 仅在需要时查询列表页未直接使用的网卡 / 带宽信息，避免每台 VM 额外触发多次 virsh 调用。
-		if listOptions.IncludeNetworkInfo {
-			netInfo := GetVMNetworkInfo(name)
-			vm.Network = netInfo.Network
-			vm.NicModel = netInfo.NicModel
-			vm.MacAddress = netInfo.MAC
-		}
 		if listOptions.IncludeBandwidth {
 			vm.BandwidthIn, vm.BandwidthOut = D.GetVMBandwidthMbps(name)
 		}
