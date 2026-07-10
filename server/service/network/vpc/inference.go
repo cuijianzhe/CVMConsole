@@ -193,6 +193,7 @@ func repairMissingVPCBindingFromRuntime(vmName string, sw *model.VPCSwitch) (*mo
 			return sw, true
 		}
 		logger.App.Warn(fmt.Sprintf("已根据运行态修复 VM %s 的 VPC 绑定记录", vmName))
+		registerVMStaticHostForDirectBridge(vmName, *sw)
 		return sw, true
 	}
 	binding := model.VPCVMBinding{
@@ -206,7 +207,35 @@ func repairMissingVPCBindingFromRuntime(vmName string, sw *model.VPCSwitch) (*mo
 		return sw, true
 	}
 	logger.App.Warn(fmt.Sprintf("已根据运行态补建 VM %s 的 VPC 绑定记录", vmName))
+	registerVMStaticHostForDirectBridge(vmName, *sw)
 	return sw, true
+}
+
+func registerVMStaticHostForDirectBridge(vmName string, sw model.VPCSwitch) {
+	if !HookSwitchUsesDirectBridge(sw) {
+		return
+	}
+	if mac := ip_resolver.GetFirstVMMAC(vmName); mac != "" {
+		bridgeName := HookBridgeNameForSwitch(sw)
+		var ipAddr string
+		if sw.BridgeIPMode == "preset" && HookFindBridgeFreeIP != nil {
+			var err error
+			ipAddr, err = HookFindBridgeFreeIP(sw)
+			if err != nil {
+				logger.App.Warn("查找桥接模式可用 IP 失败", "vm", vmName, "error", err)
+			}
+		}
+		if HookUpsertBridgeStaticHost != nil {
+			if err := HookUpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr); err != nil {
+				logger.App.Warn("桥接模式注册 MAC 地址失败", "vm", vmName, "error", err)
+			}
+		}
+		if HookReloadBridgeDNSMasq != nil {
+			if err := HookReloadBridgeDNSMasq(bridgeName); err != nil {
+				logger.App.Warn("重新加载桥接模式 DHCP 服务失败", "bridge", bridgeName, "error", err)
+			}
+		}
+	}
 }
 
 func migrateOVSStaticHostToVPCIfNeeded(vmName string, sw model.VPCSwitch) {

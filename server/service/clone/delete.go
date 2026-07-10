@@ -304,6 +304,18 @@ func collectVMIPs(vmName string) []string {
 		ipSet[ip] = true
 	}
 
+	if D.GetVPCSwitchForVM != nil && D.SwitchUsesDirectBridge != nil && D.ListBridgeStaticHosts != nil {
+		if sw, ok := D.GetVPCSwitchForVM(vmName); ok && D.SwitchUsesDirectBridge(*sw) {
+			if hosts, err := D.ListBridgeStaticHosts(sw.BridgeName); err == nil {
+				for _, host := range hosts {
+					if strings.EqualFold(host.MAC, mac) && host.IP != "" {
+						ipSet[host.IP] = true
+					}
+				}
+			}
+		}
+	}
+
 	ipRe := regexp.MustCompile(`(\d+\.\d+\.\d+\.\d+)`)
 	for _, source := range []string{"agent", "arp", "lease"} {
 		addrResult := utils.ExecCommandQuiet("virsh", "domifaddr", vmName, "--source", source)

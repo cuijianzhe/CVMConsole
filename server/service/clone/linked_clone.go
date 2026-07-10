@@ -390,6 +390,12 @@ func LinkedCloneVM(ctx context.Context, params *LinkedCloneParams, progressFn fu
 		return nil, err
 	}
 
+	if params.SwitchID != 0 && D.BindVMToVPCAsAdmin != nil {
+		if err := D.BindVMToVPCAsAdmin(params.Name, params.SwitchID, params.SecurityGroupID); err != nil {
+			logger.App.Warn("绑定虚拟机到 VPC 交换机失败", "vm", params.Name, "switch_id", params.SwitchID, "error", err)
+		}
+	}
+
 	// 额外磁盘：在启动前冷添加，避免占用 PCIe 热插槽
 	if len(params.ExtraDisks) > 0 {
 		progressFn(78, "挂载额外磁盘...")

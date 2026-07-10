@@ -57,11 +57,31 @@ func GetUserQuotaUsage(username string) (*QuotaUsage, error) {
 
 	// 获取用户拥有的VM列表（自建 + 管理员分配的）
 	vms := GetUserVMList(username)
-	usage.UsedVM = len(vms)
+
+	// 获取实际存在的 libvirt domain 名称集合，过滤掉已删除的VM和无效名称
+	allDomainsResult := utils.ExecCommand("virsh", "list", "--all", "--name")
+	validDomains := make(map[string]bool)
+	if allDomainsResult.Error == nil {
+		for _, name := range strings.Split(allDomainsResult.Stdout, "\n") {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				validDomains[name] = true
+			}
+		}
+	}
+
+	var validVMs []string
+	for _, vmName := range vms {
+		if len(validDomains) > 0 && !validDomains[vmName] {
+			continue
+		}
+		validVMs = append(validVMs, vmName)
+	}
+	usage.UsedVM = len(validVMs)
 
 	// 遍历每个VM，统计资源使用
 	totalVMMemMB := 0
-	for _, vmName := range vms {
+	for _, vmName := range validVMs {
 		cpu, memMB := GetVMCPUAndMemory(vmName)
 		usage.UsedCPU += cpu
 		totalVMMemMB += memMB

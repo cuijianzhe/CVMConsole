@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"kvm_console/model"
 	"kvm_console/service/network/vpc"
 	"kvm_console/service/storage/disk"
 	"kvm_console/service/vm/memory"
@@ -53,6 +54,10 @@ type Deps struct {
 	GetOVSStaticIPByMAC           func(mac string) string
 	ListAllVPCStaticHosts         func() ([]OVSStaticHost, error)
 	GetOVSLeaseIPByMAC            func(mac string) string
+	BindVMToVPCAsAdmin            func(vmName string, switchID, securityGroupID uint) error
+	GetVPCSwitchForVM             func(vmName string) (*model.VPCSwitch, bool)
+	SwitchUsesDirectBridge        func(sw model.VPCSwitch) bool
+	ListBridgeStaticHosts         func(bridgeName string) ([]NetworkBridgeStaticHost, error)
 
 	// ---- XML modification helpers ----
 	ApplyRTCConfigToDomainXML           func(xmlStr, offset, startDate, tplType string) (string, error)
@@ -111,8 +116,8 @@ type Deps struct {
 	HookEnsureVMNotMigrating func(vmName, action string) error
 
 	// ---- SPICE graphics（创建即带，默认本地监听） ----
-	InjectSPICEGraphics func(xmlStr, passwd, listenAddr string) string
-	EnsureQXLVideo      func(xmlStr string) string
+	InjectSPICEGraphics   func(xmlStr, passwd, listenAddr string) string
+	EnsureQXLVideo        func(xmlStr string) string
 	SpiceEnabledByDefault func() bool
 }
 
@@ -142,6 +147,13 @@ type TemplateDefaultConfig struct {
 type OVSStaticHost struct {
 	MAC string
 	IP  string
+}
+
+// NetworkBridgeStaticHost mirrors the service.NetworkBridgeStaticHost type
+type NetworkBridgeStaticHost struct {
+	VMName string
+	MAC    string
+	IP     string
 }
 
 // VMDiskInfoResult mirrors the unexported diskInfoResult from service root.

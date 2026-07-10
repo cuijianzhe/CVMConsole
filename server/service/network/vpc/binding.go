@@ -2,7 +2,9 @@ package vpc
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
+	"time"
 
 	"kvm_console/logger"
 	"kvm_console/model"
@@ -99,30 +101,35 @@ func BindVMToVPC(username, vmName string, switchID, securityGroupID uint) error 
 	if err := HookClearVMBandwidth(vmName); err != nil {
 		logger.App.Warn("清理 VM 单机速率限制失败", "vm", vmName, "error", err)
 	}
-	if err := ApplyVPCSwitchRuntime(vmName, sw); err != nil {
-		return err
-	}
 	if HookSwitchUsesDirectBridge(sw) {
-		if sw.BridgeIPMode == "preset" {
-			if mac := ip_resolver.GetFirstVMMAC(vmName); mac != "" {
-				bridgeName := HookBridgeNameForSwitch(sw)
-				if HookFindBridgeFreeIP != nil {
-					if ipAddr, err := HookFindBridgeFreeIP(sw); err == nil && ipAddr != "" {
-						if HookUpsertBridgeStaticHost != nil {
-							if err := HookUpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr); err != nil {
-								logger.App.Warn("桥接模式静态 IP 绑定失败", "vm", vmName, "error", err)
-							}
-						}
-						if HookReloadBridgeDNSMasq != nil {
-							if err := HookReloadBridgeDNSMasq(bridgeName); err != nil {
-								logger.App.Warn("重新加载桥接模式 DHCP 服务失败", "bridge", bridgeName, "error", err)
-							}
-						}
-					}
+		if mac := ip_resolver.GetFirstVMMAC(vmName); mac != "" {
+			bridgeName := HookBridgeNameForSwitch(sw)
+			var ipAddr string
+			if sw.BridgeIPMode == "preset" && HookFindBridgeFreeIP != nil {
+				var err error
+				ipAddr, err = HookFindBridgeFreeIP(sw)
+				if err != nil {
+					logger.App.Warn("查找桥接模式可用 IP 失败", "vm", vmName, "error", err)
+				}
+			}
+			if HookUpsertBridgeStaticHost != nil {
+				if err := HookUpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr); err != nil {
+					logger.App.Warn("桥接模式注册 MAC 地址失败", "vm", vmName, "error", err)
+				}
+			}
+			if HookReloadBridgeDNSMasq != nil {
+				if err := HookReloadBridgeDNSMasq(bridgeName); err != nil {
+					logger.App.Warn("重新加载桥接模式 DHCP 服务失败", "bridge", bridgeName, "error", err)
 				}
 			}
 		}
+		if err := ApplyVPCSwitchRuntime(vmName, sw); err != nil {
+			return err
+		}
 		return nil
+	}
+	if err := ApplyVPCSwitchRuntime(vmName, sw); err != nil {
+		return err
 	}
 	return ApplyVPCACLRules()
 }
@@ -197,25 +204,46 @@ func ApplyVPCSwitchToDomainXML(vmXML string, switchID uint) (string, error) {
 	if HookSwitchUsesDirectBridge(sw) {
 		updated, changed := setFirstOVSInterfaceDirectBridge(vmXML, HookBridgeNameForSwitch(sw), sw.BridgeVLANID)
 		if !changed {
-			return "", fmt.Errorf("无法在虚拟机 XML 中找到可接入桥接网桥的 OVS 网卡")
+			return addOVSInterfaceToXML(vmXML, HookBridgeNameForSwitch(sw), sw.BridgeVLANID), nil
 		}
 		return updated, nil
 	}
-	// 系统基础网络交换机（VLANID == 0）：只设置 OVS 网桥源，不打 VLAN
 	if sw.VLANID == 0 {
 		updated, bridgeChanged := setFirstOVSInterfaceBridge(vmXML, HookOvsBridgeName())
 		if !bridgeChanged {
-			return "", fmt.Errorf("无法在虚拟机 XML 中找到可接入 VPC 的 OVS 网卡")
+			return addOVSInterfaceToXML(vmXML, HookOvsBridgeName(), 0), nil
 		}
-		// 移除可能存在的 VLAN 标签
 		updated = removeFirstInterfaceVLAN(updated)
 		return updated, nil
 	}
 	updated, changed := setFirstOVSInterfaceVPC(vmXML, sw.VLANID)
 	if !changed {
-		return "", fmt.Errorf("无法在虚拟机 XML 中找到可接入 VPC 的 OVS 网卡")
+		return addOVSInterfaceToXML(vmXML, HookOvsBridgeName(), sw.VLANID), nil
 	}
 	return updated, nil
+}
+
+func addOVSInterfaceToXML(vmXML, bridge string, vlanID int) string {
+	if strings.TrimSpace(vmXML) == "" || strings.TrimSpace(bridge) == "" {
+		return vmXML
+	}
+	rand.Seed(time.Now().UnixNano())
+	mac := fmt.Sprintf("52:54:00:%02x:%02x:%02x", rand.Intn(256), rand.Intn(256), rand.Intn(256))
+	var interfaceXML strings.Builder
+	interfaceXML.WriteString("    <interface type='bridge'>\n")
+	interfaceXML.WriteString(fmt.Sprintf("      <mac address='%s'/>\n", mac))
+	interfaceXML.WriteString(fmt.Sprintf("      <source bridge='%s'/>\n", strings.TrimSpace(bridge)))
+	interfaceXML.WriteString("      <virtualport type='openvswitch'/>\n")
+	interfaceXML.WriteString("      <model type='virtio'/>\n")
+	if vlanID > 0 {
+		interfaceXML.WriteString(fmt.Sprintf("      <tag id='%d'/>\n", vlanID))
+	}
+	interfaceXML.WriteString("    </interface>\n")
+	devicesEndIdx := strings.Index(vmXML, "</devices>")
+	if devicesEndIdx >= 0 {
+		return vmXML[:devicesEndIdx] + interfaceXML.String() + vmXML[devicesEndIdx:]
+	}
+	return vmXML
 }
 
 func GetVPCBindingInfo(operator, role, vmName string) (*VPCBindingInfo, error) {

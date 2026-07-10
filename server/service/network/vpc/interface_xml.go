@@ -55,15 +55,59 @@ func setFirstOVSInterfaceVPC(xmlText string, vlanID int) (string, bool) {
 
 func setFirstOVSInterfaceDirectBridge(xmlText, bridge string, vlanID int) (string, bool) {
 	updated, bridgeChanged := setFirstOVSInterfaceBridge(xmlText, bridge)
-	if !bridgeChanged && !firstOVSInterfaceUsesBridge(updated, bridge) {
+	if bridgeChanged {
+		if vlanID > 0 {
+			vlanUpdated, _ := setFirstOVSInterfaceAnyVLANTag(updated, vlanID)
+			return vlanUpdated, true
+		}
+		vlanUpdated := removeFirstInterfaceVLAN(updated)
+		return vlanUpdated, true
+	}
+	if firstOVSInterfaceUsesBridge(xmlText, bridge) {
+		if vlanID > 0 {
+			vlanUpdated, vlanChanged := setFirstOVSInterfaceAnyVLANTag(xmlText, vlanID)
+			return vlanUpdated, vlanChanged
+		}
+		vlanUpdated := removeFirstInterfaceVLAN(xmlText)
+		return vlanUpdated, vlanUpdated != xmlText
+	}
+	updated, bridgeChanged = setFirstBridgeInterface(xmlText, bridge)
+	if bridgeChanged {
+		if vlanID > 0 {
+			vlanUpdated, _ := setFirstOVSInterfaceAnyVLANTag(updated, vlanID)
+			return vlanUpdated, true
+		}
+		vlanUpdated := removeFirstInterfaceVLAN(updated)
+		return vlanUpdated, true
+	}
+	return xmlText, false
+}
+
+func setFirstBridgeInterface(xmlText, bridge string) (string, bool) {
+	if strings.TrimSpace(xmlText) == "" || strings.TrimSpace(bridge) == "" {
 		return xmlText, false
 	}
-	if vlanID > 0 {
-		vlanUpdated, vlanChanged := setFirstOVSInterfaceAnyVLANTag(updated, vlanID)
-		return vlanUpdated, bridgeChanged || vlanChanged
+	searchFrom := 0
+	for {
+		startRel := strings.Index(xmlText[searchFrom:], "<interface ")
+		if startRel < 0 {
+			return xmlText, false
+		}
+		start := searchFrom + startRel
+		endRel := strings.Index(xmlText[start:], "</interface>")
+		if endRel < 0 {
+			return xmlText, false
+		}
+		end := start + endRel + len("</interface>")
+		block := xmlText[start:end]
+		hasBridgeType := strings.Contains(block, "<interface type='bridge'") || strings.Contains(block, `<interface type="bridge"`)
+		if hasBridgeType {
+			sourceRe := regexp.MustCompile(`<source\s+bridge=['"][^'"]+['"]\s*/>`)
+			updatedBlock := sourceRe.ReplaceAllString(block, fmt.Sprintf("<source bridge='%s'/>", strings.TrimSpace(bridge)))
+			return xmlText[:start] + updatedBlock + xmlText[end:], updatedBlock != block
+		}
+		searchFrom = end
 	}
-	vlanUpdated := removeFirstInterfaceVLAN(updated)
-	return vlanUpdated, bridgeChanged || vlanUpdated != updated
 }
 
 func SetFirstOVSInterfaceVLANTag(xmlText string, vlanID int) (string, bool) {

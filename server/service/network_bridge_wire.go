@@ -2,9 +2,12 @@ package service
 
 import (
 	"kvm_console/model"
-	bridge "kvm_console/service/network/bridge"
+	"kvm_console/service/clone"
 	netpkg "kvm_console/service/network"
+	bridge "kvm_console/service/network/bridge"
 	vpc "kvm_console/service/network/vpc"
+	"path/filepath"
+	"strings"
 )
 
 // init wires network/bridge package function variables to service root implementations.
@@ -18,7 +21,11 @@ func init() {
 
 	netpkg.HookListBridgeStaticHosts = listBridgeStaticHostsHook
 	netpkg.HookListBridgeDHCPLeases = listBridgeDHCPLeasesHook
-	netpkg.HookSwitchUsesDirectBridge = SwitchUsesDirectBridge
+	netpkg.HookUpsertBridgeStaticHost = upsertBridgeStaticHostHook
+	netpkg.HookRemoveBridgeStaticHost = removeBridgeStaticHostHook
+	netpkg.HookRemoveBridgeDHCPLease = removeBridgeDHCPLeaseHook
+	netpkg.HookReloadBridgeDNSMasq = reloadBridgeDNSMasqHook
+	netpkg.HookGetBridgeIPByMAC = getBridgeIPByMACHook
 
 	vpc.HookStartBridgeDNSMasq = bridge.HookStartBridgeDNSMasq
 }
@@ -45,6 +52,53 @@ func listBridgeDHCPLeasesHook(bridgeName string) ([]netpkg.OVSDHCPLease, error) 
 		result[i] = netpkg.OVSDHCPLease{MAC: l.MAC, IP: l.IP, Hostname: l.Hostname}
 	}
 	return result, nil
+}
+
+func upsertBridgeStaticHostHook(bridgeName, vmName, mac, ipAddr string) error {
+	return bridge.UpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr)
+}
+
+func removeBridgeStaticHostHook(bridgeName, vmName, mac string) (string, error) {
+	return bridge.RemoveBridgeStaticHost(bridgeName, vmName, mac)
+}
+
+func removeBridgeDHCPLeaseHook(bridgeName, vmName, mac string) (string, error) {
+	return bridge.RemoveBridgeDHCPLease(bridgeName, vmName, mac)
+}
+
+func reloadBridgeDNSMasqHook(bridgeName string) error {
+	return bridge.HookReloadBridgeDNSMasq(bridgeName)
+}
+
+// getBridgeIPByMACHook 遍历所有桥接网桥，通过 MAC 地址查找静态绑定 IP
+// 不依赖数据库，直接扫描网桥配置目录下的 dhcp-hosts-* 文件
+func getBridgeIPByMACHook(mac string) string {
+	if strings.TrimSpace(mac) == "" {
+		return ""
+	}
+	mac = strings.ToLower(strings.TrimSpace(mac))
+	bridgeConfigDir := "/etc/kvm-console/bridges"
+	matches, err := filepath.Glob(filepath.Join(bridgeConfigDir, "dhcp-hosts-*"))
+	if err != nil {
+		return ""
+	}
+	for _, path := range matches {
+		fileName := filepath.Base(path)
+		bridgeName := strings.TrimPrefix(fileName, "dhcp-hosts-")
+		if bridgeName == "" {
+			continue
+		}
+		hosts, err := bridge.ListBridgeStaticHosts(bridgeName)
+		if err != nil {
+			continue
+		}
+		for _, host := range hosts {
+			if strings.EqualFold(host.MAC, mac) && strings.TrimSpace(host.IP) != "" {
+				return host.IP
+			}
+		}
+	}
+	return ""
 }
 
 // ── Type aliases ──
@@ -119,6 +173,19 @@ func BridgeNameForSwitch(sw model.VPCSwitch) string {
 // SwitchUsesDirectBridge delegates to bridge.SwitchUsesDirectBridge
 func SwitchUsesDirectBridge(sw model.VPCSwitch) bool {
 	return bridge.SwitchUsesDirectBridge(sw)
+}
+
+// ListBridgeStaticHosts delegates to bridge.ListBridgeStaticHosts (exported for clone package)
+func ListBridgeStaticHosts(bridgeName string) ([]clone.NetworkBridgeStaticHost, error) {
+	hosts, err := bridge.ListBridgeStaticHosts(bridgeName)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]clone.NetworkBridgeStaticHost, len(hosts))
+	for i, h := range hosts {
+		result[i] = clone.NetworkBridgeStaticHost{VMName: h.VMName, MAC: h.MAC, IP: h.IP}
+	}
+	return result, nil
 }
 
 // BuildOVSInterfaceXMLForBridge delegates to bridge.BuildOVSInterfaceXMLForBridge

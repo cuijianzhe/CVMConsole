@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/service/ip_resolver"
 	"kvm_console/service/libvirt_rpc"
@@ -184,7 +185,9 @@ func FindBridgeFreeIP(sw model.VPCSwitch) (string, error) {
 	if HookListBridgeStaticHosts != nil {
 		staticHosts, _ := HookListBridgeStaticHosts(bridge.Name)
 		for _, host := range staticHosts {
-			used[host.IP] = true
+			if host.IP != "" {
+				used[host.IP] = true
+			}
 		}
 	}
 
@@ -345,7 +348,7 @@ func EnsureStaticIP(vmName string) (string, error) {
 	if mac == "" {
 		return "", fmt.Errorf("无法获取虚拟机 %s 的 MAC 地址", vmName)
 	}
-	if sw, ok := HookGetVPCSwitchForVM(vmName); ok {
+	if sw, ok := HookGetVPCSwitchForVM(vmName); ok && sw != nil {
 		if host, ok := GetVPCStaticHostByVMName(sw.ID, vmName); ok {
 			if !strings.EqualFold(host.MAC, mac) {
 				if err := UpsertVPCStaticHost(*sw, vmName, mac, host.IP); err != nil {
@@ -403,7 +406,7 @@ func ResolvePortForwardTargetIP(vmName, requestedIP string) (string, error) {
 		}
 		return requestedIP, nil
 	}
-	if sw, ok := HookGetVPCSwitchForVM(vmName); ok {
+	if sw, ok := HookGetVPCSwitchForVM(vmName); ok && sw != nil {
 		mac := ip_resolver.GetFirstVMMAC(vmName)
 		if mac == "" {
 			return "", fmt.Errorf("无法获取虚拟机 %s 的 MAC 地址", vmName)
@@ -454,7 +457,7 @@ func BindStaticIP(vmName, ipAddr string) (string, error) {
 	if mac == "" {
 		return "", fmt.Errorf("无法获取虚拟机 %s 的 MAC 地址", vmName)
 	}
-	if sw, ok := HookGetVPCSwitchForVM(vmName); ok {
+	if sw, ok := HookGetVPCSwitchForVM(vmName); ok && sw != nil {
 		if ipAddr == "" {
 			freeIP, err := findVPCFreeIP(*sw)
 			if err != nil {
@@ -510,7 +513,7 @@ func refreshNIC(vmName, mac, network string) {
 
 	if HookUseOVSNetwork() {
 		var ifaceXML string
-		if sw, ok := HookGetVPCSwitchForVM(vmName); ok {
+		if sw, ok := HookGetVPCSwitchForVM(vmName); ok && sw != nil {
 			ifaceXML = HookBuildOVSInterfaceXMLWithVLAN(mac, nicModel, sw.VLANID)
 			if err := libvirt_rpc.DetachDeviceFlagsRPC(vmName, ifaceXML, 1); err == nil { // VIR_DOMAIN_DEVICE_MODIFY_LIVE
 				time.Sleep(1 * time.Second)
@@ -547,7 +550,34 @@ func UnbindStaticIP(vmName string) error {
 	if mac == "" {
 		return fmt.Errorf("无法获取 MAC 地址")
 	}
-	if sw, ok := HookGetVPCSwitchForVM(vmName); ok {
+
+	if sw, ok := HookGetVPCSwitchForVM(vmName); ok && sw != nil {
+		if HookSwitchUsesDirectBridge != nil && HookSwitchUsesDirectBridge(*sw) {
+			bridgeName := sw.BridgeName
+			if bridgeName != "" {
+				if HookRemoveBridgeStaticHost != nil {
+					boundIP, err := HookRemoveBridgeStaticHost(bridgeName, vmName, mac)
+					if err != nil {
+						return err
+					}
+					if boundIP != "" {
+						RemovePortForwardsForIP(boundIP)
+					}
+				}
+				if HookRemoveBridgeDHCPLease != nil {
+					if _, err := HookRemoveBridgeDHCPLease(bridgeName, vmName, mac); err != nil {
+						logger.App.Warn("清理桥接网桥 DHCP 租约失败", "bridge", bridgeName, "vm", vmName, "error", err)
+					}
+				}
+				if HookReloadBridgeDNSMasq != nil {
+					if err := HookReloadBridgeDNSMasq(bridgeName); err != nil {
+						logger.App.Warn("重载桥接网桥 DNSMasq 失败", "bridge", bridgeName, "error", err)
+					}
+				}
+				return nil
+			}
+		}
+
 		boundIP, err := RemoveVPCStaticHost(sw.ID, vmName, mac)
 		if err != nil {
 			return err
@@ -564,12 +594,10 @@ func UnbindStaticIP(vmName string) error {
 		return err
 	}
 
-	// 删除所有指向该 IP 的端口转发规则（倒序删除避免行号偏移）
 	if boundIP != "" {
 		RemovePortForwardsForIP(boundIP)
 	}
 
-	// 如果虚拟机正在运行，拔插网卡以强制刷新 DHCP，确保切换回动态 IP
 	refreshNIC(vmName, mac, "")
 
 	return nil

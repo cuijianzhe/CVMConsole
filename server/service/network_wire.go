@@ -193,6 +193,7 @@ func init() {
 		return result, nil
 	}
 	netpkg.HookReloadVPCDNSMasq = ReloadVPCDNSMasq
+	netpkg.HookSwitchUsesDirectBridge = SwitchUsesDirectBridge
 
 	// ── Firewall hooks (now injected from firewall_wire.go) ──
 

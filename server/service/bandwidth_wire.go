@@ -126,6 +126,11 @@ func getVPCSwitchForVM(vmName string) (*model.VPCSwitch, bool) {
 	return bwpkg.GetVPCSwitchForVM(vmName)
 }
 
+// GetVPCSwitchForVM delegates to bandwidth.GetVPCSwitchForVM (exported for clone package)
+func GetVPCSwitchForVM(vmName string) (*model.VPCSwitch, bool) {
+	return bwpkg.GetVPCSwitchForVM(vmName)
+}
+
 // getGlobalEffectiveBandwidth delegates to bandwidth.GetGlobalEffectiveBandwidth
 func getGlobalEffectiveBandwidth() (int, int) {
 	return bwpkg.GetGlobalEffectiveBandwidth()

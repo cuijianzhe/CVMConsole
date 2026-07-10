@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -362,7 +363,9 @@ log-dhcp
 		return fmt.Errorf("写入 DHCP 配置失败: %w", err)
 	}
 
-	utils.ExecCommand("pkill", "-f", fmt.Sprintf("dnsmasq.*%s", bridge.Name))
+	if err := stopBridgeDNSMasq(bridge.Name); err != nil {
+		logger.App.Warn("停止桥接网桥 DHCP 服务失败", "bridge", bridge.Name, "error", err)
+	}
 	result := utils.ExecCommand("dnsmasq", "--conf-file="+configPath)
 	if result.Error != nil {
 		return fmt.Errorf("启动 DHCP 服务失败: %s", result.Stderr)
@@ -370,10 +373,23 @@ log-dhcp
 	return nil
 }
 
-func stopBridgeDNSMasq(bridgeName string) {
-	utils.ExecCommand("pkill", "-f", fmt.Sprintf("dnsmasq.*%s", bridgeName))
+func stopBridgeDNSMasq(bridgeName string) error {
 	pidPath := filepath.Join(bridgeConfigDir, fmt.Sprintf("dnsmasq-%s.pid", bridgeName))
+	if data, err := os.ReadFile(pidPath); err == nil {
+		pid := strings.TrimSpace(string(data))
+		if pid != "" {
+			result := utils.ExecCommand("kill", "-9", pid)
+			if result.Error == nil {
+				_ = os.Remove(pidPath)
+				return nil
+			}
+		}
+	}
+	utils.ExecCommand("pkill", "-f", fmt.Sprintf("dnsmasq.*%s", bridgeName))
+	utils.ExecCommand("pkill", "-f", "dnsmasq.*kvm-console")
+	utils.ExecCommand("pkill", "-9", "dnsmasq")
 	_ = os.Remove(pidPath)
+	return nil
 }
 
 func reloadBridgeDNSMasq(bridgeName string) error {

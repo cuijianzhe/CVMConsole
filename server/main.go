@@ -1076,6 +1076,10 @@ func initCloneDeps() {
 		GetOVSStaticIPByMAC:           service.GetOVSStaticIPByMAC,
 		ListAllVPCStaticHosts:         service.ListAllVPCStaticHostsForClone,
 		GetOVSLeaseIPByMAC:            service.GetOVSLeaseIPByMAC,
+		BindVMToVPCAsAdmin:            service.BindVMToVPCAsAdmin,
+		GetVPCSwitchForVM:             service.GetVPCSwitchForVM,
+		SwitchUsesDirectBridge:        service.SwitchUsesDirectBridge,
+		ListBridgeStaticHosts:         service.ListBridgeStaticHosts,
 
 		// XML modification helpers
 		ApplyRTCConfigToDomainXML:           service.ApplyRTCConfigToDomainXML,
@@ -1134,9 +1138,9 @@ func initCloneDeps() {
 		HookEnsureVMNotMigrating: service.HookEnsureVMNotMigrating,
 
 		// SPICE graphics（创建即带，默认本地监听）
-		InjectSPICEGraphics:     service.InjectSPICEGraphicsToDomainXML,
-		EnsureQXLVideo:          service.EnsureQXLVideo,
-		SpiceEnabledByDefault:   func() bool { return config.GlobalConfig.SpiceEnabledByDefault },
+		InjectSPICEGraphics:   service.InjectSPICEGraphicsToDomainXML,
+		EnsureQXLVideo:        service.EnsureQXLVideo,
+		SpiceEnabledByDefault: func() bool { return config.GlobalConfig.SpiceEnabledByDefault },
 	})
 }
 
