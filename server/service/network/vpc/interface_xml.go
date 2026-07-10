@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 )
 
 func extractFirstOVSInterfaceVLANTag(xmlText string) (int, bool) {
@@ -202,7 +201,7 @@ func setFirstOVSInterfaceBridge(xmlText, bridge string) (string, bool) {
 			if !strings.Contains(updatedBlock, "virtualport") {
 				closeIdx := strings.LastIndex(updatedBlock, "</interface>")
 				if closeIdx >= 0 {
-					virtualportXML := fmt.Sprintf("\n      <virtualport type='openvswitch'/>")
+					virtualportXML := "\n      <virtualport type='openvswitch'/>"
 					updatedBlock = updatedBlock[:closeIdx] + virtualportXML + updatedBlock[closeIdx:]
 				}
 			}
@@ -268,7 +267,6 @@ func setInterfaceBlockVLANTag(block string, vlanID int) (string, bool) {
 }
 
 func generateRandomMAC() string {
-	rand.Seed(time.Now().UnixNano())
 	return fmt.Sprintf("52:54:00:%02x:%02x:%02x", rand.Intn(256), rand.Intn(256), rand.Intn(256))
 }
 

@@ -230,12 +230,12 @@ func addOVSInterfaceToXML(vmXML, bridge string, vlanID int) string {
 	mac := generateRandomMAC()
 	var interfaceXML strings.Builder
 	interfaceXML.WriteString("    <interface type='bridge'>\n")
-	interfaceXML.WriteString(fmt.Sprintf("      <mac address='%s'/>\n", mac))
-	interfaceXML.WriteString(fmt.Sprintf("      <source bridge='%s'/>\n", strings.TrimSpace(bridge)))
+	fmt.Fprintf(&interfaceXML, "      <mac address='%s'/>\n", mac)
+	fmt.Fprintf(&interfaceXML, "      <source bridge='%s'/>\n", strings.TrimSpace(bridge))
 	interfaceXML.WriteString("      <virtualport type='openvswitch'/>\n")
 	interfaceXML.WriteString("      <model type='virtio'/>\n")
 	if vlanID > 0 {
-		interfaceXML.WriteString(fmt.Sprintf("      <tag id='%d'/>\n", vlanID))
+		fmt.Fprintf(&interfaceXML, "      <tag id='%d'/>\n", vlanID)
 	}
 	interfaceXML.WriteString("    </interface>\n")
 	devicesStartIdx := strings.Index(vmXML, "<devices>")

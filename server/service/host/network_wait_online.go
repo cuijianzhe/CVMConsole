@@ -23,14 +23,13 @@ func GetNetworkWaitOnlineStatus() (disabled bool, summary string) {
 	isEnabled := maskedResult.ExitCode == 0
 
 	if isEnabled {
-		summary = fmt.Sprintf("当前状态：已启用（systemd-networkd-wait-online.service 正常启用，OVS 桥接后开机可能卡在此服务上）")
+		summary = "当前状态：已启用（systemd-networkd-wait-online.service 正常启用，OVS 桥接后开机可能卡在此服务上）"
 	} else {
-		// 可能是 masked 或 disabled
 		isMasked := utils.ExecCommandQuiet("systemctl", "is-enabled", networkWaitOnlineUnit)
 		if isMasked.ExitCode != 0 {
-			summary = fmt.Sprintf("当前状态：已禁用/已 mask（系统开机不再等待网络就绪，适合 OVS 桥接环境）")
+			summary = "当前状态：已禁用/已 mask（系统开机不再等待网络就绪，适合 OVS 桥接环境）"
 		} else {
-			summary = fmt.Sprintf("当前状态：已启用")
+			summary = "当前状态：已启用"
 		}
 	}
 

@@ -42,7 +42,7 @@ func cloneOpenWrt(params *CloneParams, cloneDisk string, progressFn func(int, st
 }
 
 // cloneOpenWrtExt4 处理标准 ext4 根分区的 OpenWrt
-func cloneOpenWrtExt4(params *CloneParams, cloneDisk, hostname, staticIP string, progressFn func(int, string)) error {
+func cloneOpenWrtExt4(params *CloneParams, cloneDisk, hostname, staticIP string, _ func(int, string)) error {
 	tmpDir, err := os.MkdirTemp("", "openwrt-init-*")
 	if err != nil {
 		return fmt.Errorf("创建 OpenWrt 初始化临时目录失败: %w", err)
