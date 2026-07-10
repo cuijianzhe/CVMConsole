@@ -14,6 +14,7 @@ import (
 	bwpkg "kvm_console/service/bandwidth"
 	fwpkg "kvm_console/service/firewall"
 	"kvm_console/service/guest_agent"
+	ipresolver "kvm_console/service/ip_resolver"
 	"kvm_console/utils"
 )
 
@@ -237,7 +238,7 @@ func GetVMNetworkRuntimeStatus(vmName string) (*VMNetworkRuntimeStatus, error) {
 		if item.Target != "" && item.Target != "-" {
 			item.OFPort = bwpkg.GetOVSInterfaceOfPort(item.Target)
 		}
-		item.IP, item.IPSource = resolveVMIPByMAC(vmName, item.MAC, running)
+		item.IP, item.IPSource = resolveVMIPByMAC(vmName, item.MAC, item.SourceBridge, running)
 		if item.SourceBridge == status.Bridge && item.VirtualPortType == "" {
 			item.Issues = append(item.Issues, "网卡接入 OVS 网桥但缺少 openvswitch virtualport")
 		}
@@ -522,42 +523,71 @@ func readVMNetworkXML(vmName string) []ovsInterfaceXML {
 	return dom.Devices.Interfaces
 }
 
-func resolveVMIPByMAC(vmName, mac string, running bool) (string, string) {
+func resolveVMIPByMAC(vmName, mac, sourceBridge string, running bool) (string, string) {
 	mac = NormalizeMAC(mac)
 	if running {
-		// 方式1: QEMU Guest Agent（最准确，需虚拟机安装 qemu-guest-agent）
 		if ip, ok := guest_agent.GetVMIPByMACFromAgent(vmName, mac); ok {
 			return ip, "guest_agent"
 		}
-		// 方式2: OVS 静态绑定（用户显式配置，优先级高于动态分配）
 		if ip := GetOVSStaticIPByMAC(mac); ip != "" {
+			if sourceBridge != "" && !isIPInBridgeSubnet(ip, sourceBridge) {
+				return "", ""
+			}
 			return ip, "static"
 		}
-		// 方式3: OVS DHCP 租约
 		if ip := GetOVSLeaseIPByMAC(mac); ip != "" {
+			if sourceBridge != "" && !isIPInBridgeSubnet(ip, sourceBridge) {
+				return "", ""
+			}
 			return ip, "ovs_dhcp"
 		}
-		// 方式4: ARP 表（domifaddr arp）
 		if ip, ok := virshDomifaddrIPByMAC(vmName, "arp", mac); ok {
 			return ip, "arp"
 		}
-		// 方式5: 内核邻居表
 		if ip, ok := ipNeighIPByMAC(mac); ok {
 			return ip, "arp"
 		}
-		// 方式6: VPC DHCP
 		if ip := GetVPCLeaseIPForVMByMAC(vmName, mac); ip != "" {
 			return ip, "vpc_dhcp"
 		}
-		// 方式7: libvirt 租约（domifaddr lease）
 		if ip, ok := virshDomifaddrIPByMAC(vmName, "lease", mac); ok {
 			return ip, "libvirt_lease"
 		}
 	}
 	if ip := GetOVSStaticIPByMAC(mac); ip != "" {
+		if sourceBridge != "" && !isIPInBridgeSubnet(ip, sourceBridge) {
+			return "", ""
+		}
 		return ip, "static"
 	}
 	return "", ""
+}
+
+func isIPInBridgeSubnet(ip, bridge string) bool {
+	if ip == "" || bridge == "" {
+		return true
+	}
+	switch bridge {
+	case OvsBridgeName():
+		return ipresolver.IPInCIDR(ip, OvsSubnetCIDR())
+	default:
+		if cidr := getBridgeSubnetCIDR(bridge); cidr != "" {
+			return ipresolver.IPInCIDR(ip, cidr)
+		}
+	}
+	return true
+}
+
+func getBridgeSubnetCIDR(bridge string) string {
+	bridge = strings.TrimSpace(bridge)
+	if bridge == "" {
+		return ""
+	}
+	result := utils.ExecShell(fmt.Sprintf("ip addr show %s 2>/dev/null | grep -oP '(\\d+\\.\\d+\\.\\d+\\.\\d+/\\d+)' | head -1", utils.ShellSingleQuote(bridge)))
+	if result.Error != nil {
+		return ""
+	}
+	return strings.TrimSpace(result.Stdout)
 }
 
 func firstVirshDomifaddrIP(vmName, source string) (string, bool) {

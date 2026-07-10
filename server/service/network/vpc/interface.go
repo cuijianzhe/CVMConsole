@@ -343,13 +343,11 @@ func AttachExtraNICs(vmName string, extraNics []AddVMInterfaceRequest) {
 func applyNewInterfaceRuntime(vmName string, sw model.VPCSwitch, interfaceOrder int) error {
 	state := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
 	if state != "running" {
-		return nil // 关机态的 VLAN 已在 XML 中配置
+		return nil
 	}
 
-	// 从 domiflist 获取新网口的 vnet 接口名
 	vnetIF := getVMVnetIFByOrder(vmName, interfaceOrder)
 	if vnetIF == "" {
-		// 等待 vnet 接口出现
 		for i := 0; i < 10; i++ {
 			time.Sleep(500 * time.Millisecond)
 			vnetIF = getVMVnetIFByOrder(vmName, interfaceOrder)
@@ -363,7 +361,6 @@ func applyNewInterfaceRuntime(vmName string, sw model.VPCSwitch, interfaceOrder 
 	}
 
 	if !HookSwitchUsesDirectBridge(sw) && sw.VLANID > 0 {
-		// 检查端口是否实际存在于 OVS
 		if !ovsPortExists(vnetIF) {
 			logger.App.Warn("OVS 端口不存在，跳过新网口 VLAN tag 设置", "port", vnetIF)
 		} else {
@@ -374,10 +371,32 @@ func applyNewInterfaceRuntime(vmName string, sw model.VPCSwitch, interfaceOrder 
 			}
 		}
 	}
-	// 清理该接口的旧 DHCP 租约
+
 	mac := HookGetVMMACByOrder(vmName, interfaceOrder)
 	if mac != "" {
 		HookCleanOVSDHCPLease(mac, "")
+
+		if HookSwitchUsesDirectBridge(sw) {
+			bridgeName := HookBridgeNameForSwitch(sw)
+			var ipAddr string
+			if sw.BridgeIPMode == "preset" && HookFindBridgeFreeIP != nil {
+				var err error
+				ipAddr, err = HookFindBridgeFreeIP(sw)
+				if err != nil {
+					logger.App.Warn("查找桥接模式可用 IP 失败", "vm", vmName, "error", err)
+				}
+			}
+			if HookUpsertBridgeStaticHost != nil {
+				if err := HookUpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr); err != nil {
+					logger.App.Warn("桥接模式注册 MAC 地址失败", "vm", vmName, "error", err)
+				}
+			}
+			if HookReloadBridgeDNSMasq != nil {
+				if err := HookReloadBridgeDNSMasq(bridgeName); err != nil {
+					logger.App.Warn("重新加载桥接模式 DHCP 服务失败", "bridge", bridgeName, "error", err)
+				}
+			}
+		}
 	}
 	return nil
 }
