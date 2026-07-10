@@ -74,6 +74,7 @@ var (
 	HookListBridgeDHCPLeases   func(bridgeName string) ([]model.BridgeDHCPLease, error)
 	HookUpsertBridgeStaticHost func(bridgeName, vmName, mac, ipAddr string) error
 	HookRemoveBridgeStaticHost func(bridgeName, vmName, mac string) (string, error)
+	HookRemoveBridgeDHCPLease  func(bridgeName, vmName, mac string) (string, error)
 	HookReloadBridgeDNSMasq    func(bridgeName string) error
 	HookFindBridgeFreeIP       func(sw model.VPCSwitch) (string, error)
 

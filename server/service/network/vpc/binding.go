@@ -109,6 +109,17 @@ func BindVMToVPC(username, vmName string, switchID, securityGroupID uint) error 
 				if err != nil {
 					logger.App.Warn("查找桥接模式可用 IP 失败", "vm", vmName, "error", err)
 				}
+			} else {
+				if HookListBridgeDHCPLeases != nil {
+					if leases, err := HookListBridgeDHCPLeases(bridgeName); err == nil {
+						for _, lease := range leases {
+							if strings.EqualFold(lease.MAC, mac) && strings.TrimSpace(lease.IP) != "" {
+								ipAddr = lease.IP
+								break
+							}
+						}
+					}
+				}
 			}
 			if HookUpsertBridgeStaticHost != nil {
 				if err := HookUpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr); err != nil {

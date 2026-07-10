@@ -28,6 +28,7 @@ func init() {
 	netpkg.HookGetBridgeIPByMAC = getBridgeIPByMACHook
 
 	vpc.HookStartBridgeDNSMasq = bridge.HookStartBridgeDNSMasq
+	vpc.HookRemoveBridgeDHCPLease = bridge.RemoveBridgeDHCPLease
 }
 
 func listBridgeStaticHostsHook(bridgeName string) ([]netpkg.OVSStaticHost, error) {

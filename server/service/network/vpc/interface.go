@@ -304,24 +304,43 @@ func RemoveVMInterface(vmName string, interfaceOrder int) error {
 		return fmt.Errorf("未找到指定的网口绑定")
 	}
 
-	// 从虚拟机 XML 中移除网口
+	var sw model.VPCSwitch
+	if err := model.DB.First(&sw, binding.SwitchID).Error; err != nil {
+		return fmt.Errorf("交换机不存在")
+	}
+
+	mac := HookGetVMMACByOrder(vmName, interfaceOrder)
+
 	if err := HookDetachVMInterface(vmName, interfaceOrder); err != nil {
 		return err
 	}
 
-	// 删除绑定记录
-	switchID := binding.SwitchID
 	if err := model.DB.Delete(&binding).Error; err != nil {
 		return fmt.Errorf("删除网口绑定记录失败: %w", err)
 	}
 
-	// 刷新交换机带宽和 ACL
-	var sw model.VPCSwitch
-	if err := model.DB.First(&sw, switchID).Error; err == nil {
-		_ = ApplyVPCSwitchBandwidth(sw)
-		if !HookSwitchUsesDirectBridge(sw) {
-			_ = ApplyVPCACLRules()
+	if HookSwitchUsesDirectBridge(sw) && mac != "" {
+		bridgeName := HookBridgeNameForSwitch(sw)
+		if HookRemoveBridgeStaticHost != nil {
+			if _, err := HookRemoveBridgeStaticHost(bridgeName, vmName, mac); err != nil {
+				logger.App.Warn("删除桥接模式静态绑定失败", "vm", vmName, "error", err)
+			}
 		}
+		if HookRemoveBridgeDHCPLease != nil {
+			if _, err := HookRemoveBridgeDHCPLease(bridgeName, vmName, mac); err != nil {
+				logger.App.Warn("删除桥接模式 DHCP 租约失败", "vm", vmName, "error", err)
+			}
+		}
+		if HookReloadBridgeDNSMasq != nil {
+			if err := HookReloadBridgeDNSMasq(bridgeName); err != nil {
+				logger.App.Warn("重新加载桥接模式 DHCP 服务失败", "bridge", bridgeName, "error", err)
+			}
+		}
+	}
+
+	_ = ApplyVPCSwitchBandwidth(sw)
+	if !HookSwitchUsesDirectBridge(sw) {
+		_ = ApplyVPCACLRules()
 	}
 
 	return nil
@@ -384,6 +403,17 @@ func applyNewInterfaceRuntime(vmName string, sw model.VPCSwitch, interfaceOrder 
 				ipAddr, err = HookFindBridgeFreeIP(sw)
 				if err != nil {
 					logger.App.Warn("查找桥接模式可用 IP 失败", "vm", vmName, "error", err)
+				}
+			} else {
+				if HookListBridgeDHCPLeases != nil {
+					if leases, err := HookListBridgeDHCPLeases(bridgeName); err == nil {
+						for _, lease := range leases {
+							if strings.EqualFold(lease.MAC, mac) && strings.TrimSpace(lease.IP) != "" {
+								ipAddr = lease.IP
+								break
+							}
+						}
+					}
 				}
 			}
 			if HookUpsertBridgeStaticHost != nil {
