@@ -236,7 +236,7 @@ func GetVMStats(name string) (*VmStats, error) {
 	return vmpkg.GetVMStats(name)
 }
 
-func GetHostStats() (*HostStats, error) {
+func GetHostStats() (*vmpkg.HostStats, error) {
 	return vmpkg.GetHostStats()
 }
 

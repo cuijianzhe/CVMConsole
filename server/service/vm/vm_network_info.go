@@ -7,7 +7,16 @@ import (
 )
 
 // CreateOrUpdateVMNetworkInfo 创建或更新虚拟机网络信息
-// 如果已存在相同 vm_name + interface_order 的记录，则更新；否则创建新记录
+// 参数：
+//   vmName: 虚拟机名称
+//   interfaceOrder: 网口序号（0为主网口，1、2...为附加网口）
+//   ip: IP地址
+//   mac: MAC地址
+//   nicModel: 网卡型号（virtio/e1000e/rtl8139等）
+//   networkType: 网络类型（nat/bridge）
+//   switchName: 所属交换机名称
+//   bridgeName: 桥接网桥名称
+// 返回：错误信息
 func CreateOrUpdateVMNetworkInfo(vmName string, interfaceOrder int, ip, mac, nicModel, networkType, switchName, bridgeName string) error {
 	if model.DB == nil {
 		return nil
@@ -22,6 +31,7 @@ func CreateOrUpdateVMNetworkInfo(vmName string, interfaceOrder int, ip, mac, nic
 		First(&existing).Error
 
 	if err == nil {
+		// 更新已存在的记录
 		existing.IPAddress = ip
 		existing.MacAddress = mac
 		existing.NicModel = nicModel
@@ -31,6 +41,7 @@ func CreateOrUpdateVMNetworkInfo(vmName string, interfaceOrder int, ip, mac, nic
 		return model.DB.Save(&existing).Error
 	}
 
+	// 创建新记录
 	info := model.VMNetworkInfo{
 		VMName:         vmName,
 		InterfaceOrder: interfaceOrder,
@@ -46,6 +57,7 @@ func CreateOrUpdateVMNetworkInfo(vmName string, interfaceOrder int, ip, mac, nic
 }
 
 // BatchCreateOrUpdateVMNetworkInfos 批量创建或更新虚拟机网络信息
+// 用于处理多网卡场景，一次性保存所有网口的网络信息
 func BatchCreateOrUpdateVMNetworkInfos(vmName string, infos []model.VMNetworkInfo) error {
 	if model.DB == nil || len(infos) == 0 {
 		return nil
@@ -60,6 +72,7 @@ func BatchCreateOrUpdateVMNetworkInfos(vmName string, infos []model.VMNetworkInf
 }
 
 // GetVMNetworkInfoByVMName 获取指定虚拟机的所有网络信息（未删除的）
+// 返回的列表按网口序号升序排列
 func GetVMNetworkInfoByVMName(vmName string) ([]model.VMNetworkInfo, error) {
 	if model.DB == nil {
 		return nil, nil
@@ -76,6 +89,7 @@ func GetVMNetworkInfoByVMName(vmName string) ([]model.VMNetworkInfo, error) {
 }
 
 // GetVMNetworkInfoByMAC 通过 MAC 地址查找网络信息
+// MAC地址不区分大小写
 func GetVMNetworkInfoByMAC(mac string) (*model.VMNetworkInfo, error) {
 	if model.DB == nil {
 		return nil, nil
@@ -91,6 +105,7 @@ func GetVMNetworkInfoByMAC(mac string) (*model.VMNetworkInfo, error) {
 }
 
 // SoftDeleteVMNetworkInfoByVMName 软删除指定虚拟机的所有网络信息
+// 软删除不会物理删除数据，只是标记为已删除，保留历史记录用于审计
 func SoftDeleteVMNetworkInfoByVMName(vmName string) error {
 	if model.DB == nil {
 		return nil
@@ -108,6 +123,7 @@ func SoftDeleteVMNetworkInfoByVMName(vmName string) error {
 }
 
 // SoftDeleteVMNetworkInfoByMAC 软删除指定 MAC 地址的网络信息
+// 用于删除单个网口的网络信息（如删除附加网卡时）
 func SoftDeleteVMNetworkInfoByMAC(mac string) error {
 	if model.DB == nil {
 		return nil
@@ -125,6 +141,7 @@ func SoftDeleteVMNetworkInfoByMAC(mac string) error {
 }
 
 // UpdateVMNetworkIP 更新虚拟机网络信息的 IP 地址
+// 通过虚拟机名称和网口序号定位记录
 func UpdateVMNetworkIP(vmName string, interfaceOrder int, ip string) error {
 	if model.DB == nil {
 		return nil
@@ -139,6 +156,7 @@ func UpdateVMNetworkIP(vmName string, interfaceOrder int, ip string) error {
 }
 
 // UpdateVMNetworkIPByMAC 通过 MAC 地址更新 IP 地址
+// 当从 DHCP 租约或 ARP 表获取到新的 IP 地址时使用此方法更新
 func UpdateVMNetworkIPByMAC(mac, ip string) error {
 	if model.DB == nil {
 		return nil
