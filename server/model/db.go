@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -54,26 +55,56 @@ func (l *gormAppLogger) Trace(_ context.Context, begin time.Time, fc func() (sql
 // DB 全局数据库实例
 var DB *gorm.DB
 
+// DBType 当前数据库类型：sqlite 或 mysql
+var DBType string
+
 // InitDB 初始化数据库
 func InitDB() {
-	// 确保数据目录存在
-	dbDir := filepath.Dir(config.GlobalConfig.DBPath)
-	if err := os.MkdirAll(dbDir, 0755); err != nil {
-		logger.App.Error("创建数据库目录失败", "error", err)
-		os.Exit(1)
+	var err error
+	var db *gorm.DB
+
+	dbType := strings.ToLower(strings.TrimSpace(config.GlobalConfig.DBType))
+	DBType = dbType
+
+	if dbType == "mysql" {
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+			config.GlobalConfig.DBUsername,
+			config.GlobalConfig.DBPassword,
+			config.GlobalConfig.DBHost,
+			config.GlobalConfig.DBPort,
+			config.GlobalConfig.DBDatabase,
+		)
+		db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
+			Logger: &gormAppLogger{},
+		})
+		if err != nil {
+			logger.App.Error("连接 MySQL 数据库失败", "error", err)
+			os.Exit(1)
+		}
+		logger.App.Info("MySQL 数据库连接成功", "host", config.GlobalConfig.DBHost, "port", config.GlobalConfig.DBPort, "database", config.GlobalConfig.DBDatabase)
+	} else {
+		// SQLite 连接配置（默认）
+		// 确保数据目录存在
+		dbDir := filepath.Dir(config.GlobalConfig.DBPath)
+		if err := os.MkdirAll(dbDir, 0755); err != nil {
+			logger.App.Error("创建数据库目录失败", "error", err)
+			os.Exit(1)
+		}
+
+		// SQLite 并发写配置：WAL 模式 + busy_timeout + 立即事务锁。
+		// 默认配置下并发写会立即返回 SQLITE_BUSY；分片上传等并发写入必须等待重试，而非静默失败。
+		dsn := config.GlobalConfig.DBPath + "?_busy_timeout=5000&_journal_mode=WAL&_txlock=immediate"
+		db, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{
+			Logger: &gormAppLogger{},
+		})
+		if err != nil {
+			logger.App.Error("连接 SQLite 数据库失败", "error", err)
+			os.Exit(1)
+		}
+		logger.App.Info("SQLite 数据库连接成功", "path", config.GlobalConfig.DBPath)
 	}
 
-	var err error
-	// SQLite 并发写配置：WAL 模式 + busy_timeout + 立即事务锁。
-	// 默认配置下并发写会立即返回 SQLITE_BUSY；分片上传等并发写入必须等待重试，而非静默失败。
-	dsn := config.GlobalConfig.DBPath + "?_busy_timeout=5000&_journal_mode=WAL&_txlock=immediate"
-	DB, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		Logger: &gormAppLogger{},
-	})
-	if err != nil {
-		logger.App.Error("连接数据库失败", "error", err)
-		os.Exit(1)
-	}
+	DB = db
 
 	hadMaxPortForwardsColumn := DB.Migrator().HasColumn(&User{}, "max_port_forwards")
 	hadEnablePortForwardColumn := DB.Migrator().HasColumn(&User{}, "enable_port_forward")
@@ -248,12 +279,12 @@ func migrateVPCBindingInterfaceOrder(hadColumn bool) {
 // allowedIndexNames 已知安全的索引名称白名单，用于 DROP INDEX 等 DDL 操作。
 // SQLite 不支持参数化 DDL，为防范 SQL 注入，所有索引名称必须在此白名单中。
 var allowedIndexNames = map[string]bool{
-	"uni_vpc_vm_bindings_vm_name":   true,
-	"idx_vpc_vm_bindings_vm_name":   true,
-	"uq_vpc_vm_bindings_vm_name":    true,
-	"idx_vpc_switches_cidr":         true,
-	"idx_vpc_switches_c_id_r":       true,
-	"idx_vm_interface":              true,
+	"uni_vpc_vm_bindings_vm_name": true,
+	"idx_vpc_vm_bindings_vm_name": true,
+	"uq_vpc_vm_bindings_vm_name":  true,
+	"idx_vpc_switches_cidr":       true,
+	"idx_vpc_switches_c_id_r":     true,
+	"idx_vm_interface":            true,
 }
 
 // isAllowedIndexName 校验索引名称是否在允许的白名单中。
@@ -265,7 +296,6 @@ func migrateVPCBindingUniqueIndex() {
 	if DB == nil {
 		return
 	}
-	// GORM 可能生成多种索引名称，逐一尝试删除旧索引
 	oldIndexNames := []string{
 		"uni_vpc_vm_bindings_vm_name",
 		"idx_vpc_vm_bindings_vm_name",
@@ -276,11 +306,22 @@ func migrateVPCBindingUniqueIndex() {
 			logger.App.Warn("跳过非白名单索引删除", "index", name)
 			continue
 		}
-		DB.Exec("DROP INDEX IF EXISTS " + name)
+		if DBType == "mysql" {
+			err := DB.Exec("DROP INDEX " + name + " ON vpc_vm_bindings").Error
+			if err != nil && !strings.Contains(err.Error(), "Can't DROP") {
+				logger.App.Warn("删除索引失败", "index", name, "error", err)
+			}
+		} else {
+			DB.Exec("DROP INDEX IF EXISTS " + name)
+		}
 	}
-	// 创建新的联合唯一索引
-	if err := DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vm_interface ON vpc_vm_bindings(vm_name, interface_order)").Error; err != nil {
-		logger.App.Warn("创建VPC绑定联合唯一索引失败", "error", err)
+	if DBType == "mysql" {
+		err := DB.Exec("CREATE UNIQUE INDEX idx_vm_interface ON vpc_vm_bindings(vm_name, interface_order)").Error
+		if err != nil && !strings.Contains(err.Error(), "Duplicate key name") {
+			logger.App.Warn("创建VPC绑定联合唯一索引失败", "error", err)
+		}
+	} else {
+		DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vm_interface ON vpc_vm_bindings(vm_name, interface_order)")
 	}
 }
 
@@ -340,13 +381,17 @@ func preFixVPCSwitchCIDRIndex() {
 	if DB == nil {
 		return
 	}
-	// 检查表是否存在
 	if !DB.Migrator().HasTable(&VPCSwitch{}) {
 		return
 	}
-	// 删除可能存在的旧唯一索引（避免 AutoMigrate 与手动索引冲突）
-	DB.Exec("DROP INDEX IF EXISTS idx_vpc_switches_cidr")
-	// 将空字符串 CIDR 更新为 NULL（SQLite 允许多个 NULL 在 UNIQUE 索引中共存）
+	if DBType == "mysql" {
+		err := DB.Exec("DROP INDEX idx_vpc_switches_cidr ON vpc_switches").Error
+		if err != nil && !strings.Contains(err.Error(), "Can't DROP") {
+			logger.App.Warn("删除索引失败", "index", "idx_vpc_switches_cidr", "error", err)
+		}
+	} else {
+		DB.Exec("DROP INDEX IF EXISTS idx_vpc_switches_cidr")
+	}
 	DB.Exec("UPDATE vpc_switches SET cidr = NULL WHERE cidr = ''")
 }
 
@@ -363,24 +408,28 @@ func migrateVPCSwitchCIDRColumn(hadColumn bool) {
 	hasNewColumn := DB.Migrator().HasColumn(&VPCSwitch{}, "cidr")
 
 	if hasOldColumn && hasNewColumn {
-		// 将 c_id_r 中的数据迁移到 cidr（仅更新 cidr 为空的记录）
-		if err := DB.Exec("UPDATE vpc_switches SET cidr = c_id_r WHERE (cidr IS NULL OR cidr = '') AND c_id_r IS NOT NULL AND c_id_r <> ''").Error; err != nil {
-			logger.App.Warn("迁移 c_id_r → cidr 数据失败", "error", err)
-		} else {
-			logger.App.Info("已从 c_id_r 迁移数据到 cidr 列")
-		}
-		// 删除遗留的 c_id_r 列（SQLite 3.35+ 支持 DROP COLUMN）
+		DB.Exec("UPDATE vpc_switches SET cidr = c_id_r WHERE (cidr IS NULL OR cidr = '') AND c_id_r IS NOT NULL AND c_id_r <> ''")
 		if err := DB.Exec("ALTER TABLE vpc_switches DROP COLUMN c_id_r").Error; err != nil {
 			logger.App.Warn("删除遗留列 c_id_r 失败", "error", err)
 		} else {
-			logger.App.Info("已删除遗留列 c_id_r")
+			logger.App.Info("已从 c_id_r 迁移数据到 cidr 列")
 		}
-		// 创建唯一索引（可能因之前迁移失败而缺失）——使用部分索引排除空值
-		if err := DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vpc_switches_cidr ON vpc_switches(cidr) WHERE cidr IS NOT NULL AND cidr != ''").Error; err != nil {
-			logger.App.Warn("创建 vpc_switches.cidr 唯一索引失败", "error", err)
+		if DBType == "mysql" {
+			err := DB.Exec("CREATE UNIQUE INDEX idx_vpc_switches_cidr ON vpc_switches(cidr)").Error
+			if err != nil && !strings.Contains(err.Error(), "Duplicate key name") {
+				logger.App.Warn("创建 vpc_switches.cidr 唯一索引失败", "error", err)
+			}
+		} else {
+			DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vpc_switches_cidr ON vpc_switches(cidr) WHERE cidr IS NOT NULL AND cidr != ''")
 		}
-		// 删除旧的无效索引（c_id_r 列上的索引，如果有的话）
-		DB.Exec("DROP INDEX IF EXISTS idx_vpc_switches_c_id_r")
+		if DBType == "mysql" {
+			err := DB.Exec("DROP INDEX idx_vpc_switches_c_id_r ON vpc_switches").Error
+			if err != nil && !strings.Contains(err.Error(), "Can't DROP") {
+				logger.App.Warn("删除索引失败", "index", "idx_vpc_switches_c_id_r", "error", err)
+			}
+		} else {
+			DB.Exec("DROP INDEX IF EXISTS idx_vpc_switches_c_id_r")
+		}
 		return
 	}
 
@@ -438,8 +487,13 @@ func migrateVPCSwitchCIDRColumn(hadColumn bool) {
 	}
 
 	// 4. 创建部分唯一索引（排除空值，桥接/直通模式交换机无CIDR）
-	if err := DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vpc_switches_cidr ON vpc_switches(cidr) WHERE cidr IS NOT NULL AND cidr != ''").Error; err != nil {
-		logger.App.Warn("创建 vpc_switches.cidr 唯一索引失败", "error", err)
+	if DBType == "mysql" {
+		err := DB.Exec("CREATE UNIQUE INDEX idx_vpc_switches_cidr ON vpc_switches(cidr)").Error
+		if err != nil && !strings.Contains(err.Error(), "Duplicate key name") {
+			logger.App.Warn("创建 vpc_switches.cidr 唯一索引失败", "error", err)
+		}
+	} else {
+		DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vpc_switches_cidr ON vpc_switches(cidr) WHERE cidr IS NOT NULL AND cidr != ''")
 	}
 
 	logger.App.Info("vpc_switches.cidr 列迁移完成")
@@ -463,10 +517,10 @@ func initDefaultAdmin() {
 	}
 
 	admin := User{
-		Username:          config.GlobalConfig.DefaultAdminUser,
-		PasswordHash:      string(hashedPassword),
-		Role:              "admin",
-		Status:            "active",
+		Username:            config.GlobalConfig.DefaultAdminUser,
+		PasswordHash:        string(hashedPassword),
+		Role:                "admin",
+		Status:              "active",
 		ForcePasswordChange: true,
 	}
 

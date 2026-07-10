@@ -22,8 +22,16 @@ const (
 type Config struct {
 	// 服务端口
 	Port int `json:"port"`
-	// 数据库路径
+	// 数据库类型：sqlite 或 mysql
+	DBType string `json:"db_type"`
+	// 数据库路径（SQLite）
 	DBPath string `json:"db_path"`
+	// MySQL 配置
+	DBHost     string `json:"db_host"`
+	DBPort     int    `json:"db_port"`
+	DBUsername string `json:"db_username"`
+	DBPassword string `json:"db_password"`
+	DBDatabase string `json:"db_database"`
 	// JWT 密钥
 	JWTSecret string `json:"jwt_secret"`
 	// 虚拟机凭据加密密钥
@@ -219,7 +227,13 @@ func Init() {
 	templateDir := getEnv("KVM_TEMPLATE_DIR", "/var/lib/libvirt/images/templates")
 	GlobalConfig = &Config{
 		Port:                                  getEnvInt("KVM_PORT", 8080),
+		DBType:                                getEnv("KVM_DB_TYPE", "sqlite"),
 		DBPath:                                getEnv("KVM_DB_PATH", "./data/kvm_console.db"),
+		DBHost:                                getEnv("KVM_DB_HOST", "localhost"),
+		DBPort:                                getEnvInt("KVM_DB_PORT", 3306),
+		DBUsername:                            getEnv("KVM_DB_USERNAME", "root"),
+		DBPassword:                            getEnv("KVM_DB_PASSWORD", ""),
+		DBDatabase:                            getEnv("KVM_DB_DATABASE", "kvm_console"),
 		JWTSecret:                             getEnv("KVM_JWT_SECRET", defaultJWTSecret),
 		VMCredentialSecret:                    getEnv("KVM_VM_CREDENTIAL_SECRET", ""),
 		SecuritySecret:                        getEnv("KVM_SECURITY_SECRET", ""),
