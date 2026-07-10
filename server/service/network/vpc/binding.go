@@ -2,9 +2,7 @@ package vpc
 
 import (
 	"fmt"
-	"math/rand"
 	"strings"
-	"time"
 
 	"kvm_console/logger"
 	"kvm_console/model"
@@ -214,12 +212,14 @@ func ApplyVPCSwitchToDomainXML(vmXML string, switchID uint) (string, error) {
 			return addOVSInterfaceToXML(vmXML, HookOvsBridgeName(), 0), nil
 		}
 		updated = removeFirstInterfaceVLAN(updated)
+		updated = replaceFirstInterfaceMAC(updated)
 		return updated, nil
 	}
 	updated, changed := setFirstOVSInterfaceVPC(vmXML, sw.VLANID)
 	if !changed {
 		return addOVSInterfaceToXML(vmXML, HookOvsBridgeName(), sw.VLANID), nil
 	}
+	updated = replaceFirstInterfaceMAC(updated)
 	return updated, nil
 }
 
@@ -227,8 +227,7 @@ func addOVSInterfaceToXML(vmXML, bridge string, vlanID int) string {
 	if strings.TrimSpace(vmXML) == "" || strings.TrimSpace(bridge) == "" {
 		return vmXML
 	}
-	rand.Seed(time.Now().UnixNano())
-	mac := fmt.Sprintf("52:54:00:%02x:%02x:%02x", rand.Intn(256), rand.Intn(256), rand.Intn(256))
+	mac := generateRandomMAC()
 	var interfaceXML strings.Builder
 	interfaceXML.WriteString("    <interface type='bridge'>\n")
 	interfaceXML.WriteString(fmt.Sprintf("      <mac address='%s'/>\n", mac))
@@ -239,11 +238,30 @@ func addOVSInterfaceToXML(vmXML, bridge string, vlanID int) string {
 		interfaceXML.WriteString(fmt.Sprintf("      <tag id='%d'/>\n", vlanID))
 	}
 	interfaceXML.WriteString("    </interface>\n")
+	devicesStartIdx := strings.Index(vmXML, "<devices>")
 	devicesEndIdx := strings.Index(vmXML, "</devices>")
-	if devicesEndIdx >= 0 {
-		return vmXML[:devicesEndIdx] + interfaceXML.String() + vmXML[devicesEndIdx:]
+	if devicesStartIdx >= 0 && devicesEndIdx >= 0 && devicesEndIdx > devicesStartIdx {
+		devicesContent := vmXML[devicesStartIdx+len("<devices>") : devicesEndIdx]
+		cleanedDevices := removeAllInterfaceBlocks(devicesContent)
+		return vmXML[:devicesStartIdx+len("<devices>")] + cleanedDevices + interfaceXML.String() + vmXML[devicesEndIdx:]
 	}
 	return vmXML
+}
+
+func removeAllInterfaceBlocks(xmlText string) string {
+	result := xmlText
+	for {
+		startRel := strings.Index(result, "<interface ")
+		if startRel < 0 {
+			return result
+		}
+		endRel := strings.Index(result[startRel:], "</interface>")
+		if endRel < 0 {
+			return result
+		}
+		end := startRel + endRel + len("</interface>")
+		result = result[:startRel] + result[end:]
+	}
 }
 
 func GetVPCBindingInfo(operator, role, vmName string) (*VPCBindingInfo, error) {

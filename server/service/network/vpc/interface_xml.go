@@ -2,9 +2,11 @@ package vpc
 
 import (
 	"fmt"
+	"math/rand"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func extractFirstOVSInterfaceVLANTag(xmlText string) (int, bool) {
@@ -191,7 +193,24 @@ func setFirstOVSInterfaceBridge(xmlText, bridge string) (string, bool) {
 		if hasBridgeType && hasOVS {
 			sourceRe := regexp.MustCompile(`<source\s+bridge=['"][^'"]+['"]\s*/>`)
 			updatedBlock := sourceRe.ReplaceAllString(block, fmt.Sprintf("<source bridge='%s'/>", strings.TrimSpace(bridge)))
-			return xmlText[:start] + updatedBlock + xmlText[end:], updatedBlock != block
+			return xmlText[:start] + updatedBlock + xmlText[end:], true
+		}
+		if hasBridgeType && !hasOVS {
+			updatedBlock := block
+			sourceRe := regexp.MustCompile(`<source\s+bridge=['"][^'"]+['"]\s*/>`)
+			updatedBlock = sourceRe.ReplaceAllString(updatedBlock, fmt.Sprintf("<source bridge='%s'/>", strings.TrimSpace(bridge)))
+			if !strings.Contains(updatedBlock, "virtualport") {
+				closeIdx := strings.LastIndex(updatedBlock, "</interface>")
+				if closeIdx >= 0 {
+					virtualportXML := fmt.Sprintf("\n      <virtualport type='openvswitch'/>")
+					updatedBlock = updatedBlock[:closeIdx] + virtualportXML + updatedBlock[closeIdx:]
+				}
+			}
+			return xmlText[:start] + updatedBlock + xmlText[end:], true
+		}
+		if !hasBridgeType {
+			newInterface := fmt.Sprintf("    <interface type='bridge'>\n      <mac address='%s'/>\n      <source bridge='%s'/>\n      <virtualport type='openvswitch'/>\n      <model type='virtio'/>\n    </interface>", generateRandomMAC(), strings.TrimSpace(bridge))
+			return xmlText[:start] + newInterface + xmlText[end:], true
 		}
 		searchFrom = end
 	}
@@ -246,4 +265,42 @@ func setInterfaceBlockVLANTag(block string, vlanID int) (string, bool) {
 		return block, false
 	}
 	return block[:closeIdx] + vlanBlock + "\n" + block[closeIdx:], true
+}
+
+func generateRandomMAC() string {
+	rand.Seed(time.Now().UnixNano())
+	return fmt.Sprintf("52:54:00:%02x:%02x:%02x", rand.Intn(256), rand.Intn(256), rand.Intn(256))
+}
+
+func replaceFirstInterfaceMAC(xmlText string) string {
+	if strings.TrimSpace(xmlText) == "" {
+		return xmlText
+	}
+	mac := generateRandomMAC()
+	searchFrom := 0
+	for {
+		startRel := strings.Index(xmlText[searchFrom:], "<interface ")
+		if startRel < 0 {
+			return xmlText
+		}
+		start := searchFrom + startRel
+		endRel := strings.Index(xmlText[start:], "</interface>")
+		if endRel < 0 {
+			return xmlText
+		}
+		end := start + endRel + len("</interface>")
+		block := xmlText[start:end]
+		macRe := regexp.MustCompile(`<mac\s+address=['"][^'"]+['"]\s*/>`)
+		if macRe.MatchString(block) {
+			updatedBlock := macRe.ReplaceAllString(block, fmt.Sprintf(`<mac address='%s'/>`, mac))
+			return xmlText[:start] + updatedBlock + xmlText[end:]
+		}
+		macTag := fmt.Sprintf("      <mac address='%s'/>\n", mac)
+		closeIdx := strings.LastIndex(block, "</interface>")
+		if closeIdx >= 0 {
+			updatedBlock := block[:closeIdx] + macTag + block[closeIdx:]
+			return xmlText[:start] + updatedBlock + xmlText[end:]
+		}
+		searchFrom = end
+	}
 }
