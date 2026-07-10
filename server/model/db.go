@@ -119,6 +119,8 @@ func InitDB() {
 	// 预修复: 在 AutoMigrate 之前清理 vpc_switches.cidr 重复数据并删除旧唯一索引
 	preFixVPCSwitchCIDRIndex()
 
+	migrateSystemSettingsValueColumn()
+
 	// 自动迁移表结构
 	if err := DB.AutoMigrate(&User{}, &UserAPIKey{}, &VmStatsRecord{}, &PortForwardIP{}, &PortForwardWhitelist{}, &PortForwardProbeState{}, &HostStatsRecord{}, &UserTrafficDaily{}, &SystemSetting{}, &VMCredential{}, &VMCache{}, &AuthActionToken{}, &SecurityChallenge{}, &SchedulerEvent{}, &VMSchedule{}, &NetworkBridge{}, &HostStoragePool{}, &HostNode{},
 		&LightweightVMQuota{}, &LightweightVMTrafficMonthly{}, &LightweightVMRegistration{},
@@ -528,5 +530,22 @@ func initDefaultAdmin() {
 		logger.App.Warn("创建默认管理员失败", "error", err)
 	} else {
 		logger.App.Info("默认管理员账号已创建", "username", admin.Username)
+	}
+}
+
+// migrateSystemSettingsValueColumn 将 system_settings 表的 value 列从 VARCHAR/TEXT 改为 LONGTEXT
+// 解决存储大文本数据（如 base64 图片、邮箱配置等）时出现的 "Data too long" 错误
+// TEXT 类型最大 65535 字节，LONGTEXT 类型最大 4GB
+func migrateSystemSettingsValueColumn() {
+	if DB == nil {
+		return
+	}
+	if !DB.Migrator().HasTable(&SystemSetting{}) {
+		return
+	}
+	if DBType == "mysql" {
+		if err := DB.Exec("ALTER TABLE system_settings MODIFY COLUMN value LONGTEXT").Error; err != nil {
+			logger.App.Warn("修改 system_settings.value 列类型失败", "error", err)
+		}
 	}
 }
