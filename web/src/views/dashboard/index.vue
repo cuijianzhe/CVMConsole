@@ -452,10 +452,10 @@ const fetchVMs = async () => {
   vmLoading.value = true
   try {
     if (isAdmin.value) {
-      const res = await getVmList()
+      const res = await getVmList({ include_ip: true })
       myVMs.value = res.data || []
     } else {
-      const res = await getSelfVMs()
+      const res = await getSelfVMs({ include_ip: true })
       myVMs.value = res.data || []
     }
   } catch (err) {
