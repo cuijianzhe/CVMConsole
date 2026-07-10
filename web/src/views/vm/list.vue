@@ -173,6 +173,11 @@
                         </div>
                       </template>
                     </el-table-column>
+                    <el-table-column label="MAC 地址" width="180" align="center">
+                      <template #default="{ row }">
+                        <span>{{ row.mac_address || '-' }}</span>
+                      </template>
+                    </el-table-column>
                     <el-table-column label="磁盘" width="170" align="center">
                       <template #default="{ row }">
                         <div class="disk-cell">
@@ -349,6 +354,10 @@
                         </span>
                       </div>
                       <div class="info-row">
+                        <span class="info-label">MAC 地址</span>
+                        <span class="info-value">{{ row.mac_address || '-' }}</span>
+                      </div>
+                      <div class="info-row">
                         <span class="info-label">模板</span>
                         <span class="info-value">{{ formatTemplateValue(null, null, row.template) }}</span>
                       </div>
@@ -472,6 +481,10 @@
                     </span>
                   </div>
                   <div class="info-row">
+                    <span class="info-label">MAC 地址</span>
+                    <span class="info-value">{{ row.mac_address || '-' }}</span>
+                  </div>
+                  <div class="info-row">
                     <span class="info-label">模板</span>
                     <span class="info-value">{{ formatTemplateValue(null, null, row.template) }}</span>
                   </div>
@@ -586,17 +599,21 @@
                     </div>
                     <div class="vm-card-body">
                       <div class="vm-card-info-row">
-                        <span class="vm-card-label">IP 地址</span>
-                        <span class="vm-card-value">
-                          <template v-if="hasLoadedIP(row.name)">
-                            <el-tooltip v-if="ipTooltipText(row.name)" :content="ipTooltipText(row.name)" placement="top" effect="dark">
-                              <span class="ip-unreachable">{{ ipDisplayText(row.name) }}</span>
-                            </el-tooltip>
-                            <span v-else>{{ ipDisplayText(row.name) }}</span>
-                          </template>
-                          <el-button v-else link type="primary" size="small" :loading="ipLoadingMap[row.name]" @click="loadVmIP(row)">点击加载</el-button>
-                        </span>
-                      </div>
+                      <span class="vm-card-label">IP 地址</span>
+                      <span class="vm-card-value">
+                        <template v-if="hasLoadedIP(row.name)">
+                          <el-tooltip v-if="ipTooltipText(row.name)" :content="ipTooltipText(row.name)" placement="top" effect="dark">
+                            <span class="ip-unreachable">{{ ipDisplayText(row.name) }}</span>
+                          </el-tooltip>
+                          <span v-else>{{ ipDisplayText(row.name) }}</span>
+                        </template>
+                        <el-button v-else link type="primary" size="small" :loading="ipLoadingMap[row.name]" @click="loadVmIP(row)">点击加载</el-button>
+                      </span>
+                    </div>
+                    <div class="vm-card-info-row">
+                      <span class="vm-card-label">MAC 地址</span>
+                      <span class="vm-card-value">{{ row.mac_address || '-' }}</span>
+                    </div>
                       <div class="vm-card-info-row">
                         <span class="vm-card-label">磁盘占用</span>
                         <span class="vm-card-value">
@@ -716,6 +733,11 @@
                 点击加载
               </el-button>
             </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="MAC 地址" width="180" align="center">
+          <template #default="{ row }">
+            <span>{{ row.mac_address || '-' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="磁盘" width="170" align="center">
@@ -911,6 +933,10 @@
                     </template>
                     <el-button v-else link type="primary" size="small" :loading="ipLoadingMap[row.name]" @click="loadVmIP(row)">点击加载</el-button>
                   </span>
+                </div>
+                <div class="vm-card-info-row">
+                  <span class="vm-card-label">MAC 地址</span>
+                  <span class="vm-card-value">{{ row.mac_address || '-' }}</span>
                 </div>
                 <div class="vm-card-info-row">
                   <span class="vm-card-label">磁盘占用</span>
@@ -1614,9 +1640,9 @@ const fetchData = async () => {
   try {
     let res
     if (isAdmin.value) {
-      res = await getVmList({ include_resource_usage: true, include_ip: false })
+      res = await getVmList({ include_resource_usage: true, include_ip: true, include_network_info: true })
     } else {
-      res = await getSelfVMs({ include_resource_usage: true, include_ip: false })
+      res = await getSelfVMs({ include_resource_usage: true, include_ip: true, include_network_info: true })
     }
     if (res && res.data && Array.isArray(res.data)) {
       updateTableData(res.data)
@@ -1654,9 +1680,9 @@ const fetchDataSilently = async () => {
   try {
     let res
     if (isAdmin.value) {
-      res = await getVmList({ include_resource_usage: true, include_ip: false })
+      res = await getVmList({ include_resource_usage: true, include_ip: true, include_network_info: true })
     } else {
-      res = await getSelfVMs({ include_resource_usage: true, include_ip: false })
+      res = await getSelfVMs({ include_resource_usage: true, include_ip: true, include_network_info: true })
     }
     if (res && res.data && Array.isArray(res.data)) {
       updateTableData(res.data)
@@ -2780,5 +2806,9 @@ h2 {
   text-decoration: underline;
   text-decoration-style: dotted;
   text-underline-offset: 2px;
+}
+.mac-address-text {
+  color: var(--el-color-text-secondary);
+  font-size: 12px;
 }
 </style>

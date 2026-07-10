@@ -16,6 +16,7 @@ import (
 	netpkg "kvm_console/service/network"
 	"kvm_console/service/snapshot"
 	"kvm_console/service/storage/disk"
+	"kvm_console/service/vm"
 	"kvm_console/utils"
 
 	"github.com/digitalocean/go-libvirt"
@@ -254,6 +255,9 @@ func ForceDeleteVM(name string) error {
 	D.CleanupVMVPCBinding(name)
 	D.CleanupLightweightVMResources(name)
 	_ = D.DeleteVMSchedules(name)
+
+	// 软删除网络信息（保留历史记录，支持后续审计查询）
+	_ = vm.SoftDeleteVMNetworkInfoByVMName(name)
 
 	// 清理 Windows Config Drive ISO（如有）
 	CleanupWindowsConfigDriveISO(name)

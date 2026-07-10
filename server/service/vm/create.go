@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"kvm_console/logger"
+	"kvm_console/model"
 	"os"
 	"path/filepath"
 	"slices"
@@ -729,6 +730,11 @@ func CreateVM(params *CreateVMParams, progressFn func(int, string)) (string, err
 
 	progressFn(100, "虚拟机创建完成")
 
+	// 保存网络信息到数据库（持久化 IP、MAC 等信息）
+	if err := saveVMNetworkInfoAfterCreate(params.Name); err != nil {
+		logger.App.Warn("保存虚拟机网络信息失败", "vm", params.Name, "error", err)
+	}
+
 	return diskPath, nil
 }
 
@@ -799,4 +805,27 @@ func CheckHostMemory(requiredMB int) error {
 			requiredWithBuffer, bufferMB, availMB)
 	}
 	return nil
+}
+
+// saveVMNetworkInfoAfterCreate 在虚拟机创建完成后保存网络信息到数据库
+// 从 libvirt 获取虚拟机的 MAC 地址、网卡型号等信息，持久化到 vm_network_infos 表
+func saveVMNetworkInfoAfterCreate(vmName string) error {
+	if model.DB == nil {
+		return nil
+	}
+	vmName = strings.TrimSpace(vmName)
+	if vmName == "" {
+		return nil
+	}
+
+	// 获取虚拟机网络信息
+	netInfo := GetVMNetworkInfo(vmName)
+	if netInfo.MAC == "" && netInfo.NicModel == "" {
+		return nil
+	}
+
+	// 创建或更新网络信息记录（主网口，interface_order = 0）
+	// 网络类型、交换机名称等信息会在后续 IP 获取时更新
+	return CreateOrUpdateVMNetworkInfo(vmName, 0, "", netInfo.MAC, netInfo.NicModel,
+		"", "", "")
 }

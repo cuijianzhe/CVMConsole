@@ -45,6 +45,7 @@ func buildVMListOptions(c *gin.Context) service.VMListOptions {
 	return service.VMListOptions{
 		IncludeResourceUsage: parseBoolQuery(c, "include_resource_usage"),
 		IncludeIP:            parseBoolQuery(c, "include_ip"),
+		IncludeNetworkInfo:   parseBoolQuery(c, "include_network_info"),
 	}
 }
 
