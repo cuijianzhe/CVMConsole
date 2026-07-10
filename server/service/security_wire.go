@@ -14,16 +14,14 @@ type SMTPConfigView = securitypkg.SMTPConfigView
 type SMTPTestConfig = securitypkg.SMTPTestConfig
 type TOTPSetupInfo = securitypkg.TOTPSetupInfo
 type TOTPRecoverySetup = securitypkg.TOTPRecoverySetup
-type InviteDetail = securitypkg.InviteDetail
 type PasswordResetAccountCandidate = securitypkg.PasswordResetAccountCandidate
 type SecurityState = securitypkg.SecurityState
 
 // ── Constants re-export ──
 
 const (
-	UserStatusPendingInvite = securitypkg.UserStatusPendingInvite
-	UserStatusActive        = securitypkg.UserStatusActive
-	UserStatusDisabled      = securitypkg.UserStatusDisabled
+	UserStatusActive   = securitypkg.UserStatusActive
+	UserStatusDisabled = securitypkg.UserStatusDisabled
 )
 
 const (
@@ -50,14 +48,12 @@ const (
 )
 
 const (
-	ActionTokenPurposeInviteRegister = securitypkg.ActionTokenPurposeInviteRegister
-	ActionTokenPurposePasswordReset  = securitypkg.ActionTokenPurposePasswordReset
+	ActionTokenPurposePasswordReset = securitypkg.ActionTokenPurposePasswordReset
 )
 
 const (
 	LoginVerificationWindow  = securitypkg.LoginVerificationWindow
 	HighRiskEmailTrustWindow = securitypkg.HighRiskEmailTrustWindow
-	InviteLinkTTL            = securitypkg.InviteLinkTTL
 	PasswordResetLinkTTL     = securitypkg.PasswordResetLinkTTL
 	EmailCodeTTL             = securitypkg.EmailCodeTTL
 )
@@ -201,30 +197,6 @@ func GetRecoveryCodesRemaining(encryptedEnc string) int {
 }
 
 // ---- Account functions ----
-
-func CreatePendingInvitedUser(username, email, role, cloudType string, dedicatedVPCSwitchID uint, maxCPU, maxMemory, maxDisk, maxVM, maxStorage, maxRuntimeHours int, enablePortForward bool, maxPortForwards, maxSnapshots int, maxBandwidthUp, maxBandwidthDown, maxTrafficDown, maxTrafficUp float64, maxPublicIPs int) (*model.User, string, error) {
-	return securitypkg.CreatePendingInvitedUser(username, email, role, cloudType, dedicatedVPCSwitchID, maxCPU, maxMemory, maxDisk, maxVM, maxStorage, maxRuntimeHours, enablePortForward, maxPortForwards, maxSnapshots, maxBandwidthUp, maxBandwidthDown, maxTrafficDown, maxTrafficUp, maxPublicIPs)
-}
-
-func CreatePendingInvitedUserWithExistingVMs(username, email, role, cloudType string, dedicatedVPCSwitchID uint, useExistingVMs bool, maxCPU, maxMemory, maxDisk, maxVM, maxStorage, maxRuntimeHours int, enablePortForward bool, maxPortForwards, maxSnapshots int, maxBandwidthUp, maxBandwidthDown, maxTrafficDown, maxTrafficUp float64, maxPublicIPs int) (*model.User, string, error) {
-	return securitypkg.CreatePendingInvitedUserWithExistingVMs(username, email, role, cloudType, dedicatedVPCSwitchID, useExistingVMs, maxCPU, maxMemory, maxDisk, maxVM, maxStorage, maxRuntimeHours, enablePortForward, maxPortForwards, maxSnapshots, maxBandwidthUp, maxBandwidthDown, maxTrafficDown, maxTrafficUp, maxPublicIPs)
-}
-
-func ResendInviteToken(username string) (*model.User, string, error) {
-	return securitypkg.ResendInviteToken(username)
-}
-
-func BuildInviteDetail(rawToken string) (*InviteDetail, *model.AuthActionToken, *model.User, error) {
-	return securitypkg.BuildInviteDetail(rawToken)
-}
-
-func CompleteInviteRegistration(rawToken, password string) (*model.User, error) {
-	return securitypkg.CompleteInviteRegistration(rawToken, password)
-}
-
-func SendInviteEmail(user *model.User, inviteURL string) error {
-	return securitypkg.SendInviteEmail(user, inviteURL)
-}
 
 func SendLightweightVMRegistrationEmail(user *model.User, panelURL string, regs []LightweightVMRegistrationView) error {
 	// Convert service.LightweightVMRegistrationView to security.LightweightVMRegistrationView

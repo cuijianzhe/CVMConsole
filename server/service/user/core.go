@@ -243,10 +243,6 @@ func UpdateUserStatus(username, targetStatus string) error {
 	if err := model.DB.Where("username = ?", username).First(&user).Error; err != nil {
 		return fmt.Errorf("用户 %s 不存在", username)
 	}
-	// 状态变更权限由 handler 层控制（内置 admin 保护 + 不能操作自己）
-	if user.Status == security.UserStatusPendingInvite {
-		return fmt.Errorf("待激活用户不支持封禁或解封")
-	}
 
 	now := time.Now()
 	updates := map[string]interface{}{
@@ -270,10 +266,6 @@ func DisableUserAccount(username string, progressFn func(int, string)) (*UserSta
 	var user model.User
 	if err := model.DB.Where("username = ?", username).First(&user).Error; err != nil {
 		return nil, fmt.Errorf("用户 %s 不存在", username)
-	}
-	// 封禁权限由 handler 层控制（内置 admin 保护 + 不能操作自己）
-	if user.Status == security.UserStatusPendingInvite {
-		return nil, fmt.Errorf("待激活用户不支持封禁")
 	}
 
 	result := &UserStatusChangeResult{

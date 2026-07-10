@@ -54,22 +54,12 @@ export const endpointGroups = [
   },
   {
     name: '认证与账户安全',
-    description: '登录、邀请、找回密码、安全验证和 API Key 管理。',
+    description: '登录、找回密码、安全验证和 API Key 管理。',
     endpoints: [
       ep('POST', '/auth/login', '登录并进入 success/login_verify/bootstrap_security 阶段', {
         auth: publicAuth,
         body: 'JSON: username, password',
         response: 'data: stage, token, username, role, cloud_type, security, allowed_methods。'
-      }),
-      ep('GET', '/auth/invite', '读取邀请注册信息', {
-        auth: publicAuth,
-        query: ['token'],
-        response: 'data: 邀请账号、邮箱、角色、过期状态。'
-      }),
-      ep('POST', '/auth/invite/complete', '完成邀请注册', {
-        auth: publicAuth,
-        body: 'JSON: token, password, confirm_password',
-        response: 'data: stage, token, username, role, cloud_type, security。'
       }),
       ep('POST', '/auth/password/forgot', '发送旧版找回密码邮件链接', {
         auth: publicAuth,
@@ -480,7 +470,6 @@ export const endpointGroups = [
       ep('PUT', '/user/:username/status', '封禁或解封用户', { pathParams: ['username'], body: 'JSON: status(active/disabled)', notes: [admin], highRisk: 'change_user_status' }),
       ep('GET', '/user/:username/quota', '获取用户配额使用情况', { pathParams: ['username'], notes: [admin] }),
       ep('PUT', '/user/:username/ssh', '切换用户 SSH 权限', { pathParams: ['username'], body: 'JSON: enabled', notes: [admin] }),
-      ep('POST', '/user/:username/resend-invite', '重发邀请邮件', { pathParams: ['username'], notes: [admin] }),
       ep('POST', '/user/:username/traffic/reset', '重置用户流量配额', { pathParams: ['username'], notes: [admin] }),
       ep('DELETE', '/user/:username', '删除用户及其资产', { pathParams: ['username'], notes: [admin], highRisk: 'delete_user' })
     ]

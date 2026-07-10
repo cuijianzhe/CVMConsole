@@ -10,7 +10,7 @@
       <template #title>
         <div class="banner-content">
           <el-icon size="18"><WarningFilled /></el-icon>
-          <span>安全警告：SMTP 邮件服务尚未配置，邮箱绑定、邀请注册、找回密码和敏感操作二次验证等功能将无法使用。请尽快前往<el-link type="warning" :underline="true" @click="$router.push('/settings')">系统设置</el-link>完成 SMTP 配置，或确保当前处于安全可信的网络环境中。</span>
+          <span>安全警告：SMTP 邮件服务尚未配置，邮箱绑定、找回密码和敏感操作二次验证等功能将无法使用。请尽快前往<el-link type="warning" :underline="true" @click="$router.push('/settings')">系统设置</el-link>完成 SMTP 配置，或确保当前处于安全可信的网络环境中。</span>
         </div>
       </template>
     </el-alert>

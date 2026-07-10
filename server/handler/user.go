@@ -157,175 +157,74 @@ func CreateUser(c *gin.Context) {
 	maxPortForwards := resolveCreateUserMaxPortForwards(role, req.MaxPortForwards)
 	maxSnapshots := resolveCreateUserMaxSnapshots(role, req.MaxSnapshots)
 
-	// SMTP 未配置时，邮件发送不可用，必须填写密码直接创建激活用户
-	smtpConfigured := service.IsSMTPConfigured()
-	if !smtpConfigured {
-		email := strings.TrimSpace(req.Email)
-		if email == "" {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"code":    400,
-				"message": "SMTP 尚未配置，无法发送邀请邮件，请填写完整的用户信息（包括邮箱和密码）",
-			})
-			return
-		}
-		password := strings.TrimSpace(req.Password)
-		if password == "" {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"code":    400,
-				"message": "SMTP 未配置时，必须为用户设置初始密码",
-			})
-			return
-		}
-		if err := service.ValidateStrongPassword(password); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"code":    400,
-				"message": "密码不符合要求: " + err.Error(),
-			})
-			return
-		}
-
-		// 直接创建激活用户
-		user, err := service.CreateActiveUserDirectly(req.Username, email, password, role, cloudType,
-			req.MaxCPU, req.MaxMemory, req.MaxDisk, req.MaxVM, req.MaxStorage, req.MaxRuntimeHours,
-			enablePortForward, maxPortForwards, maxSnapshots,
-			req.MaxBandwidthUp, req.MaxBandwidthDown, req.MaxTrafficDown, req.MaxTrafficUp, req.MaxPublicIPs)
-		if err != nil {
-			if strings.Contains(err.Error(), "已存在") || strings.Contains(err.Error(), "已被使用") {
-				c.JSON(http.StatusConflict, gin.H{"code": 409, "message": err.Error()})
-				return
-			}
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "创建用户失败: " + err.Error()})
-			return
-		}
-
-		// 处理轻量云 VM 注册
-		if service.IsLightweightCloudType(cloudType) && len(req.LightweightVMRegistrations) > 0 {
-			if _, err := service.CreateLightweightVMRegistrations(user.Username, req.LightweightVMRegistrations, "admin"); err != nil {
-				c.JSON(http.StatusOK, gin.H{"code": 200, "message": "用户已创建，但轻量云 VM 注册失败: " + err.Error(), "data": gin.H{"username": user.Username}})
-				return
-			}
-		}
-		if service.IsLightweightCloudType(cloudType) && len(req.LightweightExistingVMs) > 0 {
-			quotaByVM := make(map[string]service.LightweightVMQuotaRequest)
-			for _, quota := range req.LightweightExistingVMQuotas {
-				quotaByVM[quota.VMName] = quota
-			}
-			quotas := make([]service.LightweightVMQuotaRequest, 0, len(req.LightweightExistingVMs))
-			for _, vmName := range req.LightweightExistingVMs {
-				if q, ok := quotaByVM[vmName]; ok {
-					quotas = append(quotas, q)
-				} else {
-					quotas = append(quotas, service.LightweightVMQuotaRequest{
-						VMName: vmName, MaxPortForwards: 10, MaxSnapshots: 2,
-					})
-				}
-			}
-			_ = service.AssignVMsToUserWithQuotas(user.Username, req.LightweightExistingVMs, quotas)
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"code":    200,
-			"message": "用户已创建（SMTP 未配置，用户可直接使用初始密码登录）",
-			"data":    gin.H{"username": user.Username},
-		})
-		return
-	}
-
-	// SMTP 已配置：原有邀请注册流程
 	email := strings.TrimSpace(req.Email)
 	if email == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "邮箱不能为空"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "邮箱不能为空",
+		})
 		return
 	}
-
-	// 如果选择已有VM，不需要专用VPC
-	dedicatedVPCSwitchID := req.DedicatedVPCSwitchID
-	useExistingVMs := service.IsLightweightCloudType(cloudType) && len(req.LightweightExistingVMs) > 0
-	if useExistingVMs {
-		dedicatedVPCSwitchID = 0
+	password := strings.TrimSpace(req.Password)
+	if password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "必须为用户设置初始密码",
+		})
+		return
 	}
-
-	user, inviteToken, err := service.CreatePendingInvitedUserWithExistingVMs(req.Username, req.Email, role, cloudType, dedicatedVPCSwitchID, useExistingVMs,
-		req.MaxCPU, req.MaxMemory, req.MaxDisk, req.MaxVM, req.MaxStorage, req.MaxRuntimeHours, enablePortForward, maxPortForwards, maxSnapshots,
-		req.MaxBandwidthUp, req.MaxBandwidthDown, req.MaxTrafficDown, req.MaxTrafficUp, req.MaxPublicIPs)
-	if err != nil {
-		// 用户名或邮箱冲突返回 409 Conflict
-		if strings.Contains(err.Error(), "已存在") || strings.Contains(err.Error(), "已被使用") {
-			c.JSON(http.StatusConflict, gin.H{
-				"code":    409,
-				"message": err.Error(),
-			})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "创建用户失败: " + err.Error(),
+	if err := service.ValidateStrongPassword(password); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "密码不符合要求: " + err.Error(),
 		})
 		return
 	}
 
+	user, err := service.CreateActiveUserDirectly(req.Username, email, password, role, cloudType,
+		req.MaxCPU, req.MaxMemory, req.MaxDisk, req.MaxVM, req.MaxStorage, req.MaxRuntimeHours,
+		enablePortForward, maxPortForwards, maxSnapshots,
+		req.MaxBandwidthUp, req.MaxBandwidthDown, req.MaxTrafficDown, req.MaxTrafficUp, req.MaxPublicIPs)
+	if err != nil {
+		if strings.Contains(err.Error(), "已存在") || strings.Contains(err.Error(), "已被使用") {
+			c.JSON(http.StatusConflict, gin.H{"code": 409, "message": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "创建用户失败: " + err.Error()})
+		return
+	}
+
+	// 处理轻量云 VM 注册
 	if service.IsLightweightCloudType(cloudType) && len(req.LightweightVMRegistrations) > 0 {
 		if _, err := service.CreateLightweightVMRegistrations(user.Username, req.LightweightVMRegistrations, "admin"); err != nil {
-			model.DB.Delete(user)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"code":    500,
-				"message": "创建轻量云 VM 注册失败: " + err.Error(),
-			})
+			c.JSON(http.StatusOK, gin.H{"code": 200, "message": "用户已创建，但轻量云 VM 注册失败: " + err.Error(), "data": gin.H{"username": user.Username}})
 			return
 		}
 	}
-
-	// 分配已有VM给用户
 	if service.IsLightweightCloudType(cloudType) && len(req.LightweightExistingVMs) > 0 {
-		// 将配额请求转换为VM名到配额的映射
 		quotaByVM := make(map[string]service.LightweightVMQuotaRequest)
 		for _, quota := range req.LightweightExistingVMQuotas {
 			quotaByVM[quota.VMName] = quota
 		}
-
-		// 构建配额请求列表
 		quotas := make([]service.LightweightVMQuotaRequest, 0, len(req.LightweightExistingVMs))
 		for _, vmName := range req.LightweightExistingVMs {
 			if q, ok := quotaByVM[vmName]; ok {
 				quotas = append(quotas, q)
 			} else {
 				quotas = append(quotas, service.LightweightVMQuotaRequest{
-					VMName:          vmName,
-					MaxPortForwards: 10,
-					MaxSnapshots:    2,
+					VMName: vmName, MaxPortForwards: 10, MaxSnapshots: 2,
 				})
 			}
 		}
-
-		if err := service.AssignVMsToUserWithQuotas(user.Username, req.LightweightExistingVMs, quotas); err != nil {
-			model.DB.Delete(user)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"code":    500,
-				"message": "分配已有 VM 失败: " + err.Error(),
-			})
-			return
-		}
-	}
-
-	inviteURL := buildBaseURL(c) + "/invite?token=" + inviteToken
-	if sendErr := service.SendInviteEmail(user, inviteURL); sendErr != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"code":    200,
-			"message": "邀请用户已创建，但邮件发送失败，请检查 SMTP 配置后重发邀请",
-			"data": gin.H{
-				"invite_url": inviteURL,
-			},
-		})
-		return
+		_ = service.AssignVMsToUserWithQuotas(user.Username, req.LightweightExistingVMs, quotas)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
-		"message": "邀请邮件已发送",
-		"data": gin.H{
-			"invite_url": inviteURL,
-		},
+		"message": "用户已创建，用户可直接使用初始密码登录",
+		"data":    gin.H{"username": user.Username},
 	})
+	return
 }
 
 // CreateLightweightVMRegistrations 管理员为轻量云用户登记待开通 VM。
@@ -412,36 +311,6 @@ func UpdateLightweightVMQuota(c *gin.Context) {
 		"data": gin.H{
 			"quota":        quota,
 			"registration": reg,
-		},
-	})
-}
-
-// ResendInvite 重发邀请
-func ResendInvite(c *gin.Context) {
-	username := c.Param("username")
-	user, inviteToken, err := service.ResendInviteToken(username)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": err.Error(),
-		})
-		return
-	}
-
-	inviteURL := buildBaseURL(c) + "/invite?token=" + inviteToken
-	if err := service.SendInviteEmail(user, inviteURL); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "重发邀请失败: " + err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "邀请邮件已重发",
-		"data": gin.H{
-			"invite_url": inviteURL,
 		},
 	})
 }

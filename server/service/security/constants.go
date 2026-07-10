@@ -3,9 +3,8 @@ package security
 import "time"
 
 const (
-	UserStatusPendingInvite = "pending_invite"
-	UserStatusActive        = "active"
-	UserStatusDisabled      = "disabled"
+	UserStatusActive   = "active"
+	UserStatusDisabled = "disabled"
 )
 
 const (
@@ -32,14 +31,12 @@ const (
 )
 
 const (
-	ActionTokenPurposeInviteRegister = "invite_register"
-	ActionTokenPurposePasswordReset  = "password_reset"
+	ActionTokenPurposePasswordReset = "password_reset"
 )
 
 const (
 	LoginVerificationWindow  = 24 * time.Hour
 	HighRiskEmailTrustWindow = time.Hour
-	InviteLinkTTL            = 72 * time.Hour
 	PasswordResetLinkTTL     = time.Hour
 	EmailCodeTTL             = 10 * time.Minute
 )

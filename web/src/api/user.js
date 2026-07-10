@@ -95,13 +95,6 @@ export function deleteUser(username) {
   })
 }
 
-export function resendInvite(username) {
-  return request({
-    url: `/user/${username}/resend-invite`,
-    method: 'post'
-  })
-}
-
 // 切换用户 SSH 访问权限（管理员）
 export function toggleUserSSH(username, enabled) {
   return request({

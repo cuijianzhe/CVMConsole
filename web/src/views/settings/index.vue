@@ -49,7 +49,7 @@
           <el-input v-model="form.public_base_url" placeholder="如 panel.example.com:8080 或 https://panel.example.com" />
           <div class="form-tip">
             <el-icon><InfoFilled /></el-icon>
-            邀请注册、找回密码等邮件里的跳转链接会优先使用这里 | 环境变量: KVM_PUBLIC_BASE_URL
+            找回密码等邮件里的跳转链接会优先使用这里 | 环境变量: KVM_PUBLIC_BASE_URL
           </div>
         </el-form-item>
             <!-- 服务信息 -->
@@ -926,7 +926,7 @@
         </el-divider>
 
         <el-alert
-          :title="form.smtp_configured ? 'SMTP 已配置，可用于邮箱绑定、邀请注册和密码找回。' : 'SMTP 尚未配置，邮箱绑定、邀请注册和密码找回将不可用。'"
+          :title="form.smtp_configured ? 'SMTP 已配置，可用于邮箱绑定和密码找回。' : 'SMTP 尚未配置，邮箱绑定和密码找回将不可用。'"
           :type="form.smtp_configured ? 'success' : 'warning'"
           :closable="false"
           style="margin-bottom: 18px;"

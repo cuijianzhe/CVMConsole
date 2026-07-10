@@ -14,12 +14,6 @@ const routes = [
     meta: { title: '登录' }
   },
   {
-    path: '/invite',
-    name: 'InviteRegister',
-    component: () => import('@/views/invite/index.vue'),
-    meta: { title: '邀请注册' }
-  },
-  {
     path: '/reset-password',
     name: 'ResetPassword',
     component: () => import('@/views/reset-password/index.vue'),
@@ -149,7 +143,7 @@ const router = createRouter({
 router.beforeEach((to) => {
   NProgress.start()
   const token = localStorage.getItem('token')
-  const publicPaths = ['/login', '/invite', '/reset-password']
+  const publicPaths = ['/login', '/reset-password']
   if (!publicPaths.includes(to.path) && !token) {
     return '/login'
   }

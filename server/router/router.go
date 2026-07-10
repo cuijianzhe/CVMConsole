@@ -53,8 +53,6 @@ func Setup() *gin.Engine {
 		auth := api.Group("/auth")
 		{
 			auth.POST("/login", handler.Login)
-			auth.GET("/invite", handler.GetInviteInfo)
-			auth.POST("/invite/complete", handler.CompleteInvite)
 			auth.POST("/password/forgot", handler.ForgotPassword)
 			auth.POST("/password/forgot/send-code", handler.ForgotPasswordSendCode)
 			auth.POST("/password/forgot/verify-code", handler.ForgotPasswordVerifyCode)
@@ -436,7 +434,6 @@ func Setup() *gin.Engine {
 				user.PUT("/:username/status", handler.UpdateUserStatus)
 				user.GET("/:username/quota", handler.GetUserQuotaUsage)
 				user.PUT("/:username/ssh", handler.ToggleUserSSH)
-				user.POST("/:username/resend-invite", handler.ResendInvite)
 				user.POST("/:username/traffic/reset", handler.ResetUserTraffic)
 				user.DELETE("/:username", handler.DeleteUser)
 			}

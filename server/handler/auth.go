@@ -74,12 +74,6 @@ type HighRiskVerifyRequest struct {
 	Operation   string `json:"operation" binding:"required"`
 }
 
-type InviteCompleteRequest struct {
-	Token           string `json:"token" binding:"required"`
-	Password        string `json:"password" binding:"required"`
-	ConfirmPassword string `json:"confirm_password" binding:"required"`
-}
-
 type PasswordForgotRequest struct {
 	Email string `json:"email" binding:"required"`
 }
@@ -170,10 +164,6 @@ func Login(c *gin.Context) {
 	if err := model.DB.Where("username = ?", strings.TrimSpace(req.Username)).First(&user).Error; err != nil {
 		service.RecordLoginFailure(clientIP, strings.TrimSpace(req.Username))
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "用户名或密码错误"})
-		return
-	}
-	if user.Status == service.UserStatusPendingInvite {
-		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "该账户尚未完成注册，请先完成邀请注册"})
 		return
 	}
 	if user.Status == service.UserStatusDisabled {
@@ -833,57 +823,6 @@ func VerifyHighRisk(c *gin.Context) {
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "不支持的验证方式"})
 	}
-}
-
-// GetInviteInfo 获取邀请详情
-func GetInviteInfo(c *gin.Context) {
-	token := strings.TrimSpace(c.Query("token"))
-	if token == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "邀请令牌不能为空"})
-		return
-	}
-	detail, _, _, err := service.BuildInviteDetail(token)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"code": 200, "message": "ok", "data": detail})
-}
-
-// CompleteInvite 完成邀请注册
-func CompleteInvite(c *gin.Context) {
-	var req InviteCompleteRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "参数错误"})
-		return
-	}
-	if req.Password != req.ConfirmPassword {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "两次输入的密码不一致"})
-		return
-	}
-	user, err := service.CompleteInviteRegistration(req.Token, req.Password)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
-		return
-	}
-	accessToken, err := middleware.GenerateAccessTokenWithContext(c, user.ID, user.Username, user.Role)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "注册成功，但自动登录失败"})
-		return
-	}
-	state := service.BuildSecurityState(user)
-	c.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "注册完成",
-		"data": LoginStageResponse{
-			Stage:     "success",
-			Token:     accessToken,
-			Username:  user.Username,
-			Role:      user.Role,
-			CloudType: service.NormalizeCloudType(user.CloudType),
-			Security:  state,
-		},
-	})
 }
 
 // ForgotPassword 发送找回密码邮件

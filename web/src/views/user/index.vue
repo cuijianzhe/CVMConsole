@@ -39,7 +39,6 @@
           style="width: 130px;"
         >
           <el-option label="正常" value="active" />
-          <el-option label="待激活" value="pending_invite" />
           <el-option label="已封禁" value="disabled" />
         </el-select>
         <el-select
@@ -75,8 +74,8 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="120">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'pending_invite' ? 'warning' : (row.status === 'active' ? 'success' : 'danger')">
-              {{ row.status === 'pending_invite' ? '待激活' : (row.status === 'active' ? '正常' : '已封禁') }}
+            <el-tag :type="row.status === 'active' ? 'success' : 'danger'">
+              {{ row.status === 'active' ? '正常' : '已封禁' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -223,8 +222,6 @@
             <el-button size="small" type="primary" :disabled="row.role === 'admin'" @click="handleAssign(row)">
               {{ row.cloud_type === 'lightweight' ? '注册VM' : '分配VM' }}
             </el-button>
-            <el-button size="small" type="success" v-if="row.status === 'pending_invite'" @click="handleResendInvite(row)">重发邀请</el-button>
-            <el-button size="small" type="danger" v-if="row.username !== 'admin' && row.username !== userStore.username && row.status === 'active'" @click="handleToggleStatus(row, 'disabled')">封禁</el-button>
             <el-button size="small" type="success" v-if="row.username !== 'admin' && row.username !== userStore.username && row.status === 'disabled'" @click="handleToggleStatus(row, 'active')">解封</el-button>
             <el-button size="small" type="info" :disabled="row.role === 'admin' || row.cloud_type === 'lightweight' || !(row.quota && (row.quota.is_limited_down || row.quota.is_limited_up))" @click="handleResetTraffic(row)">重置流量</el-button>
             <el-button size="small" type="danger" :disabled="(row.role === 'admin' && row.username === userStore.username) || row.username === 'admin'" @click="handleDelete(row)">删除</el-button>
@@ -264,8 +261,8 @@
               <el-tag v-if="row.role !== 'admin'" :type="row.cloud_type === 'lightweight' ? 'warning' : 'success'" size="small">
                 {{ row.cloud_type === 'lightweight' ? '轻量云' : '弹性云' }}
               </el-tag>
-              <el-tag :type="row.status === 'pending_invite' ? 'warning' : (row.status === 'active' ? 'success' : 'danger')" size="small">
-                {{ row.status === 'pending_invite' ? '待激活' : (row.status === 'active' ? '正常' : '已封禁') }}
+              <el-tag :type="row.status === 'active' ? 'success' : 'danger'" size="small">
+                {{ row.status === 'active' ? '正常' : '已封禁' }}
               </el-tag>
             </div>
           </div>
@@ -358,8 +355,6 @@
             <el-button size="small" type="primary" :disabled="row.role === 'admin'" @click="handleAssign(row)">
               {{ row.cloud_type === 'lightweight' ? '注册VM' : '分配VM' }}
             </el-button>
-            <el-button size="small" type="success" v-if="row.status === 'pending_invite'" @click="handleResendInvite(row)">重发邀请</el-button>
-            <el-button size="small" type="danger" v-if="row.username !== 'admin' && row.username !== userStore.username && row.status === 'active'" @click="handleToggleStatus(row, 'disabled')">封禁</el-button>
             <el-button size="small" type="success" v-if="row.username !== 'admin' && row.username !== userStore.username && row.status === 'disabled'" @click="handleToggleStatus(row, 'active')">解封</el-button>
             <el-button size="small" type="info" :disabled="row.role === 'admin' || row.cloud_type === 'lightweight' || !(row.quota && (row.quota.is_limited_down || row.quota.is_limited_up))" @click="handleResetTraffic(row)">重置流量</el-button>
             <el-button size="small" type="danger" :disabled="(row.role === 'admin' && row.username === userStore.username) || row.username === 'admin'" @click="handleDelete(row)">删除</el-button>
@@ -377,15 +372,10 @@
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="form.email" />
         </el-form-item>
-        <!-- SMTP 未配置时，需要填写初始密码 -->
-        <el-form-item v-if="!smtpConfigured" label="初始密码" prop="password">
+        <el-form-item label="初始密码" prop="password">
           <el-input v-model="form.password" type="password" show-password placeholder="为用户设置初始密码" />
-          <div class="form-tip">
-            <el-icon><Warning /></el-icon>
-            SMTP 未配置，用户将直接使用此密码登录，无需邮件邀请。
-          </div>
         </el-form-item>
-        <el-form-item v-if="!smtpConfigured" label="确认密码" prop="confirmPassword">
+        <el-form-item label="确认密码" prop="confirmPassword">
           <el-input v-model="form.confirmPassword" type="password" show-password placeholder="请再次输入密码" />
         </el-form-item>
         <el-form-item label="角色" prop="role">
@@ -422,7 +412,7 @@
               <div class="registration-panel-header">
                 <div>
                   <strong>待注册 VM</strong>
-                  <span class="registration-hint">配置会随邀请邮件发送，用户确认凭据后才开通。</span>
+                  <span class="registration-hint">用户创建后即可使用。</span>
                 </div>
                 <el-button size="small" type="primary" :disabled="!form.dedicated_vpc_switch_id" @click="openCreateRegistrationForm">添加注册VM</el-button>
               </div>
@@ -750,7 +740,6 @@ import {
   assignVms,
   toggleUserSSH,
   resetUserTraffic,
-  resendInvite,
   createLightweightVmRegistrations,
   deleteLightweightVmRegistration,
   removeLightweightRegisteredVm,
@@ -766,9 +755,6 @@ import { useUserStore } from '@/store/user'
 import { passwordValidator, checkPasswordBreachAsync } from '@/utils/validate'
 
 const userStore = useUserStore()
-
-// SMTP 是否已配置
-const smtpConfigured = computed(() => userStore.security?.smtp_configured === true)
 
 const tableData = ref([])
 const loading = ref(false)
@@ -1137,14 +1123,8 @@ const handleCreate = () => {
   existingVMQuotaData.value = []
   allVMs.value = []
   createVisible.value = true
-  // 动态设置密码验证规则
-  if (!smtpConfigured.value) {
-    createRules.password = smtpNotConfiguredRules.password
-    createRules.confirmPassword = smtpNotConfiguredRules.confirmPassword
-  } else {
-    delete createRules.password
-    delete createRules.confirmPassword
-  }
+  createRules.password = smtpNotConfiguredRules.password
+  createRules.confirmPassword = smtpNotConfiguredRules.confirmPassword
   fetchAllVMs()
 }
 
@@ -1162,13 +1142,11 @@ const submitCreate = async () => {
           return
         }
       }
-      // SMTP 未配置时需要密码，进行泄露检测
-      if (!smtpConfigured && form.password) {
-        const breach = await checkPasswordBreachAsync(form.password)
-        if (breach.enabled && breach.breached) {
-          ElMessage.error('该密码已在已知泄露数据库中发现，请更换为更安全的密码')
-          return
-        }
+      // 进行密码泄露检测
+      const breach = await checkPasswordBreachAsync(form.password)
+      if (breach.enabled && breach.breached) {
+        ElMessage.error('该密码已在已知泄露数据库中发现，请更换为更安全的密码')
+        return
       }
       submitLoading.value = true
       try {
@@ -1188,7 +1166,7 @@ const submitCreate = async () => {
           payload.lightweight_vm_registrations = buildRegistrationPayload(form.lightweight_vm_registrations)
         }
         const res = await createUser(payload)
-        ElMessage.success(res.message || '邀请邮件已发送')
+        ElMessage.success(res.message || '用户已创建')
         createVisible.value = false
         fetchData()
       } catch (err) {
@@ -1588,15 +1566,6 @@ const handleToggleStatus = async (row, targetStatus) => {
     }
     setTimeout(fetchData, isDisable ? 2000 : 500)
   } catch {}
-}
-
-const handleResendInvite = async (row) => {
-  try {
-    await resendInvite(row.username)
-    ElMessage.success(`已向 ${row.email} 重发邀请邮件`)
-  } catch (err) {
-    console.error(err)
-  }
 }
 
 const handleResetTraffic = async (row) => {

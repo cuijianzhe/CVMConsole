@@ -112,22 +112,6 @@ export function verifyHighRisk(data) {
   })
 }
 
-export function getInviteInfo(token) {
-  return request({
-    url: '/auth/invite',
-    method: 'get',
-    params: { token }
-  })
-}
-
-export function completeInvite(data) {
-  return request({
-    url: '/auth/invite/complete',
-    method: 'post',
-    data
-  })
-}
-
 export function forgotPassword(data) {
   return request({
     url: '/auth/password/forgot',

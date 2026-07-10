@@ -155,8 +155,6 @@ var publicPaths = map[string]bool{
 	"/api/public/settings":      true,
 	"/api/public/version":       true,
 	"/api/auth/login":           true,
-	"/api/auth/invite":          true,
-	"/api/auth/invite/complete": true,
 	"/api/auth/password/forgot": true,
 	"/api/auth/password/reset":  true,
 }
