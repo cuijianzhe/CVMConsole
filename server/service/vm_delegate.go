@@ -178,6 +178,12 @@ func MarkVMCacheMissingAsync(name string) {
 	vmpkg.MarkVMCacheMissingAsync(name)
 }
 
+// ── Network Info ──
+
+func CreateOrUpdateVMNetworkInfo(vmName string, interfaceOrder int, ip, mac, nicModel, networkType, switchName, bridgeName string) error {
+	return vmpkg.CreateOrUpdateVMNetworkInfo(vmName, interfaceOrder, ip, mac, nicModel, networkType, switchName, bridgeName)
+}
+
 func UpdateVMCacheOwner(name, owner string) {
 	vmpkg.UpdateVMCacheOwner(name, owner)
 }

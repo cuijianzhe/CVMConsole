@@ -249,6 +249,22 @@ func importVMPostDefine(vmName, srcDiskPath, destDiskPath string, copyDisk bool,
 			return err
 		}
 	}
+
+	// 刷新虚拟机缓存，确保数据库中存储最新的虚拟机信息
+	if err := service.RefreshVMCacheByName(vmName); err != nil {
+		logger.App.Warn("刷新虚拟机缓存失败", "vm", vmName, "error", err)
+	}
+
+	// 持久化虚拟机网络信息到数据库
+	if startAfterImport {
+		time.Sleep(2 * time.Second)
+		mac := ip_resolver.GetFirstVMMAC(vmName)
+		if mac != "" {
+			ip, _, _ := service.GetVMIPInfo(vmName)
+			_ = service.CreateOrUpdateVMNetworkInfo(vmName, 0, ip, mac, "", "", "", "")
+		}
+	}
+
 	return nil
 }
 
