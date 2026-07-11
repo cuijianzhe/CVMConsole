@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { getPublicSettings } from '@/api/settings'
 
-export const DEFAULT_SITE_TITLE = 'QVMConsole'
+export const DEFAULT_SITE_TITLE = 'CVMConsole'
 const SITE_TITLE_STORAGE_KEY = 'site_title'
 const HOME_TITLE_STORAGE_KEY = 'home_title'
 const SYSTEM_HOME_ICON_STORAGE_KEY = 'system_home_icon'

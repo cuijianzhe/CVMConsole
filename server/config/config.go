@@ -14,7 +14,7 @@ import (
 const (
 	defaultMaintenanceServiceUnits = "kvm-console.service,libvirtd.service,libvirtd.socket,libvirtd-ro.socket,libvirtd-admin.socket"
 	DefaultISODir                  = "/var/lib/libvirt/images/ISO"
-	DefaultSiteTitle               = "QVMConsole"
+	DefaultSiteTitle               = "CVMConsole"
 	defaultJWTSecret               = "kvm-console-secret-key-change-me"
 )
 
