@@ -25,10 +25,9 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 	isX8664 := archName == arch.ArchX8664
 
 	// Hyper-V enlightenments 仅在 x86_64 架构上支持
-	var hyperVBlock, hyperVFeaturesBlock string
+	var hyperVBlock string
 	if isX8664 {
-		hyperVBlock = "    <hyperv mode='custom'>\n      <relaxed state='on'/><vapic state='on'/><spinlocks state='on' retries='8191'/>\n    </hyperv>\n    "
-		hyperVFeaturesBlock = "    <timer name='pit' tickpolicy='delay'/>\n    <timer name='hpet' present='no'/><timer name='hypervclock' present='yes'/>"
+		hyperVBlock = "    <hyperv mode='custom'>\n      <relaxed state='on'/><vapic state='on'/><spinlocks state='on' retries='8191'/>\n    </hyperv>\n    <timer name='pit' tickpolicy='delay'/>\n    <timer name='hpet' present='no'/><timer name='hypervclock' present='yes'/>\n    "
 	}
 
 	// 网络接口 XML：仅在有主网口交换机配置时才添加
@@ -81,7 +80,7 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
   </os>
   <features>
     <acpi/><apic/>
-    %s<vmport state='off'/><smm state='on'/>
+    <vmport state='off'/><smm state='on'/>
   </features>
   <cpu mode='host-passthrough' check='none' migratable='on'/>
   %s
@@ -108,7 +107,7 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
     <memballoon model='virtio' freePageReporting='on'><stats period='5'/></memballoon>
   </devices>
 </domain>`,
-		params.Name, ramKiB, service.BuildVCPUTag(params.VCPU, params.MaxVCPU), archName, machineType, loaderPath, varsTemplate, nvramClone, clockOpenTag, hyperVBlock, emulatorPath, format, destDiskPath, networkXML, hyperVFeaturesBlock, watchdogModel)
+		params.Name, ramKiB, service.BuildVCPUTag(params.VCPU, params.MaxVCPU), archName, machineType, loaderPath, varsTemplate, nvramClone, clockOpenTag, hyperVBlock, emulatorPath, format, destDiskPath, networkXML, watchdogModel)
 
 	var err error
 	if memoryMeta != nil {
@@ -218,10 +217,9 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 	isX8664 := archName == arch.ArchX8664
 
 	// Hyper-V enlightenments 仅在 x86_64 架构上支持
-	var hyperVBlock, hyperVFeaturesBlock string
+	var hyperVBlock string
 	if isX8664 {
-		hyperVBlock = "    <hyperv mode='custom'>\n      <relaxed state='on'/><vapic state='on'/><spinlocks state='on' retries='8191'/>\n    </hyperv>\n    "
-		hyperVFeaturesBlock = "    <timer name='pit' tickpolicy='delay'/>\n    <timer name='hpet' present='no'/><timer name='hypervclock' present='yes'/>"
+		hyperVBlock = "    <hyperv mode='custom'>\n      <relaxed state='on'/><vapic state='on'/><spinlocks state='on' retries='8191'/>\n    </hyperv>\n    <timer name='pit' tickpolicy='delay'/>\n    <timer name='hpet' present='no'/><timer name='hypervclock' present='yes'/>\n    "
 	}
 
 	// 网络接口 XML：仅在有主网口交换机配置时才添加
@@ -272,7 +270,7 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
   </os>
   <features>
     <acpi/><apic/>
-    %s<vmport state='off'/><smm state='on'/>
+    <vmport state='off'/><smm state='on'/>
   </features>
   <cpu mode='host-passthrough' check='none' migratable='on'/>
   %s
@@ -299,7 +297,7 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
     <memballoon model='virtio' freePageReporting='on'><stats period='5'/></memballoon>
   </devices>
 </domain>`,
-		params.Name, ramKiB, service.BuildVCPUTag(params.VCPU, params.MaxVCPU), archName, machineType, loaderPath2, varsTemplate2, nvramClone, clockOpenTag, hyperVBlock, emulatorPath, format, destDiskPath, networkXML, hyperVFeaturesBlock, watchdogModel)
+		params.Name, ramKiB, service.BuildVCPUTag(params.VCPU, params.MaxVCPU), archName, machineType, loaderPath2, varsTemplate2, nvramClone, clockOpenTag, hyperVBlock, emulatorPath, format, destDiskPath, networkXML, watchdogModel)
 
 	var err error
 	if memoryMeta != nil {

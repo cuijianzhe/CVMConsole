@@ -26,7 +26,7 @@ func BuildOVSInterfaceXMLForBridge(mac, modelName, bridge string) string {
 	b.WriteString(fmt.Sprintf("      <source bridge='%s'/>\n", strings.TrimSpace(bridge)))
 	b.WriteString("      <virtualport type='openvswitch'/>\n")
 	b.WriteString(fmt.Sprintf("      <model type='%s'/>\n", strings.TrimSpace(modelName)))
-	b.WriteString("    </interface>")
+	b.WriteString("    </interface>\n")
 	return b.String()
 }
 
