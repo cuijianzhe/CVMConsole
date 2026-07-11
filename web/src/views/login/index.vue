@@ -14,14 +14,8 @@
           <el-form-item prop="password">
             <el-input v-model="form.password" size="large" type="password" placeholder="密码" prefix-icon="Lock" show-password @keyup.enter="handleLogin" />
           </el-form-item>
-          <el-form-item class="agreement-item">
-            <el-checkbox v-model="agreementChecked" class="agreement-checkbox">
-              <span>我已阅读并同意</span>
-              <a href="https://qvmcdocs.xiaozhuhouses.asia/agreement?return=%2Fdocs%2Finstall%2F" target="_blank" rel="noopener noreferrer" class="agreement-link" @click.stop>《用户协议》</a>
-            </el-checkbox>
-          </el-form-item>
           <el-form-item class="submit-item">
-            <el-button type="primary" size="large" class="login-btn" :loading="loading" :disabled="!agreementChecked" @click="handleLogin">登 录</el-button>
+            <el-button type="primary" size="large" class="login-btn" :loading="loading" @click="handleLogin">登 录</el-button>
           </el-form-item>
         </el-form>
       </template>
@@ -251,10 +245,9 @@
       destroy-on-close
     >
       <div class="about-content">
-        <p>{{ displaySiteTitle }}公有云平台，由开发者又菜有爱玩的小朱独立研发设计。底层采用 KVM+QEMU 支持软硬件虚拟机并自行研发模板和开通流程，所有的模板均为官方镜像并非二次魔改，并且采用标准的开通方式。</p>
-        <p>同时我自行研发弹性云和轻量云，弹性云面向开发者群体和企业用户，采用配额计费体系，用户可以在配额内灵活自行开通虚拟机VPS并支持VPC内网通信、网段隔离和ACL安全组策略，轻量云则面向个人用户提供最简单的服务器使用方式，由管理员直接开通分配。</p>
-        <p>目前该套系统属于内测抢先体验，尚不对外开放。</p>
-        <p class="contact">如需体验试用，可联系 QQ：<strong>3354416548</strong>。</p>
+        <p>{{ displaySiteTitle }}公有云平台，底层采用 KVM+QEMU 支持软硬件虚拟机并自行研发模板和开通流程，所有的模板均为官方镜像并非二次魔改，并且采用标准的开通方式。</p>
+        <p>同时有弹性云和轻量云，弹性云面向开发者群体和企业用户，采用配额计费体系，用户可以在配额内灵活自行开通虚拟机VPS并支持VPC内网通信、网段隔离和ACL安全组策略，轻量云则面向个人用户提供最简单的服务器使用方式，由管理员直接开通分配。</p>
+        <p class="contact">可联系 QQ：<strong>598941324</strong>。</p>
       </div>
       <template #footer>
         <span class="dialog-footer">
@@ -354,11 +347,11 @@
       </template>
     </el-dialog>
 
-    <div class="footer-ack">
+    <!-- <div class="footer-ack">
       <div class="footer-copy">
         &copy; <a href="https://github.com/cuijianzhe/CVMConsole" target="_blank" rel="noopener noreferrer"><svg class="github-icon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg> CVMConsole (Open source Apache 2.0)</a>
       </div>
-    </div>
+    </div> -->
   </div>
 </template>
 
@@ -393,23 +386,8 @@ const userStore = useUserStore()
 const loginFormRef = ref(null)
 const displaySiteTitle = computed(() => siteTitle.value)
 
-// 用户协议勾选状态，勾选后通过 localStorage 记住
-const agreementChecked = ref(false)
-const AGREEMENT_STORAGE_KEY = 'qvm_agreement_accepted'
-
 onMounted(() => {
-  if (localStorage.getItem(AGREEMENT_STORAGE_KEY) === 'true') {
-    agreementChecked.value = true
-  }
   syncPublicSiteTitle()
-})
-
-watch(agreementChecked, (val) => {
-  if (val) {
-    localStorage.setItem(AGREEMENT_STORAGE_KEY, 'true')
-  } else {
-    localStorage.removeItem(AGREEMENT_STORAGE_KEY)
-  }
 })
 
 const loading = ref(false)
@@ -607,10 +585,6 @@ const applyStage = async (data) => {
 
 const handleLogin = async () => {
   if (!loginFormRef.value) return
-  if (!agreementChecked.value) {
-    ElMessage.warning('请先阅读并同意用户协议和内测协议')
-    return
-  }
   const valid = await loginFormRef.value.validate().catch(() => false)
   if (!valid) return
 
@@ -1177,24 +1151,6 @@ const handleForgotCancel = () => {
   text-decoration: none;
   font-weight: 500;
   border-bottom: 1px dotted rgba(255, 255, 255, 0.5);
-}
-
-.agreement-item {
-  margin-bottom: 8px;
-}
-
-.agreement-checkbox {
-  white-space: normal;
-  line-height: 1.6;
-}
-
-.agreement-link {
-  color: var(--el-color-primary);
-  text-decoration: none;
-}
-
-.agreement-link:hover {
-  text-decoration: underline;
 }
 
 :deep(.el-input__wrapper) {
