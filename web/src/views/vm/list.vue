@@ -30,6 +30,7 @@
               <div v-show="hasSelection" class="vm-actions-batch">
                 <el-button type="warning" @click="handleBatchOperate('start')" :loading="batchOperating">开机</el-button>
                 <el-button type="info" @click="handleBatchOperate('shutdown')" :loading="batchOperating">关机</el-button>
+                <el-button type="primary" @click="handleBatchOperate('reboot')" :loading="batchOperating">重启</el-button>
                 <el-button v-if="!isLightweight" type="danger" @click="handleBatchDelete" :loading="batchOperating">删除</el-button>
               </div>
             </div>
@@ -248,6 +249,8 @@
                           </span>
                           <template #dropdown>
                             <el-dropdown-menu>
+                              <el-dropdown-item v-if="row.status === 'running'" command="reboot" :disabled="isMigrating(row)">软重启</el-dropdown-item>
+                              <el-dropdown-item v-if="row.status === 'running'" command="destroy" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
                               <el-dropdown-item v-if="isAdmin" command="template" :disabled="isMigrating(row)">制作模板</el-dropdown-item>
                               <el-dropdown-item v-if="!isLightweight" command="export" :disabled="isMigrating(row)">导出虚拟机</el-dropdown-item>
                               <el-dropdown-item v-if="!isLightweight" command="network" :disabled="isMigrating(row)">网络管理</el-dropdown-item>
@@ -323,6 +326,17 @@
                           :icon="row.status === 'running' ? 'SwitchButton' : 'VideoPlay'"
                           :disabled="isMigrating(row)"
                           @click="handleOperate(row, row.status === 'running' ? 'shutdown' : 'start')"
+                        />
+                      </el-tooltip>
+                      <el-tooltip v-if="row.status === 'running'" content="重启" placement="top">
+                        <el-button
+                          size="small"
+                          circle
+                          type="primary"
+                          :loading="operatingMap[row.name]"
+                          icon="RefreshRight"
+                          :disabled="isMigrating(row)"
+                          @click="handleOperate(row, 'reboot')"
                         />
                       </el-tooltip>
                     </div>
@@ -452,6 +466,17 @@
                       @click="handleOperate(row, row.status === 'running' ? 'shutdown' : 'start')"
                     />
                   </el-tooltip>
+                  <el-tooltip v-if="row.status === 'running'" content="重启" placement="top">
+                    <el-button
+                      size="small"
+                      circle
+                      type="primary"
+                      :loading="operatingMap[row.name]"
+                      icon="RefreshRight"
+                      :disabled="isMigrating(row)"
+                      @click="handleOperate(row, 'reboot')"
+                    />
+                  </el-tooltip>
                 </div>
                 <div class="card-specs">
                   <span class="spec-item">
@@ -532,6 +557,8 @@
                     <el-button size="small" circle icon="MoreFilled" :disabled="isMigrating(row)" />
                     <template #dropdown>
                       <el-dropdown-menu>
+                        <el-dropdown-item v-if="row.status === 'running'" command="reboot" :disabled="isMigrating(row)">软重启</el-dropdown-item>
+                        <el-dropdown-item v-if="row.status === 'running'" command="destroy" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
                         <el-dropdown-item v-if="isAdmin" command="template" :disabled="isMigrating(row)">制作模板</el-dropdown-item>
                         <el-dropdown-item v-if="!isLightweight" command="export" :disabled="isMigrating(row)">导出虚拟机</el-dropdown-item>
                         <el-dropdown-item v-if="!isLightweight" command="network" :disabled="isMigrating(row)">网络管理</el-dropdown-item>
@@ -658,6 +685,7 @@
                     </div>
                     <div class="vm-card-actions">
                       <el-button size="small" :type="row.status === 'running' ? 'warning' : 'success'" :loading="operatingMap[row.name]" :disabled="isMigrating(row)" @click="handleOperate(row, row.status === 'running' ? 'shutdown' : 'start')">{{ row.status === 'running' ? '关机' : row.status === 'paused' ? '继续' : '开机' }}</el-button>
+                      <el-button v-if="row.status === 'running'" size="small" type="primary" :loading="operatingMap[row.name]" :disabled="isMigrating(row)" @click="handleOperate(row, 'reboot')">重启</el-button>
                       <el-button v-if="row.status === 'paused'" size="small" type="danger" :loading="operatingMap[row.name]" :disabled="isMigrating(row)" @click="handleOperate(row, 'reset')">重置</el-button>
                       <el-button v-if="!isLightweight" size="small" type="primary" plain :disabled="isMigrating(row)" @click="handleEdit(row)">编辑</el-button>
                       <el-button size="small" type="success" plain @click="$router.push(`/vm/detail/${row.name}`)">详情</el-button>
@@ -665,6 +693,8 @@
                         <el-button size="small" circle icon="MoreFilled" />
                         <template #dropdown>
                           <el-dropdown-menu>
+                            <el-dropdown-item v-if="row.status === 'running'" command="reboot" :disabled="isMigrating(row)">软重启</el-dropdown-item>
+                            <el-dropdown-item v-if="row.status === 'running'" command="destroy" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
                             <el-dropdown-item v-if="isAdmin" command="template" :disabled="isMigrating(row)">制作模板</el-dropdown-item>
                             <el-dropdown-item v-if="!isLightweight" command="export" :disabled="isMigrating(row)">导出虚拟机</el-dropdown-item>
                             <el-dropdown-item v-if="!isLightweight" command="network" :disabled="isMigrating(row)">网络管理</el-dropdown-item>
@@ -864,6 +894,8 @@
               </span>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item v-if="row.status === 'running'" command="reboot" :disabled="isMigrating(row)">软重启</el-dropdown-item>
+                  <el-dropdown-item v-if="row.status === 'running'" command="destroy" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
                   <el-dropdown-item v-if="isAdmin" command="template" :disabled="isMigrating(row)">制作模板</el-dropdown-item>
                   <el-dropdown-item v-if="!isLightweight" command="export" :disabled="isMigrating(row)">导出虚拟机</el-dropdown-item>
                   <el-dropdown-item v-if="!isLightweight" command="network" :disabled="isMigrating(row)">网络管理</el-dropdown-item>
@@ -986,6 +1018,7 @@
                 <el-button size="small" :type="row.status === 'running' ? 'warning' : 'success'" :loading="operatingMap[row.name]" :disabled="isMigrating(row)" @click="handleOperate(row, row.status === 'running' ? 'shutdown' : 'start')">
                   {{ row.status === 'running' ? '关机' : row.status === 'paused' ? '继续' : '开机' }}
                 </el-button>
+                <el-button v-if="row.status === 'running'" size="small" type="primary" :loading="operatingMap[row.name]" :disabled="isMigrating(row)" @click="handleOperate(row, 'reboot')">重启</el-button>
                 <el-button v-if="row.status === 'paused'" size="small" type="danger" :loading="operatingMap[row.name]" :disabled="isMigrating(row)" @click="handleOperate(row, 'reset')">重置</el-button>
                 <el-button v-if="!isLightweight" size="small" type="primary" plain :disabled="isMigrating(row)" @click="handleEdit(row)">编辑</el-button>
                 <el-button size="small" type="success" plain @click="$router.push(`/vm/detail/${row.name}`)">详情</el-button>
@@ -993,6 +1026,8 @@
                   <el-button size="small" circle icon="MoreFilled" />
                   <template #dropdown>
                     <el-dropdown-menu>
+                      <el-dropdown-item v-if="row.status === 'running'" command="reboot" :disabled="isMigrating(row)">软重启</el-dropdown-item>
+                      <el-dropdown-item v-if="row.status === 'running'" command="destroy" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
                       <el-dropdown-item v-if="isAdmin" command="template" :disabled="isMigrating(row)">制作模板</el-dropdown-item>
                       <el-dropdown-item v-if="!isLightweight" command="export" :disabled="isMigrating(row)">导出虚拟机</el-dropdown-item>
                       <el-dropdown-item v-if="!isLightweight" command="network" :disabled="isMigrating(row)">网络管理</el-dropdown-item>
@@ -1912,6 +1947,10 @@ const handleMore = async (command, row) => {
   }
   if (command === 'delete') {
     vmDeleteRef.value?.open(row.name)
+  } else if (command === 'reboot') {
+    await handleOperate(row, 'reboot')
+  } else if (command === 'destroy') {
+    await handleOperate(row, 'destroy')
   } else if (command === 'snapshot') {
     snapshotRef.value?.open(row.name, row.status)
   } else if (command === 'network') {
