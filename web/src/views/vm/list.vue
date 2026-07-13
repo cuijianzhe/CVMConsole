@@ -250,7 +250,7 @@
                           <template #dropdown>
                             <el-dropdown-menu>
                               <el-dropdown-item v-if="row.status === 'running'" command="reboot" :disabled="isMigrating(row)">软重启</el-dropdown-item>
-                              <el-dropdown-item v-if="row.status === 'running'" command="destroy" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
+                              <el-dropdown-item v-if="row.status === 'running'" command="reset" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
                               <el-dropdown-item v-if="isAdmin" command="template" :disabled="isMigrating(row)">制作模板</el-dropdown-item>
                               <el-dropdown-item v-if="!isLightweight" command="export" :disabled="isMigrating(row)">导出虚拟机</el-dropdown-item>
                               <el-dropdown-item v-if="!isLightweight" command="network" :disabled="isMigrating(row)">网络管理</el-dropdown-item>
@@ -419,6 +419,8 @@
                         <el-button size="small" circle icon="MoreFilled" :disabled="isMigrating(row)" />
                         <template #dropdown>
                           <el-dropdown-menu>
+                            <el-dropdown-item v-if="row.status === 'running'" command="reboot" :disabled="isMigrating(row)">软重启</el-dropdown-item>
+                            <el-dropdown-item v-if="row.status === 'running'" command="reset" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
                             <el-dropdown-item v-if="isAdmin" command="template" :disabled="isMigrating(row)">制作模板</el-dropdown-item>
                             <el-dropdown-item v-if="!isLightweight" command="export" :disabled="isMigrating(row)">导出虚拟机</el-dropdown-item>
                             <el-dropdown-item v-if="!isLightweight" command="network" :disabled="isMigrating(row)">网络管理</el-dropdown-item>
@@ -558,7 +560,7 @@
                     <template #dropdown>
                       <el-dropdown-menu>
                         <el-dropdown-item v-if="row.status === 'running'" command="reboot" :disabled="isMigrating(row)">软重启</el-dropdown-item>
-                        <el-dropdown-item v-if="row.status === 'running'" command="destroy" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
+                        <el-dropdown-item v-if="row.status === 'running'" command="reset" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
                         <el-dropdown-item v-if="isAdmin" command="template" :disabled="isMigrating(row)">制作模板</el-dropdown-item>
                         <el-dropdown-item v-if="!isLightweight" command="export" :disabled="isMigrating(row)">导出虚拟机</el-dropdown-item>
                         <el-dropdown-item v-if="!isLightweight" command="network" :disabled="isMigrating(row)">网络管理</el-dropdown-item>
@@ -694,7 +696,7 @@
                         <template #dropdown>
                           <el-dropdown-menu>
                             <el-dropdown-item v-if="row.status === 'running'" command="reboot" :disabled="isMigrating(row)">软重启</el-dropdown-item>
-                            <el-dropdown-item v-if="row.status === 'running'" command="destroy" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
+                            <el-dropdown-item v-if="row.status === 'running'" command="reset" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
                             <el-dropdown-item v-if="isAdmin" command="template" :disabled="isMigrating(row)">制作模板</el-dropdown-item>
                             <el-dropdown-item v-if="!isLightweight" command="export" :disabled="isMigrating(row)">导出虚拟机</el-dropdown-item>
                             <el-dropdown-item v-if="!isLightweight" command="network" :disabled="isMigrating(row)">网络管理</el-dropdown-item>
@@ -895,7 +897,7 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item v-if="row.status === 'running'" command="reboot" :disabled="isMigrating(row)">软重启</el-dropdown-item>
-                  <el-dropdown-item v-if="row.status === 'running'" command="destroy" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
+                  <el-dropdown-item v-if="row.status === 'running'" command="reset" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
                   <el-dropdown-item v-if="isAdmin" command="template" :disabled="isMigrating(row)">制作模板</el-dropdown-item>
                   <el-dropdown-item v-if="!isLightweight" command="export" :disabled="isMigrating(row)">导出虚拟机</el-dropdown-item>
                   <el-dropdown-item v-if="!isLightweight" command="network" :disabled="isMigrating(row)">网络管理</el-dropdown-item>
@@ -1027,7 +1029,7 @@
                   <template #dropdown>
                     <el-dropdown-menu>
                       <el-dropdown-item v-if="row.status === 'running'" command="reboot" :disabled="isMigrating(row)">软重启</el-dropdown-item>
-                      <el-dropdown-item v-if="row.status === 'running'" command="destroy" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
+                      <el-dropdown-item v-if="row.status === 'running'" command="reset" :disabled="isMigrating(row)">硬重启</el-dropdown-item>
                       <el-dropdown-item v-if="isAdmin" command="template" :disabled="isMigrating(row)">制作模板</el-dropdown-item>
                       <el-dropdown-item v-if="!isLightweight" command="export" :disabled="isMigrating(row)">导出虚拟机</el-dropdown-item>
                       <el-dropdown-item v-if="!isLightweight" command="network" :disabled="isMigrating(row)">网络管理</el-dropdown-item>
@@ -1948,8 +1950,13 @@ const handleMore = async (command, row) => {
   if (command === 'delete') {
     vmDeleteRef.value?.open(row.name)
   } else if (command === 'reboot') {
+    // 软重启：发送 ACPI 重启信号，等待系统正常重启
     await handleOperate(row, 'reboot')
+  } else if (command === 'reset') {
+    // 硬重启：立即重置虚拟机，相当于按物理机重置按钮
+    await handleOperate(row, 'reset')
   } else if (command === 'destroy') {
+    // 强制断电：立即关机，不会自动开机
     await handleOperate(row, 'destroy')
   } else if (command === 'snapshot') {
     snapshotRef.value?.open(row.name, row.status)
