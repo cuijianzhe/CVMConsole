@@ -198,8 +198,10 @@ func ImportDiskByPath(ctx context.Context, params *ImportDiskByPathParams, progr
 	format := "qcow2" // 目标格式始终是 qcow2
 
 	if isWindows {
-		if err := importDiskByPathWindowsDefine(params, destDiskPath, format, ramMB, memoryMeta, mainDiskSrc); err != nil {
+		if err, needEject := importDiskByPathWindowsDefine(params, destDiskPath, format, ramMB, memoryMeta, mainDiskSrc); err != nil {
 			return nil, err
+		} else if needEject && params.StartAfterImport {
+			service.ScheduleWindowsConfigDriveEject(params.Name, "virtio")
 		}
 	} else {
 		if err := importDiskByPathLinuxDefine(params, destDiskPath, format, ramMB, memoryMeta, mainDiskSrc, needUEFI, normalizedBootType, initType); err != nil {

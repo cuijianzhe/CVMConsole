@@ -41,7 +41,7 @@ mtu_use_dhcp_config=true
 ntp_use_dhcp_config=true
 local_scripts_path=C:\Program Files\Cloudbase Solutions\Cloudbase-Init\LocalScripts\
 metadata_services=cloudbaseinit.metadata.services.configdrive.ConfigDriveService,cloudbaseinit.metadata.services.base.EmptyMetadataService
-plugins=cloudbaseinit.plugins.common.mtu.MTUPlugin,cloudbaseinit.plugins.windows.ntpclient.NTPClientPlugin,cloudbaseinit.plugins.common.sethostname.SetHostNamePlugin,cloudbaseinit.plugins.common.setuserpassword.SetUserPasswordPlugin,cloudbaseinit.plugins.windows.extendvolumes.ExtendVolumesPlugin,cloudbaseinit.plugins.common.userdata.UserDataPlugin,cloudbaseinit.plugins.common.localscripts.LocalScriptsPlugin
+plugins=cloudbaseinit.plugins.common.mtu.MTUPlugin,cloudbaseinit.plugins.windows.ntpclient.NTPClientPlugin,cloudbaseinit.plugins.common.sethostname.SetHostNamePlugin,cloudbaseinit.plugins.windows.createuser.CreateUserPlugin,cloudbaseinit.plugins.common.setuserpassword.SetUserPasswordPlugin,cloudbaseinit.plugins.windows.extendvolumes.ExtendVolumesPlugin,cloudbaseinit.plugins.common.userdata.UserDataPlugin,cloudbaseinit.plugins.common.localscripts.LocalScriptsPlugin
 first_logon_behaviour=no
 rename_admin_user=false
 allow_reboot=false
@@ -158,6 +158,12 @@ func detectWindowsNTFSPartition(diskPath string) string {
 	// 未找到含 /Windows 的分区，回退使用第一个 NTFS 分区
 	logger.App.Warn("未找到含 /Windows 的 NTFS 分区，使用第一个 NTFS 分区", "partition", ntfsPartitions[0])
 	return ntfsPartitions[0]
+}
+
+// InjectWindowsCloudbaseInitFilesExported 是 injectWindowsCloudbaseInitFiles 的导出版本
+// 通过 virt-customize 向克隆磁盘注入 CloudbaseInit 配置文件
+func InjectWindowsCloudbaseInitFilesExported(vmName, cloneDisk, category string, progressFn func(int, string)) {
+	injectWindowsCloudbaseInitFiles(vmName, cloneDisk, category, progressFn)
 }
 
 // injectWindowsCloudbaseInitFiles 通过 virt-customize 向克隆磁盘注入配置文件：
@@ -281,10 +287,8 @@ func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ra
 			password = generateRandomPassword(16)
 		}
 
-		// 注入 CloudbaseInit 配置文件（cloudbase-init.conf + Panther unattend.xml）
-		injectWindowsCloudbaseInitFiles(params.Name, cloneDisk, params.TemplateCategory, progressFn)
-
 		// 创建 Config Drive ISO（包含实例 hostname、admin_pass、instance-id）
+		// 模板磁盘已预安装 cloudbase-init 并配置 ConfigDriveService，无需 virt-customize 注入
 		isoPath, isoErr = createWindowsConfigDriveISO(params.Name, params.Hostname, password)
 		if isoErr != nil {
 			logger.App.Warn("创建 Windows Config Drive ISO 失败，CloudbaseInit 将无法自动注入密码",

@@ -82,7 +82,7 @@
 
     <!-- 页脚 -->
     <!-- <div class="about-footer">
-      <p>© {{ currentYear }} QVMConsole. 基于 Vue 3 + Element Plus + Go 构建</p>
+      <p>© {{ currentYear }} CVMConsole. 基于 Vue 3 + Element Plus + Go 构建</p>
     </div> -->
   </div>
 </template>

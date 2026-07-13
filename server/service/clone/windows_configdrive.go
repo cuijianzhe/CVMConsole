@@ -123,6 +123,12 @@ func removeConfigDriveCDROMFromXML(vmXML string) string {
 }
 
 // windowsConfigDriveMetadata 是写入 meta_data.json 的 OpenStack ConfigDrive 元数据结构
+// Cloudbase-Init 的 ConfigDriveService 期望以下字段：
+// - uuid: 实例唯一标识，用于插件状态持久化和幂等性（OpenStack 规范使用 uuid 而非 instance_id）
+// - name: 实例名称
+// - hostname: 主机名
+// - admin_pass: 管理员密码（SetUserPasswordPlugin 使用）
+// - admin_username: 管理员用户名
 type windowsConfigDriveMetadata struct {
 	UUID          string `json:"uuid"`
 	Name          string `json:"name"`
@@ -222,8 +228,25 @@ isoCreated:
 	return isoPath, nil
 }
 
-// CleanupWindowsConfigDriveISO 删除虚拟机对应的 Config Drive ISO 文件。
-// 在虚拟机删除时调用，失败仅记录警告不中断流程。
+// CreateWindowsConfigDriveISOExported 是 createWindowsConfigDriveISO 的导出版本
+// 创建符合 OpenStack ConfigDrive 规范的 ISO 镜像（label=config-2）
+func CreateWindowsConfigDriveISOExported(vmName, hostname, password string) (string, error) {
+	return createWindowsConfigDriveISO(vmName, hostname, password)
+}
+
+// AddConfigDriveCDROMToXMLExported 是 addConfigDriveCDROMToXML 的导出版本
+// 向 VM 域 XML 的 </devices> 前注入 Config Drive CD-ROM 设备定义
+func AddConfigDriveCDROMToXMLExported(vmXML, isoPath, diskBus string) string {
+	return addConfigDriveCDROMToXML(vmXML, isoPath, diskBus)
+}
+
+// ScheduleWindowsConfigDriveEjectExported 是 scheduleWindowsConfigDriveEject 的导出版本
+// 在后台轮询 QEMU Guest Agent，检测到 cloudbase-init 完成后自动弹出 Config Drive
+func ScheduleWindowsConfigDriveEjectExported(vmName, diskBus string) {
+	scheduleWindowsConfigDriveEject(vmName, diskBus)
+}
+
+// CleanupWindowsConfigDriveISO 是公开函数，删除虚拟机对应的 Config Drive ISO 文件
 func CleanupWindowsConfigDriveISO(vmName string) {
 	isoPath := windowsConfigDriveISOPath(vmName)
 	if err := os.Remove(isoPath); err != nil && !os.IsNotExist(err) {

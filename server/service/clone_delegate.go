@@ -172,3 +172,23 @@ var CloneUsernameRegexp = clonepkg.CloneUsernameRegexp
 
 // LinuxCloneIPWaitSeconds re-exports clone.LinuxCloneIPWaitSeconds
 const LinuxCloneIPWaitSeconds = clonepkg.LinuxCloneIPWaitSeconds
+
+// InjectWindowsCloudbaseInitFiles 通过 virt-customize 向克隆磁盘注入 CloudbaseInit 配置文件
+func InjectWindowsCloudbaseInitFiles(vmName, cloneDisk, category string, progressFn func(int, string)) {
+	clonepkg.InjectWindowsCloudbaseInitFilesExported(vmName, cloneDisk, category, progressFn)
+}
+
+// CreateWindowsConfigDriveISO 创建符合 OpenStack ConfigDrive 规范的 ISO 镜像
+func CreateWindowsConfigDriveISO(vmName, hostname, password string) (string, error) {
+	return clonepkg.CreateWindowsConfigDriveISOExported(vmName, hostname, password)
+}
+
+// AddConfigDriveCDROMToXML 向 VM 域 XML 的 </devices> 前注入 Config Drive CD-ROM 设备定义
+func AddConfigDriveCDROMToXML(vmXML, isoPath, diskBus string) string {
+	return clonepkg.AddConfigDriveCDROMToXMLExported(vmXML, isoPath, diskBus)
+}
+
+// ScheduleWindowsConfigDriveEject 在后台轮询 QEMU Guest Agent，检测到 cloudbase-init 完成后自动弹出 Config Drive
+func ScheduleWindowsConfigDriveEject(vmName, diskBus string) {
+	clonepkg.ScheduleWindowsConfigDriveEjectExported(vmName, diskBus)
+}

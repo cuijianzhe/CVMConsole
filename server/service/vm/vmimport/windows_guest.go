@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/service"
 	"kvm_console/service/arch"
 	vm_memory "kvm_console/service/vm/memory"
@@ -14,7 +15,8 @@ import (
 )
 
 // importVMWindowsDefine handles Windows VM XML construction and define for ImportVM
-func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, ramMB int, memoryMeta *vm_memory.VMMemoryMetadata, srcDiskPath string, needUEFI bool) error {
+// 返回值：(error, bool) bool 表示是否创建了 Config Drive 需要在启动后弹出
+func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, ramMB int, memoryMeta *vm_memory.VMMemoryMetadata, srcDiskPath string, needUEFI bool) (error, bool) {
 	// 获取宿主机架构 Profile，参数化 arch/machine/emulator/watchdog
 	hostArch := arch.DetectHostArch()
 	profile := arch.GetProfile(hostArch)
@@ -45,7 +47,7 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 	nvramClone := fmt.Sprintf("/var/lib/libvirt/qemu/nvram/%s_VARS.fd", params.Name)
 	if err := vm_xml.CreateQCOW2NVRAMFromTemplate("/usr/share/OVMF/OVMF_VARS_4M.ms.fd", nvramClone); err != nil {
 		_ = os.Remove(destDiskPath)
-		return err
+		return err, false
 	}
 
 	ramKiB := ramMB * 1024
@@ -57,7 +59,7 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 		epoch, err := service.ParseRTCStartDateToEpoch(rtcStartDate)
 		if err != nil {
 			_ = os.Remove(destDiskPath)
-			return err
+			return err, false
 		}
 		rtcOffset = service.VMRTCOffsetAbsolute
 		clockOpenTag = fmt.Sprintf("<clock offset='%s' start='%s'>", rtcOffset, epoch)
@@ -67,6 +69,19 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 	// 避免 libvirt 自动填充 nvram format='raw' 与 qcow2 格式不匹配导致黑屏。
 	loaderPath := vm_xml.ResolveOVMFLoaderPath(true)
 	varsTemplate := vm_xml.ResolveOVMFVarsTemplatePath(true)
+
+	// CloudbaseInit 初始化：仅在 init_type=windows 且有密码时执行
+	// 导入磁盘场景跳过 virt-customize 注入（磁盘通常已安装 cloudbase-init，且 virt-customize 对非模板磁盘检测极慢）
+	// 直接使用 Config Drive 提供元数据（hostname、密码等）
+	var isoPath string
+	var isoErr error
+	if params.InitType == "windows" && params.Password != "" {
+		isoPath, isoErr = service.CreateWindowsConfigDriveISO(params.Name, params.Hostname, params.Password)
+		if isoErr != nil {
+			logger.App.Warn("创建 Windows Config Drive ISO 失败，CloudbaseInit 将无法自动注入密码",
+				"vm", params.Name, "error", isoErr)
+		}
+	}
 
 	vmXML := fmt.Sprintf(`<domain type='kvm'>
   <name>%s</name>
@@ -114,28 +129,28 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 		vmXML, err = vm_memory.ApplyMemoryMetadataToDomainXML(vmXML, memoryMeta, false)
 		if err != nil {
 			_ = os.Remove(destDiskPath)
-			return err
+			return err, false
 		}
 	}
 	vmXML, err = vm_xml.ApplyVMGuestAgentConfigToDomainXML(vmXML, params.GuestAgent)
 	if err != nil {
 		_ = os.Remove(destDiskPath)
-		return err
+		return err, false
 	}
 	vmXML, err = vm_xml.ApplySMBIOS1ConfigToDomainXML(vmXML, params.SMBIOS1, true)
 	if err != nil {
 		_ = os.Remove(destDiskPath)
-		return err
+		return err, false
 	}
 	vmXML, err = service.ApplyVMAPICToDomainXML(vmXML, params.APIC)
 	if err != nil {
 		_ = os.Remove(destDiskPath)
-		return err
+		return err, false
 	}
 	vmXML, err = vm_xml.ApplyVMPAEToDomainXML(vmXML, params.PAE)
 	if err != nil {
 		_ = os.Remove(destDiskPath)
-		return err
+		return err, false
 	}
 	vmXML = vm_xml.ApplyVMVideoModelToDomainXML(vmXML, params.VideoModel, "windows")
 	vmXML = vm_xml.ApplyWindowsGuestOptimizationsToDomainXML(vmXML)
@@ -144,7 +159,7 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 		vmXML, err = vm_xml.ApplyKVMHiddenToDomainXML(vmXML, params.KVMHidden)
 		if err != nil {
 			_ = os.Remove(destDiskPath)
-			return err
+			return err, false
 		}
 	}
 	// Hyper-V vendor_id 伪装
@@ -152,7 +167,7 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 		vmXML, err = vm_xml.ApplyVendorIDToHyperVBlock(vmXML, params.VendorID)
 		if err != nil {
 			_ = os.Remove(destDiskPath)
-			return err
+			return err, false
 		}
 	}
 	topoVCPU := service.EffectiveTopologyVCPU(params.VCPU, params.MaxVCPU)
@@ -162,12 +177,12 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 		affinityCores, affErr := service.ParseCPUAffinity(params.CPUAffinity)
 		if affErr != nil {
 			_ = os.Remove(destDiskPath)
-			return fmt.Errorf("CPU 亲和性格式错误: %w", affErr)
+			return fmt.Errorf("CPU 亲和性格式错误: %w", affErr), false
 		}
 		if len(affinityCores) > 0 {
 			if affErr := service.ValidateCPUAffinity(affinityCores); affErr != nil {
 				_ = os.Remove(destDiskPath)
-				return affErr
+				return affErr, false
 			}
 		}
 		vmXML = service.ApplyCPUAffinityToDomainXML(vmXML, topoVCPU, affinityCores)
@@ -175,7 +190,7 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 	vmXML, err = service.ApplyVPCSwitchToDomainXML(vmXML, params.SwitchID)
 	if err != nil {
 		_ = os.Remove(destDiskPath)
-		return err
+		return err, false
 	}
 
 	// SPICE graphics（默认本地监听），与 VNC 共存；是否启用由 per-VM 开关决定，回退全局默认
@@ -188,10 +203,15 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 		vmXML = service.EnsureQXLVideo(vmXML)
 	}
 
+	// 将 Config Drive ISO 挂载为 CD-ROM，供 CloudbaseInit 首次启动时读取
+	if params.InitType == "windows" && isoPath != "" {
+		vmXML = service.AddConfigDriveCDROMToXML(vmXML, isoPath, "virtio")
+	}
+
 	xmlPath := fmt.Sprintf("/tmp/_vm-import-%s.xml", params.Name)
 	if err := os.WriteFile(xmlPath, []byte(vmXML), 0644); err != nil {
 		_ = os.Remove(destDiskPath)
-		return fmt.Errorf("写入虚拟机 XML 失败: %v", err)
+		return fmt.Errorf("写入虚拟机 XML 失败: %v", err), false
 	}
 	defer os.Remove(xmlPath)
 
@@ -199,14 +219,16 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 	_ = os.Remove(xmlPath)
 	if defineResult.Error != nil {
 		_ = os.Remove(destDiskPath)
-		return fmt.Errorf("定义虚拟机失败: %s", defineResult.Stderr)
+		return fmt.Errorf("定义虚拟机失败: %s", defineResult.Stderr), false
 	}
 
-	return importVMPostDefine(params.Name, srcDiskPath, destDiskPath, params.CopyDisk, memoryMeta, params.Remark, params.Freeze, params.StartAfterImport)
+	err = importVMPostDefine(params.Name, srcDiskPath, destDiskPath, params.CopyDisk, memoryMeta, params.Remark, params.Freeze, params.StartAfterImport)
+	return err, isoPath != ""
 }
 
 // importDiskByPathWindowsDefine handles Windows VM XML construction and define for ImportDiskByPath
-func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath, format string, ramMB int, memoryMeta *vm_memory.VMMemoryMetadata, mainDiskSrc string) error {
+// 返回值：(error, bool) bool 表示是否创建了 Config Drive 需要在启动后弹出
+func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath, format string, ramMB int, memoryMeta *vm_memory.VMMemoryMetadata, mainDiskSrc string) (error, bool) {
 	// 获取宿主机架构 Profile，参数化 arch/machine/emulator/watchdog
 	hostArch := arch.DetectHostArch()
 	profile := arch.GetProfile(hostArch)
@@ -236,7 +258,7 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 	nvramClone := fmt.Sprintf("/var/lib/libvirt/qemu/nvram/%s_VARS.fd", params.Name)
 	if err := vm_xml.CreateQCOW2NVRAMFromTemplate("/usr/share/OVMF/OVMF_VARS_4M.ms.fd", nvramClone); err != nil {
 		_ = os.Remove(destDiskPath)
-		return err
+		return err, false
 	}
 
 	ramKiB := ramMB * 1024
@@ -248,7 +270,7 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 		epoch, err := service.ParseRTCStartDateToEpoch(rtcStartDate)
 		if err != nil {
 			_ = os.Remove(destDiskPath)
-			return err
+			return err, false
 		}
 		rtcOffset = service.VMRTCOffsetAbsolute
 		clockOpenTag = fmt.Sprintf("<clock offset='%s' start='%s'>", rtcOffset, epoch)
@@ -257,6 +279,19 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 	// 使用显式 loader/nvram，不使用 firmware='efi' 自动选择
 	loaderPath2 := vm_xml.ResolveOVMFLoaderPath(true)
 	varsTemplate2 := vm_xml.ResolveOVMFVarsTemplatePath(true)
+
+	// CloudbaseInit 初始化：仅在 init_type=windows 且有密码时执行
+	// 导入磁盘场景跳过 virt-customize 注入（磁盘通常已安装 cloudbase-init，且 virt-customize 对非模板磁盘检测极慢）
+	// 直接使用 Config Drive 提供元数据（hostname、密码等）
+	var isoPath string
+	var isoErr error
+	if params.InitType == "windows" && params.Password != "" {
+		isoPath, isoErr = service.CreateWindowsConfigDriveISO(params.Name, params.Hostname, params.Password)
+		if isoErr != nil {
+			logger.App.Warn("创建 Windows Config Drive ISO 失败，CloudbaseInit 将无法自动注入密码",
+				"vm", params.Name, "error", isoErr)
+		}
+	}
 
 	vmXML := fmt.Sprintf(`<domain type='kvm'>
   <name>%s</name>
@@ -304,28 +339,28 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 		vmXML, err = vm_memory.ApplyMemoryMetadataToDomainXML(vmXML, memoryMeta, false)
 		if err != nil {
 			_ = os.Remove(destDiskPath)
-			return err
+			return err, false
 		}
 	}
 	vmXML, err = vm_xml.ApplyVMGuestAgentConfigToDomainXML(vmXML, params.GuestAgent)
 	if err != nil {
 		_ = os.Remove(destDiskPath)
-		return err
+		return err, false
 	}
 	vmXML, err = vm_xml.ApplySMBIOS1ConfigToDomainXML(vmXML, params.SMBIOS1, true)
 	if err != nil {
 		_ = os.Remove(destDiskPath)
-		return err
+		return err, false
 	}
 	vmXML, err = service.ApplyVMAPICToDomainXML(vmXML, params.APIC)
 	if err != nil {
 		_ = os.Remove(destDiskPath)
-		return err
+		return err, false
 	}
 	vmXML, err = vm_xml.ApplyVMPAEToDomainXML(vmXML, params.PAE)
 	if err != nil {
 		_ = os.Remove(destDiskPath)
-		return err
+		return err, false
 	}
 	vmXML = vm_xml.ApplyVMVideoModelToDomainXML(vmXML, params.VideoModel, "windows")
 	vmXML = vm_xml.ApplyWindowsGuestOptimizationsToDomainXML(vmXML)
@@ -334,7 +369,7 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 		vmXML, err = vm_xml.ApplyKVMHiddenToDomainXML(vmXML, params.KVMHidden)
 		if err != nil {
 			_ = os.Remove(destDiskPath)
-			return err
+			return err, false
 		}
 	}
 	// Hyper-V vendor_id 伪装
@@ -342,7 +377,7 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 		vmXML, err = vm_xml.ApplyVendorIDToHyperVBlock(vmXML, params.VendorID)
 		if err != nil {
 			_ = os.Remove(destDiskPath)
-			return err
+			return err, false
 		}
 	}
 	topoVCPU := service.EffectiveTopologyVCPU(params.VCPU, params.MaxVCPU)
@@ -353,13 +388,13 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 		vmXML, affErr = service.ApplyCPUAffinityIfSet(vmXML, topoVCPU, params.CPUAffinity)
 		if affErr != nil {
 			_ = os.Remove(destDiskPath)
-			return affErr
+			return affErr, false
 		}
 	}
 	vmXML, err = service.ApplyVPCSwitchToDomainXML(vmXML, params.SwitchID)
 	if err != nil {
 		_ = os.Remove(destDiskPath)
-		return err
+		return err, false
 	}
 
 	// SPICE graphics（默认本地监听），与 VNC 共存；是否启用由 per-VM 开关决定，回退全局默认
@@ -372,10 +407,15 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 		vmXML = service.EnsureQXLVideo(vmXML)
 	}
 
+	// 将 Config Drive ISO 挂载为 CD-ROM，供 CloudbaseInit 首次启动时读取
+	if params.InitType == "windows" && isoPath != "" {
+		vmXML = service.AddConfigDriveCDROMToXML(vmXML, isoPath, "virtio")
+	}
+
 	xmlPath := fmt.Sprintf("/tmp/_vm-importd-%s.xml", params.Name)
 	if err := os.WriteFile(xmlPath, []byte(vmXML), 0644); err != nil {
 		_ = os.Remove(destDiskPath)
-		return fmt.Errorf("写入虚拟机 XML 失败: %v", err)
+		return fmt.Errorf("写入虚拟机 XML 失败: %v", err), false
 	}
 	defer os.Remove(xmlPath)
 
@@ -383,8 +423,9 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 	_ = os.Remove(xmlPath)
 	if defineResult.Error != nil {
 		_ = os.Remove(destDiskPath)
-		return fmt.Errorf("定义虚拟机失败: %s", defineResult.Stderr)
+		return fmt.Errorf("定义虚拟机失败: %s", defineResult.Stderr), false
 	}
 
-	return importVMPostDefine(params.Name, mainDiskSrc, destDiskPath, params.CopyDisk, memoryMeta, params.Remark, params.Freeze, params.StartAfterImport)
+	err = importVMPostDefine(params.Name, mainDiskSrc, destDiskPath, params.CopyDisk, memoryMeta, params.Remark, params.Freeze, params.StartAfterImport)
+	return err, isoPath != ""
 }
