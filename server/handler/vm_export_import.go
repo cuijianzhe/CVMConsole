@@ -107,6 +107,7 @@ type ImportVMRequest struct {
 	DiskFile         string                            `json:"disk_file" binding:"required"`
 	VCPU             int                               `json:"vcpu" binding:"required"`
 	RAM              int                               `json:"ram" binding:"required"`
+	DiskSize         int                               `json:"disk_size"`
 	CopyDisk         bool                              `json:"copy_disk"`
 	InitType         string                            `json:"init_type"`
 	Hostname         string                            `json:"hostname"`
@@ -215,6 +216,7 @@ func ImportVMHandler(c *gin.Context) {
 		CopyDisk:         req.CopyDisk,
 		VCPU:             req.VCPU,
 		RAM:              req.RAM,
+		DiskSize:         req.DiskSize,
 		InitType:         req.InitType,
 		Hostname:         req.Hostname,
 		User:             req.User,

@@ -156,6 +156,15 @@ func ImportDiskByPath(ctx context.Context, params *ImportDiskByPathParams, progr
 		}
 	}
 
+	// 如果指定了磁盘大小，进行扩容（仅当大于原磁盘时）
+	if params.DiskSize > 0 {
+		progressFn(22, "调整磁盘大小...")
+		resizeResult := utils.ExecShell(fmt.Sprintf("qemu-img resize %s %dG", utils.ShellSingleQuote(destDiskPath), params.DiskSize))
+		if resizeResult.Error != nil {
+			logger.App.Warn("磁盘扩容失败，将使用原磁盘大小", "vm", params.Name, "error", resizeResult.Stderr)
+		}
+	}
+
 	// 设置权限
 	chownResult := utils.ExecCommand("chown", "libvirt-qemu:kvm", destDiskPath)
 	if chownResult.Error != nil {

@@ -19,6 +19,7 @@ type ImportVMParams struct {
 	VCPU             int                               `json:"vcpu"`                         // CPU 核心数
 	MaxVCPU          int                               `json:"max_vcpu,omitempty"`           // CPU 热添加上限
 	RAM              int                               `json:"ram"`                          // 内存（GB）
+	DiskSize         int                               `json:"disk_size,omitempty"`          // 磁盘大小（GB，可选，大于原磁盘时扩容）
 	Network          string                            `json:"network,omitempty"`            // 网络
 	InitType         string                            `json:"init_type,omitempty"`          // 初始化类型: linux/windows/other/空（不初始化）
 	Hostname         string                            `json:"hostname,omitempty"`           // 主机名
@@ -70,6 +71,7 @@ type ImportDiskByPathParams struct {
 	VCPU             int                               `json:"vcpu"`
 	MaxVCPU          int                               `json:"max_vcpu,omitempty"` // CPU 热添加上限
 	RAM              int                               `json:"ram"`
+	DiskSize         int                               `json:"disk_size,omitempty"` // 磁盘大小（GB，可选，大于原磁盘时扩容）
 	InitType         string                            `json:"init_type,omitempty"`
 	Hostname         string                            `json:"hostname,omitempty"`
 	User             string                            `json:"user,omitempty"`

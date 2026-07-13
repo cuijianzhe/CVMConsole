@@ -277,6 +277,7 @@ type ImportDiskByPathRequest struct {
 	StoragePoolID    string                            `json:"storage_pool_id"`
 	VCPU             int                               `json:"vcpu" binding:"required"`
 	RAM              int                               `json:"ram" binding:"required"`
+	DiskSize         int                               `json:"disk_size"`
 	CopyDisk         bool                              `json:"copy_disk"`
 	InitType         string                            `json:"init_type"`
 	Hostname         string                            `json:"hostname"`
@@ -364,6 +365,7 @@ func AdminImportDisk(c *gin.Context) {
 		StoragePoolID:    req.StoragePoolID,
 		VCPU:             req.VCPU,
 		RAM:              req.RAM,
+		DiskSize:         req.DiskSize,
 		CopyDisk:         req.CopyDisk,
 		InitType:         req.InitType,
 		Hostname:         req.Hostname,

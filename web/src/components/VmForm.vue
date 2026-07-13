@@ -1457,6 +1457,11 @@
                     </el-form-item>
                   </template>
 
+                  <el-form-item label="磁盘大小(GB)" prop="disk_size">
+                    <el-input-number v-model="form.disk_size" :min="0" :max="2000" :step="10" style="width: 100%;" />
+                    <div style="font-size: 12px; color: #909399; margin-top: 4px;">留空或输入0保持原磁盘大小，输入大于原磁盘的数值将扩容</div>
+                  </el-form-item>
+
                   <el-form-item label="磁盘处理">
                     <el-radio-group v-model="form.copy_disk">
                       <el-radio :value="false">不保留原磁盘文件（推荐，节省空间）</el-radio>
@@ -4665,7 +4670,7 @@ const open = async (row, mode, options = {}) => {
     currentVmUUID.value = ''
     Object.assign(form, {
       name: generateRandomVmName(), remark: '', vcpu: 2, memory: 2, ram: 2,
-      disk_size: (mode === 'template' || registrationMode.value) ? 0 : 20, create_mode: mode === 'import' ? 'import' : (mode === 'template' || registrationMode.value) ? 'template' : 'iso',
+      disk_size: (mode === 'import' || mode === 'template' || registrationMode.value) ? 0 : 20, create_mode: mode === 'import' ? 'import' : (mode === 'template' || registrationMode.value) ? 'template' : 'iso',
       os_type: 'linux', os_variant: '', disk_format: 'qcow2', disk_bus: 'virtio',
       system_disk_iops_total: 0, system_disk_iops_read: 0, system_disk_iops_write: 0,
       iso_path: '', iso_paths: [], floppy_image: '', switch_id: registrationContext.dedicated_vpc_switch_id || null, security_group_id: null, nic_model: 'virtio', video_model: 'virtio', spice_enabled: spiceEnabledByDefault.value, cpu_topology_mode: 'auto', first_boot_reboot_mode: 'normal', autostart: false, freeze: false, apic: true, pae: true, rtc_offset: 'utc', rtc_startdate: 'now',
@@ -5279,6 +5284,7 @@ const submitForm = async () => {
               switch_id: nicsPayload.primarySwitchId,
               security_group_id: nicsPayload.primarySecurityGroupId,
               copy_disk: form.copy_disk,
+              disk_size: Number(form.disk_size || 0),
               hostname: form.system_init_enabled ? (form.hostname || form.name) : '',
               user: form.system_init_enabled ? form.import_user : '',
               password: form.system_init_enabled ? form.import_password : '',
@@ -5333,6 +5339,7 @@ const submitForm = async () => {
             switch_id: nicsPayload.primarySwitchId,
             security_group_id: nicsPayload.primarySecurityGroupId,
             copy_disk: form.copy_disk,
+            disk_size: Number(form.disk_size || 0),
             hostname: form.system_init_enabled ? (form.hostname || form.name) : '',
             user: form.system_init_enabled ? form.import_user : '',
             password: form.system_init_enabled ? form.import_password : '',
