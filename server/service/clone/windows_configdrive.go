@@ -40,7 +40,7 @@ func windowsConfigDriveISOPath(vmName string) string {
 // configDriveCDROMTarget 根据系统盘总线类型和宿主机架构返回 Config Drive CD-ROM 的目标设备名和总线。
 // 确保不与系统盘目标设备发生冲突。
 // ARM64 (aarch64) 架构必须使用 USB 总线，因为 AAVMF 固件不支持从 SATA CDROM 引导。
-func configDriveCDROMTarget(diskBus string) (dev, bus string) {
+func configDriveCDROMTarget(diskBus, systemDiskDevice string) (dev, bus string) {
 	// ARM64 架构固定使用 USB 总线
 	if arch.IsHostArch(arch.ArchAarch64) {
 		switch strings.ToLower(strings.TrimSpace(diskBus)) {
@@ -62,13 +62,17 @@ func configDriveCDROMTarget(diskBus string) (dev, bus string) {
 		return "hdb", "ide"
 	default:
 		// virtio 系统盘占用 vda，SATA 的 sda 空闲
+		// 但如果系统盘实际使用了 sda，则使用 sdb
+		if strings.EqualFold(systemDiskDevice, "sda") {
+			return "sdb", "sata"
+		}
 		return "sda", "sata"
 	}
 }
 
 // addConfigDriveCDROMToXML 向 VM 域 XML 的 </devices> 前注入 Config Drive CD-ROM 设备定义
-func addConfigDriveCDROMToXML(vmXML, isoPath, diskBus string) string {
-	cdDev, cdBus := configDriveCDROMTarget(diskBus)
+func addConfigDriveCDROMToXML(vmXML, isoPath, diskBus, systemDiskDevice string) string {
+	cdDev, cdBus := configDriveCDROMTarget(diskBus, systemDiskDevice)
 	cdromXML := fmt.Sprintf(
 		"\n    <disk type='file' device='cdrom'>\n"+
 			"      <driver name='qemu' type='raw'/>\n"+
@@ -133,14 +137,20 @@ type windowsConfigDriveMetadata struct {
 	UUID          string `json:"uuid"`
 	Name          string `json:"name"`
 	Hostname      string `json:"hostname"`
-	AdminPass     string `json:"admin_pass"`
+	AdminPass     string `json:"admin_pass,omitempty"`
 	AdminUsername string `json:"admin_username"`
 }
 
 // createWindowsConfigDriveISO 创建符合 OpenStack ConfigDrive 规范的 ISO 镜像（label=config-2）。
 // 挂载到虚拟机后，CloudbaseInit 的 ConfigDriveService 将读取 openstack/latest/meta_data.json，
-// 自动完成主机名设置和管理员密码注入，无需在磁盘中写入 unattend.xml。
-func createWindowsConfigDriveISO(vmName, hostname, password string) (string, error) {
+// 自动完成主机名设置、管理员密码注入和新用户创建，无需在磁盘中写入 unattend.xml。
+// 参数：
+//
+//	vmName: 虚拟机名称
+//	hostname: 主机名（SetHostNamePlugin 使用）
+//	password: 管理员密码（SetUserPasswordPlugin 使用，为空时不修改原有密码）
+//	username: 新创建的用户名（为空时不创建新用户）
+func createWindowsConfigDriveISO(vmName, hostname, password, username string) (string, error) {
 	// 生成唯一 instance-id，CloudbaseInit 依赖此字段实现幂等（重启不重复执行插件）
 	randBytes := make([]byte, 4)
 	_, _ = rand.Read(randBytes)
@@ -150,8 +160,11 @@ func createWindowsConfigDriveISO(vmName, hostname, password string) (string, err
 		UUID:          instanceID,
 		Name:          vmName,
 		Hostname:      hostname,
-		AdminPass:     password,
 		AdminUsername: "Administrator",
+	}
+	// 仅在密码不为空时设置 AdminPass，omitempty 确保空值不出现在 JSON 中
+	if password != "" {
+		meta.AdminPass = password
 	}
 	metaJSON, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
@@ -172,10 +185,23 @@ func createWindowsConfigDriveISO(vmName, hostname, password string) (string, err
 	}
 
 	// 写入 user_data PowerShell 脚本（由 UserDataPlugin 执行）
-	// 在 SetUserPasswordPlugin 设置密码之后运行，清除「登录前必须更改密码」标志，确保用户可用 ConfigDrive 中的密码直接登录。
+	// 清除「登录前必须更改密码」标志，确保用户可用密码直接登录
+	// 如果指定了用户名，则创建新用户并添加到管理员组
 	userDataPath := filepath.Join(metaDir, "user_data")
 	userDataScript := "#ps1_sysnative\r\n" +
 		"net user Administrator /logonpasswordchg:no /active:yes\r\n"
+	// 如果指定了用户名，创建新用户并添加到管理员组
+	if username != "" && !strings.EqualFold(username, "Administrator") {
+		// 创建用户（如果密码不为空，使用指定密码；否则使用随机密码）
+		if password != "" {
+			userDataScript += fmt.Sprintf("net user %s %s /add /logonpasswordchg:no /active:yes\r\n",
+				username, password)
+		} else {
+			userDataScript += fmt.Sprintf("net user %s /add /logonpasswordchg:no /active:yes\r\n", username)
+		}
+		// 将用户添加到管理员组
+		userDataScript += fmt.Sprintf("net localgroup administrators %s /add\r\n", username)
+	}
 	if err := os.WriteFile(userDataPath, []byte(userDataScript), 0600); err != nil {
 		return "", fmt.Errorf("写入 Config Drive user_data 失败: %w", err)
 	}
@@ -230,20 +256,20 @@ isoCreated:
 
 // CreateWindowsConfigDriveISOExported 是 createWindowsConfigDriveISO 的导出版本
 // 创建符合 OpenStack ConfigDrive 规范的 ISO 镜像（label=config-2）
-func CreateWindowsConfigDriveISOExported(vmName, hostname, password string) (string, error) {
-	return createWindowsConfigDriveISO(vmName, hostname, password)
+func CreateWindowsConfigDriveISOExported(vmName, hostname, password, username string) (string, error) {
+	return createWindowsConfigDriveISO(vmName, hostname, password, username)
 }
 
 // AddConfigDriveCDROMToXMLExported 是 addConfigDriveCDROMToXML 的导出版本
 // 向 VM 域 XML 的 </devices> 前注入 Config Drive CD-ROM 设备定义
-func AddConfigDriveCDROMToXMLExported(vmXML, isoPath, diskBus string) string {
-	return addConfigDriveCDROMToXML(vmXML, isoPath, diskBus)
+func AddConfigDriveCDROMToXMLExported(vmXML, isoPath, diskBus, systemDiskDevice string) string {
+	return addConfigDriveCDROMToXML(vmXML, isoPath, diskBus, systemDiskDevice)
 }
 
 // ScheduleWindowsConfigDriveEjectExported 是 scheduleWindowsConfigDriveEject 的导出版本
 // 在后台轮询 QEMU Guest Agent，检测到 cloudbase-init 完成后自动弹出 Config Drive
-func ScheduleWindowsConfigDriveEjectExported(vmName, diskBus string) {
-	scheduleWindowsConfigDriveEject(vmName, diskBus)
+func ScheduleWindowsConfigDriveEjectExported(vmName, diskBus, systemDiskDevice string) {
+	scheduleWindowsConfigDriveEject(vmName, diskBus, systemDiskDevice)
 }
 
 // CleanupWindowsConfigDriveISO 是公开函数，删除虚拟机对应的 Config Drive ISO 文件
@@ -307,7 +333,7 @@ func isCloudbaseInitCompleted(vmName string) bool {
 //   - 阶段二：通过 Agent 检查日志文件是否包含 "Plugins execution done"
 //     （不依赖服务状态，因为服务未启动时也是 STOPPED 会导致误判）
 //   - 超时内未完成 → 停止轮询，ISO 将在 VM 删除时清理
-func scheduleWindowsConfigDriveEject(vmName, diskBus string) {
+func scheduleWindowsConfigDriveEject(vmName, diskBus, systemDiskDevice string) {
 	go func() {
 		defer utils.RecoverAndLog("configdrive-eject")
 		// === 阶段一：等待 Guest Agent 可达 ===
@@ -357,7 +383,7 @@ func scheduleWindowsConfigDriveEject(vmName, diskBus string) {
 		time.Sleep(configDriveServiceCheckGracePeriod)
 
 		// === 阶段三：弹出 CD-ROM 并清理 ===
-		cdDev, _ := configDriveCDROMTarget(diskBus)
+		cdDev, _ := configDriveCDROMTarget(diskBus, systemDiskDevice)
 		// 优先尝试热弹出（VM 运行中）+ 更新持久化 XML
 		r := utils.ExecCommand("virsh", "change-media", vmName, cdDev, "--eject", "--config", "--live")
 		if r.Error != nil {

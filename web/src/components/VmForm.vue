@@ -2658,7 +2658,7 @@ const allRequiredFilled = computed(() => {
     }
   } else if (isTemplateSourceMode.value) {
     if (!form.template || form.disk_size <= 0) return false
-    if (!registrationMode.value && !disableSystemInit.value && !isNoInitTemplate.value && !isOpenWrtTemplate.value && (!form.import_user || (!form.import_password && form.batch_count <= 1))) return false
+    if (!registrationMode.value && !disableSystemInit.value && !isNoInitTemplate.value && !isOpenWrtTemplate.value && !form.hostname) return false
     if (isOpenWrtTemplate.value && !disableSystemInit.value && !form.static_ip) return false
     if (isFnOSTemplate.value && !disableSystemInit.value && form.fnos_device_id_mode === 'custom' && !hasCustomFnOSDeviceID.value) return false
   }
@@ -2683,8 +2683,7 @@ const allRequiredTip = computed(() => {
     if (!form.template) missing.push('模板')
     if (form.disk_size <= 0) missing.push('磁盘大小')
     if (!registrationMode.value && !disableSystemInit.value && !isNoInitTemplate.value && !isOpenWrtTemplate.value) {
-      if (!form.import_user) missing.push('用户名')
-      if (!form.import_password && form.batch_count <= 1) missing.push('密码')
+      if (!form.hostname) missing.push('主机名')
     }
     if (isOpenWrtTemplate.value && !disableSystemInit.value && !form.static_ip) {
       missing.push('静态 IP')
@@ -3267,7 +3266,7 @@ const validateTemplateUsername = (_, value, callback) => {
     return
   }
   if (!normalizedValue) {
-    callback(new Error('请输入用户名'))
+    callback()
     return
   }
   if (!templateUsernamePattern.test(normalizedValue)) {
@@ -3288,6 +3287,15 @@ const validateTemplatePassword = (_, value, callback) => {
       return
     }
     callback(new Error('请输入密码'))
+    return
+  }
+  passwordValidator(_, value, callback)
+}
+
+// 可选密码验证：密码为空时通过，非空时执行强密码验证
+const validateTemplatePasswordOptional = (_, value, callback) => {
+  if (!value) {
+    callback()
     return
   }
   passwordValidator(_, value, callback)
@@ -3437,7 +3445,7 @@ const nextStep = async () => {
       if (!registrationMode.value && !disableSystemInit.value) {
         fieldsToValidate.push('hostname')
         if (!isNoInitTemplate.value) {
-          fieldsToValidate.push('import_user', 'import_password')
+          fieldsToValidate.push('import_user')
         }
       } else if (registrationMode.value) {
         fieldsToValidate.push('hostname')
@@ -3964,7 +3972,7 @@ const createRules = computed(() => {
     }
     if (!registrationMode.value && !disableSystemInit.value && !isNoInitTemplate.value) {
       base.import_user = [{ validator: validateTemplateUsername, trigger: 'blur' }]
-      base.import_password = [{ validator: validateTemplatePassword, trigger: 'blur' }]
+      base.import_password = [{ validator: validateTemplatePasswordOptional, trigger: 'blur' }]
     }
     if (isFnOSTemplate.value && !disableSystemInit.value && form.fnos_device_id_mode === 'custom') {
       base.fnos_device_id = [{

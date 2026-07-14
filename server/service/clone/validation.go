@@ -25,6 +25,7 @@ var (
 )
 
 // ValidateCloneCredentials 校验模板克隆使用的主机名、用户名和密码
+// 用户名和密码为可选项，不强制要求输入
 func ValidateCloneCredentials(hostname, username, password string, requireCredentials bool) error {
 	trimmedHostname := strings.TrimSpace(hostname)
 	if trimmedHostname != "" && !cloneHostnameRegexp.MatchString(trimmedHostname) {
@@ -32,16 +33,10 @@ func ValidateCloneCredentials(hostname, username, password string, requireCreden
 	}
 
 	trimmedUsername := strings.TrimSpace(username)
-	if requireCredentials && trimmedUsername == "" {
-		return fmt.Errorf("请输入用户名")
-	}
 	if trimmedUsername != "" && !cloneUsernameRegexp.MatchString(trimmedUsername) {
 		return fmt.Errorf("用户名只能以小写字母或下划线开头，且只能包含小写字母、数字、下划线和短横线")
 	}
 
-	if requireCredentials && password == "" {
-		return fmt.Errorf("请输入密码")
-	}
 	if password != "" {
 		return ValidateStrongPassword(password)
 	}

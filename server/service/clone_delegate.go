@@ -174,21 +174,40 @@ var CloneUsernameRegexp = clonepkg.CloneUsernameRegexp
 const LinuxCloneIPWaitSeconds = clonepkg.LinuxCloneIPWaitSeconds
 
 // InjectWindowsCloudbaseInitFiles 通过 virt-customize 向克隆磁盘注入 CloudbaseInit 配置文件
-func InjectWindowsCloudbaseInitFiles(vmName, cloneDisk, category string, progressFn func(int, string)) {
-	clonepkg.InjectWindowsCloudbaseInitFilesExported(vmName, cloneDisk, category, progressFn)
+// password 参数用于控制 inject_user_password 设置：为空时不注入密码，非空时注入密码
+func InjectWindowsCloudbaseInitFiles(vmName, cloneDisk, category, password string, progressFn func(int, string)) {
+	clonepkg.InjectWindowsCloudbaseInitFilesExported(vmName, cloneDisk, category, password, progressFn)
 }
 
 // CreateWindowsConfigDriveISO 创建符合 OpenStack ConfigDrive 规范的 ISO 镜像
-func CreateWindowsConfigDriveISO(vmName, hostname, password string) (string, error) {
-	return clonepkg.CreateWindowsConfigDriveISOExported(vmName, hostname, password)
+// 参数：
+//   vmName: 虚拟机名称
+//   hostname: 主机名
+//   password: 管理员密码（为空时不修改原有密码）
+//   username: 新创建的用户名（为空时不创建新用户）
+func CreateWindowsConfigDriveISO(vmName, hostname, password, username string) (string, error) {
+	return clonepkg.CreateWindowsConfigDriveISOExported(vmName, hostname, password, username)
 }
 
 // AddConfigDriveCDROMToXML 向 VM 域 XML 的 </devices> 前注入 Config Drive CD-ROM 设备定义
-func AddConfigDriveCDROMToXML(vmXML, isoPath, diskBus string) string {
-	return clonepkg.AddConfigDriveCDROMToXMLExported(vmXML, isoPath, diskBus)
+func AddConfigDriveCDROMToXML(vmXML, isoPath, diskBus, systemDiskDevice string) string {
+	return clonepkg.AddConfigDriveCDROMToXMLExported(vmXML, isoPath, diskBus, systemDiskDevice)
+}
+
+// DisableWindowsCloudbaseInitPasswordInjection 禁用 CloudbaseInit 的密码注入功能
+// 当用户不指定密码时调用，避免 SetUserPasswordPlugin 生成随机密码覆盖原有密码
+func DisableWindowsCloudbaseInitPasswordInjection(cloneDisk string) {
+	clonepkg.DisableWindowsCloudbaseInitPasswordInjectionExported(cloneDisk)
+}
+
+// SetWindowsCloudbaseInitPasswordInjection 设置 CloudbaseInit 的密码注入功能
+// usePassword: true=启用密码注入（使用 Config Drive 中的密码）
+//              false=禁用密码注入（保留镜像原有密码）
+func SetWindowsCloudbaseInitPasswordInjection(cloneDisk string, usePassword bool) {
+	clonepkg.SetWindowsCloudbaseInitPasswordInjectionExported(cloneDisk, usePassword)
 }
 
 // ScheduleWindowsConfigDriveEject 在后台轮询 QEMU Guest Agent，检测到 cloudbase-init 完成后自动弹出 Config Drive
-func ScheduleWindowsConfigDriveEject(vmName, diskBus string) {
-	clonepkg.ScheduleWindowsConfigDriveEjectExported(vmName, diskBus)
+func ScheduleWindowsConfigDriveEject(vmName, diskBus, systemDiskDevice string) {
+	clonepkg.ScheduleWindowsConfigDriveEjectExported(vmName, diskBus, systemDiskDevice)
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"kvm_console/config"
 	"kvm_console/logger"
@@ -25,7 +26,7 @@ func buildWindowsCloudbaseInitConf() string {
 	return `[DEFAULT]
 username=Administrator
 groups=Administrators
-inject_user_password=true
+inject_user_password=false
 config_drive_raw_hhd=true
 config_drive_cdrom=true
 config_drive_vfat=true
@@ -50,9 +51,10 @@ check_latest_version=false
 }
 
 // buildWindowsPantherUnattendXML 根据 Windows 版本生成 Unattend.xml 内容。
-// specialize pass: 禁用 AutoLogon + 设置临时密码
+// specialize pass: 禁用 AutoLogon + 设置临时密码（仅在用户指定密码时）
 // oobeSystem pass: 跳过 OOBE 向导（Server 2025 / Windows 11 需要额外的 UserAccounts + AutoLogon）
-func buildWindowsPantherUnattendXML(category string) string {
+// hasPassword: 用户是否指定了密码；为 false 时不设置临时密码，保留镜像原有密码
+func buildWindowsPantherUnattendXML(category string, hasPassword bool) string {
 	needOOBEBypass := strings.EqualFold(category, "WindowsServer2025") ||
 		strings.EqualFold(category, "Windows11")
 
@@ -67,7 +69,7 @@ func buildWindowsPantherUnattendXML(category string) string {
         <SkipMachineOOBE>true</SkipMachineOOBE>
         <SkipUserOOBE>true</SkipUserOOBE>
       </OOBE>`
-	if needOOBEBypass {
+	if needOOBEBypass && hasPassword {
 		oobeContent = `
       <UserAccounts>
         <AdministratorPassword>
@@ -84,6 +86,24 @@ func buildWindowsPantherUnattendXML(category string) string {
       </OOBE>`
 	}
 
+	// specialize pass 命令列表：始终禁用 AutoLogon，仅在用户指定密码时设置临时密码
+	specializeCommands := `
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>cmd.exe /c reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoAdminLogon /t REG_SZ /d 0 /f</Path>
+          <Description>Disable AutoLogon left over from template creation</Description>
+          <WillReboot>Never</WillReboot>
+        </RunSynchronousCommand>`
+	if hasPassword {
+		specializeCommands += `
+        <RunSynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Path>cmd.exe /c net user Administrator "Temp@BootInit#1" /logonpasswordchg:no /active:yes</Path>
+          <Description>Set temp password to prevent passwordless auto-login before cloudbase-init sets the real password</Description>
+          <WillReboot>Never</WillReboot>
+        </RunSynchronousCommand>`
+	}
+
 	return fmt.Sprintf(`<?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
   <settings pass="generalize">
@@ -97,23 +117,11 @@ func buildWindowsPantherUnattendXML(category string) string {
   </settings>
   <settings pass="specialize">
     <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-      <RunSynchronous>
-        <RunSynchronousCommand wcm:action="add">
-          <Order>1</Order>
-          <Path>cmd.exe /c reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoAdminLogon /t REG_SZ /d 0 /f</Path>
-          <Description>Disable AutoLogon left over from template creation</Description>
-          <WillReboot>Never</WillReboot>
-        </RunSynchronousCommand>
-        <RunSynchronousCommand wcm:action="add">
-          <Order>2</Order>
-          <Path>cmd.exe /c net user Administrator "Temp@BootInit#1" /logonpasswordchg:no /active:yes</Path>
-          <Description>Set temp password to prevent passwordless auto-login before cloudbase-init sets the real password</Description>
-          <WillReboot>Never</WillReboot>
-        </RunSynchronousCommand>
+      <RunSynchronous>%s
       </RunSynchronous>
     </component>
   </settings>
-</unattend>`, oobeContent)
+</unattend>`, oobeContent, specializeCommands)
 }
 
 // detectWindowsNTFSPartition 检测磁盘镜像中的 Windows NTFS 系统分区。
@@ -162,8 +170,9 @@ func detectWindowsNTFSPartition(diskPath string) string {
 
 // InjectWindowsCloudbaseInitFilesExported 是 injectWindowsCloudbaseInitFiles 的导出版本
 // 通过 virt-customize 向克隆磁盘注入 CloudbaseInit 配置文件
-func InjectWindowsCloudbaseInitFilesExported(vmName, cloneDisk, category string, progressFn func(int, string)) {
-	injectWindowsCloudbaseInitFiles(vmName, cloneDisk, category, progressFn)
+// password 参数用于控制 inject_user_password 设置：为空时不注入密码，非空时注入密码
+func InjectWindowsCloudbaseInitFilesExported(vmName, cloneDisk, category, password string, progressFn func(int, string)) {
+	injectWindowsCloudbaseInitFiles(vmName, cloneDisk, category, password, progressFn)
 }
 
 // injectWindowsCloudbaseInitFiles 通过 virt-customize 向克隆磁盘注入配置文件：
@@ -174,18 +183,22 @@ func InjectWindowsCloudbaseInitFilesExported(vmName, cloneDisk, category string,
 // 当 libguestfs 的 OS 自动检测失败时（Windows Server 2025 已知问题），
 // 自动回退为显式挂载 NTFS 分区（通过 -m 参数），绕过 OS 检测。
 // 注入失败仅记录警告，不中断克隆流程。
-func injectWindowsCloudbaseInitFiles(vmName, cloneDisk, category string, progressFn func(int, string)) {
+// password 参数用于控制 inject_user_password 设置：为空时不注入密码，非空时注入密码
+func injectWindowsCloudbaseInitFiles(vmName, cloneDisk, category string, password string, progressFn func(int, string)) {
 	if progressFn == nil {
 		progressFn = func(int, string) {}
 	}
 	progressFn(35, "注入 CloudbaseInit 配置文件...")
 
 	confContent := buildWindowsCloudbaseInitConf()
+	if password != "" {
+		confContent = strings.Replace(confContent, "inject_user_password=false", "inject_user_password=true", 1)
+	}
 	confPath := fmt.Sprintf("/tmp/_cbi-conf-%s.conf", vmName)
 	_ = os.WriteFile(confPath, []byte(confContent), 0600)
 	defer func() { _ = os.Remove(confPath) }()
 
-	unattendContent := buildWindowsPantherUnattendXML(category)
+	unattendContent := buildWindowsPantherUnattendXML(category, password != "")
 	unattendPath := fmt.Sprintf("/tmp/_cbi-unattend-%s.xml", vmName)
 	_ = os.WriteFile(unattendPath, []byte(unattendContent), 0600)
 	defer func() { _ = os.Remove(unattendPath) }()
@@ -258,6 +271,105 @@ func windowsDiskControllerXML(bus string) string {
 	}
 }
 
+// setWindowsCloudbaseInitPasswordInjection 设置 CloudbaseInit 的密码注入功能。
+// usePassword: true=启用密码注入（设为 true，Cloudbase-Init 使用 Config Drive 中的密码）
+//
+//	false=禁用密码注入（设为 false 且移除 SetUserPasswordPlugin，保留镜像原有密码）
+//
+// 使用 guestfish 直接修改文件，比 virt-customize 快得多。
+// 修改失败仅记录警告，不中断克隆流程。
+func setWindowsCloudbaseInitPasswordInjection(cloneDisk string, usePassword bool) {
+	winPartition := detectWindowsNTFSPartition(cloneDisk)
+	if winPartition == "" {
+		logger.App.Warn("未找到 Windows 分区，跳过设置密码注入", "disk", cloneDisk)
+		return
+	}
+
+	confPaths := []string{
+		"/Program Files/Cloudbase Solutions/Cloudbase-Init/conf/cloudbase-init.conf",
+		"/Program Files/Cloudbase Solutions/Cloudbase-Init/conf/cloudbase-init-unattend.conf",
+	}
+
+	for _, confPath := range confPaths {
+		result := utils.ExecCommandLongRunning("guestfish", "--rw", "-a", cloneDisk,
+			"run", ":",
+			"mount", winPartition, "/", ":",
+			"cat", confPath)
+		if result.Error != nil {
+			continue
+		}
+
+		originalContent := result.Stdout
+		modifiedContent := originalContent
+
+		if usePassword {
+			if strings.Contains(originalContent, "inject_user_password=false") {
+				modifiedContent = strings.Replace(modifiedContent, "inject_user_password=false", "inject_user_password=true", 1)
+			} else if !strings.Contains(modifiedContent, "inject_user_password=true") {
+				modifiedContent = modifiedContent + "\n" + "inject_user_password=true\n"
+			}
+			// 确保 SetUserPasswordPlugin 在插件列表中（从之前的移除中恢复）
+			if !strings.Contains(modifiedContent, "cloudbaseinit.plugins.common.setuserpassword.SetUserPasswordPlugin") {
+				// 在 plugins 行末尾添加 SetUserPasswordPlugin
+				modifiedContent = strings.Replace(modifiedContent,
+					"plugins=",
+					"plugins=cloudbaseinit.plugins.common.setuserpassword.SetUserPasswordPlugin,",
+					1)
+			}
+		} else {
+			if strings.Contains(modifiedContent, "inject_user_password=true") {
+				modifiedContent = strings.Replace(modifiedContent, "inject_user_password=true", "inject_user_password=false", 1)
+			} else if !strings.Contains(modifiedContent, "inject_user_password=false") {
+				modifiedContent = modifiedContent + "\n" + "inject_user_password=false\n"
+			}
+			modifiedContent = strings.Replace(modifiedContent, ",cloudbaseinit.plugins.common.setuserpassword.SetUserPasswordPlugin", "", -1)
+			modifiedContent = strings.Replace(modifiedContent, "cloudbaseinit.plugins.common.setuserpassword.SetUserPasswordPlugin,", "", -1)
+			modifiedContent = strings.Replace(modifiedContent, "cloudbaseinit.plugins.common.setuserpassword.SetUserPasswordPlugin", "", -1)
+		}
+
+		if modifiedContent == originalContent {
+			continue
+		}
+
+		tmpFile := fmt.Sprintf("/tmp/_cbi_set_%d.conf", time.Now().UnixNano())
+		if err := os.WriteFile(tmpFile, []byte(modifiedContent), 0600); err != nil {
+			logger.App.Warn("写入临时配置文件失败", "error", err)
+			continue
+		}
+		defer func() { _ = os.Remove(tmpFile) }()
+
+		writeResult := utils.ExecCommandLongRunning("guestfish", "--rw", "-a", cloneDisk,
+			"run", ":",
+			"mount", winPartition, "/", ":",
+			"upload", tmpFile, confPath)
+		if writeResult.Error != nil {
+			logger.App.Warn("写回 cloudbase-init.conf 失败", "disk", cloneDisk, "error", writeResult.Stderr)
+			continue
+		}
+
+		if usePassword {
+			logger.App.Info("已启用 CloudbaseInit 密码注入（用户指定了密码）", "disk", cloneDisk, "conf", confPath)
+		} else {
+			logger.App.Info("已禁用 CloudbaseInit 密码注入（用户未指定密码）", "disk", cloneDisk, "conf", confPath)
+		}
+	}
+}
+
+// SetWindowsCloudbaseInitPasswordInjectionExported 是 setWindowsCloudbaseInitPasswordInjection 的导出版本
+func SetWindowsCloudbaseInitPasswordInjectionExported(cloneDisk string, usePassword bool) {
+	setWindowsCloudbaseInitPasswordInjection(cloneDisk, usePassword)
+}
+
+// DisableWindowsCloudbaseInitPasswordInjectionExported 是 setWindowsCloudbaseInitPasswordInjection 的导出版本（兼容旧调用）
+func DisableWindowsCloudbaseInitPasswordInjectionExported(cloneDisk string) {
+	setWindowsCloudbaseInitPasswordInjection(cloneDisk, false)
+}
+
+// disableWindowsCloudbaseInitPasswordInjection 禁用 CloudbaseInit 的密码注入功能（兼容旧调用）
+func disableWindowsCloudbaseInitPasswordInjection(cloneDisk string) {
+	setWindowsCloudbaseInitPasswordInjection(cloneDisk, false)
+}
+
 // cloneWindows Windows 克隆逻辑
 // cloneDir: 虚拟机磁盘所在的存储目录，额外磁盘也会创建在此目录
 func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ramMB int, memoryMeta *memory.VMMemoryMetadata, needUEFI bool, isNoInit bool, progressFn func(int, string), cloneDir string) error {
@@ -281,19 +393,22 @@ func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ra
 
 	var isoPath string
 	var isoErr error
-	if !isNoInit {
-		password := params.Password
-		if password == "" {
-			password = generateRandomPassword(16)
-		}
-
+	if !isNoInit && (params.Hostname != "" || params.Password != "") {
 		// 创建 Config Drive ISO（包含实例 hostname、admin_pass、instance-id）
-		// 模板磁盘已预安装 cloudbase-init 并配置 ConfigDriveService，无需 virt-customize 注入
-		isoPath, isoErr = createWindowsConfigDriveISO(params.Name, params.Hostname, password)
+		// 模板磁盘已预安装 cloudbase-init，只通过 Config Drive 传递配置，不使用 virt-customize（太慢）
+		isoPath, isoErr = createWindowsConfigDriveISO(params.Name, params.Hostname, params.Password, params.User)
 		if isoErr != nil {
-			logger.App.Warn("创建 Windows Config Drive ISO 失败，CloudbaseInit 将无法自动注入密码",
+			logger.App.Warn("创建 Windows Config Drive ISO 失败，CloudbaseInit 将无法自动注入配置",
 				"vm", params.Name, "error", isoErr)
 		}
+	}
+
+	// 使用 guestfish 快速修改 cloudbase-init.conf（不使用 virt-customize，避免10分钟等待）
+	// 根据用户是否提供密码，设置 inject_user_password：
+	// - 有密码：设为 true，Cloudbase-Init 使用 Config Drive 中的密码
+	// - 无密码：设为 false，Cloudbase-Init 不修改密码，保留镜像原有密码
+	if !isNoInit {
+		setWindowsCloudbaseInitPasswordInjection(cloneDisk, params.Password != "")
 	}
 
 	nvramClone := ""
@@ -446,7 +561,7 @@ func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ra
 
 	// 将 Config Drive ISO 挂载为 SATA CD-ROM，供 CloudbaseInit 首次启动时读取
 	if !isNoInit && isoPath != "" {
-		vmXML = addConfigDriveCDROMToXML(vmXML, isoPath, diskBus)
+		vmXML = addConfigDriveCDROMToXML(vmXML, isoPath, diskBus, diskTargetDev)
 	}
 
 	// 嵌套虚拟化开关（默认启用，host-passthrough 下需 policy='disable' 覆盖）
@@ -533,7 +648,7 @@ func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ra
 
 	// 在后台等待 QEMU Guest Agent 连接后自动弹出并清理 Config Drive CD-ROM
 	if !isNoInit && isoPath != "" {
-		scheduleWindowsConfigDriveEject(params.Name, diskBus)
+		scheduleWindowsConfigDriveEject(params.Name, diskBus, diskTargetDev)
 	}
 
 	return nil

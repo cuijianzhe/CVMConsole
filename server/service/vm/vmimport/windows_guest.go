@@ -70,17 +70,25 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 	loaderPath := vm_xml.ResolveOVMFLoaderPath(true)
 	varsTemplate := vm_xml.ResolveOVMFVarsTemplatePath(true)
 
-	// CloudbaseInit 初始化：仅在 init_type=windows 且有密码时执行
+	// CloudbaseInit 初始化：仅在 init_type=windows 且有主机名或密码时执行
 	// 导入磁盘场景跳过 virt-customize 注入（磁盘通常已安装 cloudbase-init，且 virt-customize 对非模板磁盘检测极慢）
-	// 直接使用 Config Drive 提供元数据（hostname、密码等）
+	// 直接使用 Config Drive 提供元数据（hostname、密码等），主机名和密码为可选项
 	var isoPath string
 	var isoErr error
-	if params.InitType == "windows" && params.Password != "" {
-		isoPath, isoErr = service.CreateWindowsConfigDriveISO(params.Name, params.Hostname, params.Password)
+	if params.InitType == "windows" && (params.Hostname != "" || params.Password != "") {
+		isoPath, isoErr = service.CreateWindowsConfigDriveISO(params.Name, params.Hostname, params.Password, params.Username)
 		if isoErr != nil {
-			logger.App.Warn("创建 Windows Config Drive ISO 失败，CloudbaseInit 将无法自动注入密码",
+			logger.App.Warn("创建 Windows Config Drive ISO 失败，CloudbaseInit 将无法自动注入配置",
 				"vm", params.Name, "error", isoErr)
 		}
+	}
+
+	// 使用 guestfish 快速修改 cloudbase-init.conf（不使用 virt-customize，避免10分钟等待）
+	// 根据用户是否提供密码，设置 inject_user_password：
+	// - 有密码：设为 true，Cloudbase-Init 使用 Config Drive 中的密码
+	// - 无密码：设为 false，Cloudbase-Init 不修改密码，保留镜像原有密码
+	if params.InitType == "windows" {
+		service.SetWindowsCloudbaseInitPasswordInjection(destDiskPath, params.Password != "")
 	}
 
 	vmXML := fmt.Sprintf(`<domain type='kvm'>
@@ -205,7 +213,7 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 
 	// 将 Config Drive ISO 挂载为 CD-ROM，供 CloudbaseInit 首次启动时读取
 	if params.InitType == "windows" && isoPath != "" {
-		vmXML = service.AddConfigDriveCDROMToXML(vmXML, isoPath, "virtio")
+		vmXML = service.AddConfigDriveCDROMToXML(vmXML, isoPath, "virtio", "vda")
 	}
 
 	xmlPath := fmt.Sprintf("/tmp/_vm-import-%s.xml", params.Name)
@@ -280,17 +288,25 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 	loaderPath2 := vm_xml.ResolveOVMFLoaderPath(true)
 	varsTemplate2 := vm_xml.ResolveOVMFVarsTemplatePath(true)
 
-	// CloudbaseInit 初始化：仅在 init_type=windows 且有密码时执行
+	// CloudbaseInit 初始化：仅在 init_type=windows 且有主机名或密码时执行
 	// 导入磁盘场景跳过 virt-customize 注入（磁盘通常已安装 cloudbase-init，且 virt-customize 对非模板磁盘检测极慢）
-	// 直接使用 Config Drive 提供元数据（hostname、密码等）
+	// 直接使用 Config Drive 提供元数据（hostname、密码等），主机名和密码为可选项
 	var isoPath string
 	var isoErr error
-	if params.InitType == "windows" && params.Password != "" {
-		isoPath, isoErr = service.CreateWindowsConfigDriveISO(params.Name, params.Hostname, params.Password)
+	if params.InitType == "windows" && (params.Hostname != "" || params.Password != "") {
+		isoPath, isoErr = service.CreateWindowsConfigDriveISO(params.Name, params.Hostname, params.Password, params.Username)
 		if isoErr != nil {
-			logger.App.Warn("创建 Windows Config Drive ISO 失败，CloudbaseInit 将无法自动注入密码",
+			logger.App.Warn("创建 Windows Config Drive ISO 失败，CloudbaseInit 将无法自动注入配置",
 				"vm", params.Name, "error", isoErr)
 		}
+	}
+
+	// 使用 guestfish 快速修改 cloudbase-init.conf（不使用 virt-customize，避免10分钟等待）
+	// 根据用户是否提供密码，设置 inject_user_password：
+	// - 有密码：设为 true，Cloudbase-Init 使用 Config Drive 中的密码
+	// - 无密码：设为 false，Cloudbase-Init 不修改密码，保留镜像原有密码
+	if params.InitType == "windows" {
+		service.SetWindowsCloudbaseInitPasswordInjection(destDiskPath, params.Password != "")
 	}
 
 	vmXML := fmt.Sprintf(`<domain type='kvm'>
@@ -409,7 +425,7 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 
 	// 将 Config Drive ISO 挂载为 CD-ROM，供 CloudbaseInit 首次启动时读取
 	if params.InitType == "windows" && isoPath != "" {
-		vmXML = service.AddConfigDriveCDROMToXML(vmXML, isoPath, "virtio")
+		vmXML = service.AddConfigDriveCDROMToXML(vmXML, isoPath, "virtio", "vda")
 	}
 
 	xmlPath := fmt.Sprintf("/tmp/_vm-importd-%s.xml", params.Name)

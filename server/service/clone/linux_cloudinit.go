@@ -14,7 +14,11 @@ import (
 // prepareLinuxNoCloudInit 通过 virt-customize 完成 Linux 克隆全部初始化
 // 无需 SSH 连接：自动安装 cloud-init（如缺失）、清理身份信息、写入 cloud-init NoCloud seed 文件、离线修改密码与用户名
 // 适用于所有 Linux 模板；若宿主机无网络则跳过包安装，seed 文件将静默失效但不影响 VM 可用性
+// 仅在主机名、用户名或密码至少有一个不为空时才执行初始化
 func prepareLinuxNoCloudInit(params *CloneParams, cloneDisk string) error {
+	if params.Hostname == "" && params.User == "" && params.Password == "" {
+		return nil
+	}
 	// 生成 cloud-init seed 文件内容
 	metaData := buildNoCloudMetaData(params)
 	userData := buildNoCloudUserData(params)
@@ -204,23 +208,20 @@ func buildNoCloudUserData(params *CloneParams) string {
 	sb.WriteString("ssh_pwauth: true\n")
 	sb.WriteString("disable_root: false\n\n")
 
-	// 防止 cloud-init 重新锁定用户密码
-	// Ubuntu 等发行版 cloud.cfg 中 default_user 设置 lock_passwd: true，
-	// 首次启动时 cloud-init 会在 /etc/shadow 密码哈希前添加 '!' 导致无法登录
-	// 此处显式声明 lock_passwd: false，确保 virt-customize 离线设置的密码不被覆盖
-	targetUser := params.User
-	if targetUser == "" || targetUser == "root" {
-		targetUser = params.TemplateUser
+	if params.Password != "" {
+		targetUser := params.User
+		if targetUser == "" || targetUser == "root" {
+			targetUser = params.TemplateUser
+		}
+		if targetUser != "" && targetUser != "root" {
+			sb.WriteString("users:\n")
+			sb.WriteString(fmt.Sprintf("  - name: %s\n", targetUser))
+			sb.WriteString("    lock_passwd: false\n")
+			sb.WriteString("    shell: /bin/bash\n")
+			sb.WriteString("    sudo: ALL=(ALL) NOPASSWD:ALL\n\n")
+		}
+		sb.WriteString("chpasswd:\n  expire: false\n\n")
 	}
-	if targetUser != "" && targetUser != "root" {
-		sb.WriteString("users:\n")
-		sb.WriteString(fmt.Sprintf("  - name: %s\n", targetUser))
-		sb.WriteString("    lock_passwd: false\n")
-		sb.WriteString("    shell: /bin/bash\n")
-		sb.WriteString("    sudo: ALL=(ALL) NOPASSWD:ALL\n\n")
-	}
-
-	sb.WriteString("chpasswd:\n  expire: false\n\n")
 
 	// growpart 对普通分区有效；对 LVM 系统由下方 runcmd 补充处理
 	sb.WriteString("growpart:\n  mode: auto\n  devices: ['/']\nresize_rootfs: true\n\n")

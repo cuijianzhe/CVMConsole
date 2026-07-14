@@ -210,7 +210,7 @@ func ImportDiskByPath(ctx context.Context, params *ImportDiskByPathParams, progr
 		if err, needEject := importDiskByPathWindowsDefine(params, destDiskPath, format, ramMB, memoryMeta, mainDiskSrc); err != nil {
 			return nil, err
 		} else if needEject && params.StartAfterImport {
-			service.ScheduleWindowsConfigDriveEject(params.Name, "virtio")
+			service.ScheduleWindowsConfigDriveEject(params.Name, "virtio", "vda")
 		}
 	} else {
 		if err := importDiskByPathLinuxDefine(params, destDiskPath, format, ramMB, memoryMeta, mainDiskSrc, needUEFI, normalizedBootType, initType); err != nil {

@@ -162,7 +162,7 @@ func ImportVM(ctx context.Context, params *ImportVMParams, progressFn func(int, 
 		if err, needEject := importVMWindowsDefine(params, destDiskPath, format, ramMB, memoryMeta, srcDiskPath, needUEFI); err != nil {
 			return nil, err
 		} else if needEject && params.StartAfterImport {
-			service.ScheduleWindowsConfigDriveEject(params.Name, "virtio")
+			service.ScheduleWindowsConfigDriveEject(params.Name, "virtio", "vda")
 		}
 	} else {
 		if err := importVMLinuxDefine(params, destDiskPath, format, ramMB, memoryMeta, srcDiskPath, needUEFI, normalizedBootType, initType); err != nil {
