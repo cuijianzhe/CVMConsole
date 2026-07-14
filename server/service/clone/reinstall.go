@@ -90,6 +90,16 @@ func buildReinstallCloneParams(params *ReinstallParams, diskBus string, template
 	if cloneParams.TemplateType == "" {
 		cloneParams.TemplateType = "linux"
 	}
+
+	nameLower := strings.ToLower(strings.TrimSpace(params.Template))
+	if strings.Contains(nameLower, "win") || strings.Contains(nameLower, "windows") {
+		cloneParams.TemplateType = "windows"
+	} else if strings.Contains(nameLower, "fnos") || strings.Contains(nameLower, "nas") {
+		cloneParams.TemplateType = "fnos"
+	} else if strings.Contains(nameLower, "openwrt") || strings.Contains(nameLower, "lede") || strings.Contains(nameLower, "istoreos") {
+		cloneParams.TemplateType = "openwrt"
+	}
+
 	cloneParams.User = NormalizeCloneUsernameForTemplate(cloneParams.TemplateType, cloneParams.User)
 	if cloneParams.Hostname == "" {
 		cloneParams.Hostname = GenerateRandomCloneHostname()
@@ -260,7 +270,8 @@ func ReinstallVM(ctx context.Context, params *ReinstallParams, progressFn func(i
 			reinstallWindowsISOPath = isoPath
 			// 将 Config Drive CD-ROM 注入 VM XML（移除旧的再添加新的）
 			updatedReinstallXML := removeConfigDriveCDROMFromXML(originalXML)
-			updatedReinstallXML = addConfigDriveCDROMToXML(updatedReinstallXML, reinstallWindowsISOPath, cloneParams.DiskBus, systemDisk.Device)
+			var cdDev string
+			updatedReinstallXML, cdDev = addConfigDriveCDROMToXML(updatedReinstallXML, reinstallWindowsISOPath, cloneParams.DiskBus, systemDisk.Device)
 			if setXMLErr := D.SetVMInactiveDomainXML(params.Name, updatedReinstallXML); setXMLErr != nil {
 				logger.App.Warn("更新 VM XML 添加 Config Drive CD-ROM 失败",
 					"vm", params.Name, "error", setXMLErr)
@@ -268,6 +279,8 @@ func ReinstallVM(ctx context.Context, params *ReinstallParams, progressFn func(i
 				xmlModified = true
 				// 更新 originalXML，供后续冷重启逻辑和回滚使用
 				originalXML = updatedReinstallXML
+				// 记录 CD-ROM 设备名，供后续弹出使用
+				reinstallWindowsISOPath = isoPath + "|" + cdDev
 			}
 		}
 	}
@@ -304,7 +317,13 @@ func ReinstallVM(ctx context.Context, params *ReinstallParams, progressFn func(i
 
 	// Windows 重装：在后台等待 QEMU Guest Agent 连接后自动弹出并清理 Config Drive CD-ROM
 	if cloneParams.TemplateType == "windows" && reinstallWindowsISOPath != "" {
-		scheduleWindowsConfigDriveEject(params.Name, cloneParams.DiskBus, systemDisk.Device)
+		// 从 reinstallWindowsISOPath 中提取 CD-ROM 设备名（格式: isoPath|cdDev）
+		var cdDev string
+		if idx := strings.Index(reinstallWindowsISOPath, "|"); idx != -1 {
+			cdDev = reinstallWindowsISOPath[idx+1:]
+			reinstallWindowsISOPath = reinstallWindowsISOPath[:idx]
+		}
+		scheduleWindowsConfigDriveEject(params.Name, cloneParams.DiskBus, cdDev)
 	}
 
 	if cloneParams.TemplateType == "linux" {

@@ -561,7 +561,8 @@ func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ra
 
 	// 将 Config Drive ISO 挂载为 SATA CD-ROM，供 CloudbaseInit 首次启动时读取
 	if !isNoInit && isoPath != "" {
-		vmXML = addConfigDriveCDROMToXML(vmXML, isoPath, diskBus, diskTargetDev)
+		var _ string
+		vmXML, _ = addConfigDriveCDROMToXML(vmXML, isoPath, diskBus, diskTargetDev)
 	}
 
 	// 嵌套虚拟化开关（默认启用，host-passthrough 下需 policy='disable' 覆盖）

@@ -45,34 +45,58 @@ func configDriveCDROMTarget(diskBus, systemDiskDevice string) (dev, bus string) 
 	if arch.IsHostArch(arch.ArchAarch64) {
 		switch strings.ToLower(strings.TrimSpace(diskBus)) {
 		case "sata", "scsi":
-			// sata/scsi 系统盘占用 sda，CD-ROM 使用 sdb（USB 总线）
 			return "sdb", "usb"
 		default:
-			// virtio 系统盘占用 vda，USB 的 sda 空闲
 			return "sda", "usb"
 		}
 	}
 
 	switch strings.ToLower(strings.TrimSpace(diskBus)) {
 	case "sata", "scsi":
-		// sata/scsi 系统盘占用 sda，CD-ROM 使用 sdb（同为 SATA 总线）
 		return "sdb", "sata"
 	case "ide":
-		// ide 系统盘占用 hda，CD-ROM 使用 hdb
 		return "hdb", "ide"
 	default:
-		// virtio 系统盘占用 vda，SATA 的 sda 空闲
-		// 但如果系统盘实际使用了 sda，则使用 sdb
-		if strings.EqualFold(systemDiskDevice, "sda") {
+		if strings.EqualFold(systemDiskDevice, "sda") || strings.EqualFold(systemDiskDevice, "vda") {
 			return "sdb", "sata"
 		}
 		return "sda", "sata"
 	}
 }
 
+// extractUsedDiskTargets 从 VM XML 中提取所有已使用的磁盘目标设备名
+func extractUsedDiskTargets(vmXML string) map[string]bool {
+	used := make(map[string]bool)
+	lines := strings.Split(vmXML, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, "<target") && strings.Contains(trimmed, "dev='") {
+			parts := strings.Split(trimmed, "dev='")
+			if len(parts) > 1 {
+				dev := strings.Split(parts[1], "'")[0]
+				used[dev] = true
+			}
+		}
+	}
+	return used
+}
+
 // addConfigDriveCDROMToXML 向 VM 域 XML 的 </devices> 前注入 Config Drive CD-ROM 设备定义
-func addConfigDriveCDROMToXML(vmXML, isoPath, diskBus, systemDiskDevice string) string {
+// 返回更新后的 XML 和实际使用的 CD-ROM 设备名
+func addConfigDriveCDROMToXML(vmXML, isoPath, diskBus, systemDiskDevice string) (string, string) {
+	usedTargets := extractUsedDiskTargets(vmXML)
+
 	cdDev, cdBus := configDriveCDROMTarget(diskBus, systemDiskDevice)
+
+	if usedTargets[cdDev] {
+		for _, candidate := range []string{"sdb", "sdc", "hdb", "hdc", "sdd", "hdc"} {
+			if !usedTargets[candidate] {
+				cdDev = candidate
+				break
+			}
+		}
+	}
+
 	cdromXML := fmt.Sprintf(
 		"\n    <disk type='file' device='cdrom'>\n"+
 			"      <driver name='qemu' type='raw'/>\n"+
@@ -82,7 +106,7 @@ func addConfigDriveCDROMToXML(vmXML, isoPath, diskBus, systemDiskDevice string) 
 			"    </disk>",
 		isoPath, cdDev, cdBus,
 	)
-	return strings.Replace(vmXML, "</devices>", cdromXML+"\n  </devices>", 1)
+	return strings.Replace(vmXML, "</devices>", cdromXML+"\n  </devices>", 1), cdDev
 }
 
 // removeConfigDriveCDROMFromXML 从 VM 域 XML 中移除已有的 Config Drive CD-ROM 挂载。
@@ -262,7 +286,7 @@ func CreateWindowsConfigDriveISOExported(vmName, hostname, password, username st
 
 // AddConfigDriveCDROMToXMLExported 是 addConfigDriveCDROMToXML 的导出版本
 // 向 VM 域 XML 的 </devices> 前注入 Config Drive CD-ROM 设备定义
-func AddConfigDriveCDROMToXMLExported(vmXML, isoPath, diskBus, systemDiskDevice string) string {
+func AddConfigDriveCDROMToXMLExported(vmXML, isoPath, diskBus, systemDiskDevice string) (string, string) {
 	return addConfigDriveCDROMToXML(vmXML, isoPath, diskBus, systemDiskDevice)
 }
 

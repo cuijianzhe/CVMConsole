@@ -190,7 +190,7 @@ func CreateWindowsConfigDriveISO(vmName, hostname, password, username string) (s
 }
 
 // AddConfigDriveCDROMToXML 向 VM 域 XML 的 </devices> 前注入 Config Drive CD-ROM 设备定义
-func AddConfigDriveCDROMToXML(vmXML, isoPath, diskBus, systemDiskDevice string) string {
+func AddConfigDriveCDROMToXML(vmXML, isoPath, diskBus, systemDiskDevice string) (string, string) {
 	return clonepkg.AddConfigDriveCDROMToXMLExported(vmXML, isoPath, diskBus, systemDiskDevice)
 }
 

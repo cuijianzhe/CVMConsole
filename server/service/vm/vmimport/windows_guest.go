@@ -213,7 +213,8 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 
 	// 将 Config Drive ISO 挂载为 CD-ROM，供 CloudbaseInit 首次启动时读取
 	if params.InitType == "windows" && isoPath != "" {
-		vmXML = service.AddConfigDriveCDROMToXML(vmXML, isoPath, "virtio", "vda")
+		var _ string
+		vmXML, _ = service.AddConfigDriveCDROMToXML(vmXML, isoPath, "virtio", "vda")
 	}
 
 	xmlPath := fmt.Sprintf("/tmp/_vm-import-%s.xml", params.Name)
@@ -425,7 +426,8 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 
 	// 将 Config Drive ISO 挂载为 CD-ROM，供 CloudbaseInit 首次启动时读取
 	if params.InitType == "windows" && isoPath != "" {
-		vmXML = service.AddConfigDriveCDROMToXML(vmXML, isoPath, "virtio", "vda")
+		var _ string
+		vmXML, _ = service.AddConfigDriveCDROMToXML(vmXML, isoPath, "virtio", "vda")
 	}
 
 	xmlPath := fmt.Sprintf("/tmp/_vm-importd-%s.xml", params.Name)
