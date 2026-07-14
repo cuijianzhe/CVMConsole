@@ -281,6 +281,20 @@ func DeleteLightweightVMRegistration(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 200, "message": "注册记录已删除"})
 }
 
+// ConfirmLightweightVMRegistration 管理员确认开通轻量云 VM。
+func ConfirmLightweightVMRegistration(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "注册记录 ID 无效"})
+		return
+	}
+	if err := service.LightweightConfirmRegistration(uint(id)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "message": "轻量云 VM 已确认开通"})
+}
+
 // RemoveLightweightVMRegistrationByVMName 将已开通 VM 从轻量云注册列表中移除。
 func RemoveLightweightVMRegistrationByVMName(c *gin.Context) {
 	username := c.Param("username")

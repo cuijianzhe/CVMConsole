@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	clonepkg "kvm_console/service/clone"
 	"kvm_console/service/vm/memory"
@@ -172,13 +173,13 @@ func ProvisionLightweightVMRegistration(ctx context.Context, params *Lightweight
 		return fail(fmt.Errorf("服务器已创建，但写入轻量云配额失败: %w", err))
 	}
 	if err := EnsureLightweightVMNetwork(user.Username, reg.VMName); err != nil {
-		return fail(fmt.Errorf("服务器已创建，但绑定专用 VPC 失败: %w", err))
+		logger.App.Warn("轻量云服务器绑定专用 VPC 失败，服务器已创建", "vm", reg.VMName, "error", err)
 	}
 	if err := ApplyLightweightVMBandwidth(reg.VMName); err != nil {
-		return fail(fmt.Errorf("服务器已创建，但应用带宽失败: %w", err))
+		logger.App.Warn("轻量云服务器应用带宽失败，服务器已创建", "vm", reg.VMName, "error", err)
 	}
 	if err := HookSaveVMCredential(reg.VMName, params.CredentialUsername, params.CredentialPassword, "lightweight_registration", params.Operator, false); err != nil {
-		return fail(fmt.Errorf("服务器已创建，但保存登录凭据失败: %w", err))
+		logger.App.Warn("轻量云服务器保存登录凭据失败，服务器已创建", "vm", reg.VMName, "error", err)
 	}
 	if err := model.DB.Model(&model.LightweightVMRegistration{}).Where("id = ?", reg.ID).Updates(map[string]interface{}{
 		"status":        LightweightVMRegistrationStatusActive,

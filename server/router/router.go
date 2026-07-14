@@ -430,6 +430,7 @@ func Setup() *gin.Engine {
 				user.PUT("/:username/lightweight-vm-quota", handler.UpdateLightweightVMQuota)
 				user.DELETE("/:username/lightweight-vm/:vmName", handler.RemoveLightweightVMRegistrationByVMName)
 				user.DELETE("/:username/lightweight-registrations/:id", handler.DeleteLightweightVMRegistration)
+				user.PUT("/:username/lightweight-registrations/:id/confirm", handler.ConfirmLightweightVMRegistration)
 				user.PUT("/:username/quota", handler.UpdateUserQuota)
 				user.PUT("/:username/status", handler.UpdateUserStatus)
 				user.GET("/:username/quota", handler.GetUserQuotaUsage)

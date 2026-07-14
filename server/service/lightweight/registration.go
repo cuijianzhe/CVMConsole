@@ -11,8 +11,8 @@ import (
 
 	"kvm_console/logger"
 	"kvm_console/model"
-	clonepkg "kvm_console/service/clone"
 	"kvm_console/service/arch"
+	clonepkg "kvm_console/service/clone"
 	"kvm_console/service/storage/disk"
 	"kvm_console/service/vm_xml"
 )
@@ -131,7 +131,7 @@ func normalizeLightweightVMRegistrationRequest(user model.User, req LightweightV
 	if req.TemplateType == "" {
 		req.TemplateType = "linux"
 	}
-	if err := HookValidateCloneCredentialsForTemplate(req.TemplateType, req.Hostname, HookNormalizeCloneUsernameForTemplate(req.TemplateType, "admin"), "TempAa12345!", false); err != nil {
+	if err := HookValidateCloneCredentialsForTemplate(req.TemplateType, req.Hostname, HookNormalizeCloneUsernameForTemplate(req.TemplateType, ""), "", false); err != nil {
 		return nil, err
 	}
 	if req.DiskSize < 0 {
@@ -333,6 +333,21 @@ func DeleteLightweightVMRegistration(username string, id uint) error {
 		return fmt.Errorf("当前注册记录已进入开通流程，不能删除")
 	}
 	return model.DB.Delete(&reg).Error
+}
+
+func LightweightConfirmRegistration(id uint) error {
+	var reg model.LightweightVMRegistration
+	if err := model.DB.Where("id = ?", id).First(&reg).Error; err != nil {
+		return fmt.Errorf("注册记录不存在")
+	}
+	if reg.Status != LightweightVMRegistrationStatusPending {
+		return fmt.Errorf("当前注册记录状态不允许确认")
+	}
+	now := time.Now()
+	return model.DB.Model(&reg).Updates(map[string]interface{}{
+		"status":       LightweightVMRegistrationStatusActive,
+		"confirmed_at": &now,
+	}).Error
 }
 
 // RemoveLightweightVMRegistrationByVMName 将已开通 VM 从注册 VM 列表中移除，不删除虚拟机本体。

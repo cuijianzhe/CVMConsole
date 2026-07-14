@@ -50,13 +50,25 @@ func BindVMToVPC(username, vmName string, switchID, securityGroupID uint) error 
 	if HookSwitchUsesDirectBridge(sw) {
 		if securityGroupID != 0 {
 			var sg model.VPCSecurityGroup
-			if err := model.DB.Where("id = ? AND username = ?", securityGroupID, username).First(&sg).Error; err != nil {
+			var err error
+			if sw.IsSystem {
+				err = model.DB.Where("id = ? AND (username = ? OR username = ?)", securityGroupID, username, sw.Username).First(&sg).Error
+			} else {
+				err = model.DB.Where("id = ? AND username = ?", securityGroupID, username).First(&sg).Error
+			}
+			if err != nil {
 				return fmt.Errorf("安全组不存在或不属于该用户")
 			}
 		}
 	} else {
 		var sg model.VPCSecurityGroup
-		if err := model.DB.Where("id = ? AND username = ?", securityGroupID, username).First(&sg).Error; err != nil {
+		var err error
+		if sw.IsSystem {
+			err = model.DB.Where("id = ? AND (username = ? OR username = ?)", securityGroupID, username, sw.Username).First(&sg).Error
+		} else {
+			err = model.DB.Where("id = ? AND username = ?", securityGroupID, username).First(&sg).Error
+		}
+		if err != nil {
 			return fmt.Errorf("安全组不存在或不属于该用户")
 		}
 	}

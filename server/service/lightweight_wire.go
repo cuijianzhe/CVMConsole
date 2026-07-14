@@ -161,6 +161,10 @@ func ApplyLightweightVMBandwidth(vmName string) error {
 	return lwpkg.ApplyLightweightVMBandwidth(vmName)
 }
 
+func LightweightConfirmRegistration(id uint) error {
+	return lwpkg.LightweightConfirmRegistration(id)
+}
+
 func CheckAndApplyLightweightVMTrafficLimit(quota model.LightweightVMQuota) {
 	lwpkg.CheckAndApplyLightweightVMTrafficLimit(quota)
 }
