@@ -15,6 +15,7 @@ import (
 	"kvm_console/model"
 	clonepkg "kvm_console/service/clone"
 	"kvm_console/service/security"
+	"kvm_console/service/snapshot"
 	"kvm_console/utils"
 )
 
@@ -35,6 +36,33 @@ func ListUsers() ([]VMUserInfo, error) {
 	var users []model.User
 	if err := model.DB.Find(&users).Error; err != nil {
 		return nil, err
+	}
+
+	allDomainsResult := utils.ExecCommand("virsh", "list", "--all", "--name")
+	validDomains := make(map[string]bool)
+	if allDomainsResult.Error == nil {
+		for _, name := range strings.Split(allDomainsResult.Stdout, "\n") {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				validDomains[name] = true
+			}
+		}
+	}
+
+	vmResourceCache := make(map[string]struct {
+		cpu  int
+		mem  int
+		disk int
+	})
+
+	for vmName := range validDomains {
+		cpu, mem := GetVMCPUAndMemory(vmName)
+		disk := getVMDiskCapacityGB(vmName)
+		vmResourceCache[vmName] = struct {
+			cpu  int
+			mem  int
+			disk int
+		}{cpu, mem, disk}
 	}
 
 	var result []VMUserInfo
@@ -64,15 +92,75 @@ func ListUsers() ([]VMUserInfo, error) {
 			SSHEnabled:           u.SSHEnabled,
 		}
 
-		// 读取用户的虚拟机分配列表
 		if u.Role != "admin" {
-			info.VMs = GetUserVMList(u.Username)
+			vms := GetUserVMList(u.Username)
 
-			// 弹性云用户显示用户级配额，轻量云改为单 VM 配额。
-			if !HookIsLightweightCloudType(u.CloudType) {
-				if quota, err := GetUserQuotaUsage(u.Username); err == nil {
-					info.Quota = quota
+			var validVMs []string
+			for _, vmName := range vms {
+				if validDomains[vmName] {
+					validVMs = append(validVMs, vmName)
 				}
+			}
+			info.VMs = validVMs
+
+			if !HookIsLightweightCloudType(u.CloudType) {
+				quota := &QuotaUsage{
+					MaxCPU:            u.MaxCPU,
+					MaxMemory:         u.MaxMemory,
+					MaxDisk:           u.MaxDisk,
+					MaxVM:             u.MaxVM,
+					MaxStorage:        u.MaxStorage,
+					MaxRuntimeHours:   u.MaxRuntimeHours,
+					EnablePortForward: u.EnablePortForward,
+					MaxPortForwards:   u.MaxPortForwards,
+					MaxSnapshots:      u.MaxSnapshots,
+					MaxBandwidthUp:    u.MaxBandwidthUp,
+					MaxBandwidthDown:  u.MaxBandwidthDown,
+					MaxTrafficDown:    u.MaxTrafficDown,
+					MaxTrafficUp:      u.MaxTrafficUp,
+					MaxPublicIPs:      u.MaxPublicIPs,
+					UsedVM:            len(validVMs),
+				}
+
+				for _, vmName := range validVMs {
+					if res, ok := vmResourceCache[vmName]; ok {
+						quota.UsedCPU += res.cpu
+						quota.UsedMemory += res.mem / 1024
+						quota.UsedDisk += res.disk
+					}
+				}
+
+				quota.UsedPublicIPs = HookGetUserPublicIPUsage(u.Username)
+				quota.UsedPortForwards = HookGetUserPortForwardUsage(u.Username)
+				quota.UsedSnapshots = snapshot.CountUserSnapshots(u.Username)
+
+				if quotaInfo, err := HookGetUserStorageUsage(u.Username); err == nil && quotaInfo != nil {
+					quota.UsedStorage = quotaInfo.UsedBytes
+				} else {
+					isoDir := GetUserISODir(u.Username)
+					shareDir := GetUserShareDir(u.Username)
+					quota.UsedStorage = getDirSizeBytes(isoDir) + getDirSizeBytes(shareDir)
+				}
+				quota.UsedStorageGB = formatBytes(quota.UsedStorage)
+
+				runtimeSnapshot := BuildUserRuntimeQuotaSnapshot(&u, time.Now())
+				quota.UsedRuntimeSeconds = runtimeSnapshot.UsedSeconds
+				quota.UsedRuntimeDisplay = FormatRuntimeQuotaDuration(runtimeSnapshot.UsedSeconds)
+				quota.RemainingRuntimeSeconds = runtimeSnapshot.RemainingSeconds
+				quota.RemainingRuntimeDisplay = FormatRuntimeQuotaDuration(runtimeSnapshot.RemainingSeconds)
+				quota.RuntimeQuotaReached = runtimeSnapshot.QuotaReached
+
+				trafficInfo := HookGetUserTrafficUsage(u.Username)
+				if trafficInfo != nil {
+					quota.UsedTrafficDown = trafficInfo.UsedTrafficDown
+					quota.UsedTrafficUp = trafficInfo.UsedTrafficUp
+					quota.UsedTrafficDownGB = trafficInfo.UsedTrafficDownGB
+					quota.UsedTrafficUpGB = trafficInfo.UsedTrafficUpGB
+					quota.IsLimitedDown = trafficInfo.IsLimitedDown
+					quota.IsLimitedUp = trafficInfo.IsLimitedUp
+				}
+
+				info.Quota = quota
 			} else {
 				model.DB.Where("username = ?", u.Username).Find(&info.LightweightVMQuotas)
 				for i := range info.LightweightVMQuotas {
@@ -83,7 +171,6 @@ func ListUsers() ([]VMUserInfo, error) {
 				}
 			}
 		} else {
-			// 管理员也填充存储配额使用情况
 			if quota, err := GetUserQuotaUsage(u.Username); err == nil {
 				info.Quota = quota
 			}

@@ -72,7 +72,7 @@ func GetUserQuotaUsage(username string) (*QuotaUsage, error) {
 
 	var validVMs []string
 	for _, vmName := range vms {
-		if len(validDomains) > 0 && !validDomains[vmName] {
+		if !validDomains[vmName] {
 			continue
 		}
 		validVMs = append(validVMs, vmName)
