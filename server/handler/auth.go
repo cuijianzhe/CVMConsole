@@ -586,6 +586,11 @@ func BindEmail(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
 		return
 	}
+	// 将更新后的用户对象设置到上下文中，确保后续操作能看到邮箱已验证
+	c.Set("current_user", freshUser)
+	c.Set("user_id", freshUser.ID)
+	c.Set("username", freshUser.Username)
+	c.Set("role", freshUser.Role)
 	tokenType, _ := c.Get("token_type")
 	if tokenType == service.TokenTypeBootstrap && !service.CanEnterBootstrap(freshUser) {
 		accessToken, err := middleware.GenerateAccessTokenWithContext(c, freshUser.ID, freshUser.Username, freshUser.Role)
