@@ -232,6 +232,14 @@ func defineAndStartNonWindowsClone(params *CloneParams, cloneDisk string, ramMB 
 		}
 	}
 
+	// vGPU 设备
+	if params.VGPUUUID != "" {
+		vmXML, err = vm_xml.ApplyVGPUToDomainXML(vmXML, params.VGPUUUID)
+		if err != nil {
+			return err
+		}
+	}
+
 	if _, err := libvirt_rpc.DefineDomainXMLRPC(vmXML); err != nil {
 		return fmt.Errorf("定义虚拟机失败: %w", err)
 	}

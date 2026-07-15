@@ -557,13 +557,27 @@
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="硬件直通" name="hardware">
+        <el-tab-pane label="VGPU/硬件直通" name="hardware">
           <div class="tab-content-wrapper">
             <el-alert type="info" :closable="false" show-icon class="advanced-inline-alert" style="margin-bottom: 16px;">
               <template #title>
-                硬件直通可将宿主机的 PCI 设备（如 GPU、网卡、NVMe 硬盘等）直接分配给虚拟机使用，获得接近原生的性能。
+                VGPU/硬件直通可将宿主机的 PCI 设备（如 GPU、网卡、NVMe 硬盘等）或 vGPU 设备直接分配给虚拟机使用，获得接近原生的性能。
               </template>
             </el-alert>
+            <el-form-item label="vGPU 设备">
+              <el-select v-model="form.vgpu_uuid" placeholder="选择 vGPU 实例" style="width: 100%;" filterable clearable :disabled="editVmStatus === 'running' || editVmStatus === 'paused'" @focus="loadVGPUInstances">
+                <el-option v-for="vgpu in vgpuInstances" :key="vgpu.uuid" :label="vgpu.profile?.profile_name + ' (' + vgpu.uuid.substring(0, 8) + ')' || vgpu.uuid" :value="vgpu.uuid" />
+              </el-select>
+              <div v-if="editVmStatus === 'running' || editVmStatus === 'paused'" class="form-tip">
+                <el-icon><WarningFilled /></el-icon>
+                修改 vGPU 需要先关机
+              </div>
+              <div v-else class="form-tip">
+                <el-icon><InfoFilled /></el-icon>
+                选择已创建的 vGPU 实例，将其绑定到当前虚拟机。需确保宿主机已启用 vGPU 功能且有可用实例。
+              </div>
+            </el-form-item>
+            <el-divider content-position="left">PCI 直通设备</el-divider>
             <el-form-item label="直通设备">
               <div style="width: 100%;">
                 <div v-if="form.host_devices.length > 0">
@@ -1956,21 +1970,31 @@
           </div>
             </div><!-- /step-pane-body -->
         </div>
-        <!-- 硬件直通（仅管理员） -->
+        <!-- VGPU/硬件直通（仅管理员） -->
         <div v-if="isAdmin" v-show="createSteps[createStep]?.name === 'passthrough'" class="step-pane">
           <div class="step-pane-header">
             <div class="step-pane-icon advanced"><FormIcons icon="step-plug" :size="22" /></div>
             <div class="step-pane-info">
-              <div class="step-pane-title">硬件直通</div>
-              <div class="step-pane-desc">将宿主机 PCI 设备直接分配给虚拟机，获得接近原生的性能</div>
+              <div class="step-pane-title">VGPU/硬件直通</div>
+              <div class="step-pane-desc">将宿主机 PCI 设备或 vGPU 设备直接分配给虚拟机，获得接近原生的性能</div>
             </div>
           </div>
           <div class="step-pane-body">
             <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px;">
               <template #title>
-                硬件直通可将 GPU、NVMe 硬盘、网卡等 PCI 设备直接分配给虚拟机。配置后设备将在虚拟机启动时自动绑定到 vfio-pci 驱动。
+                VGPU/硬件直通可将 GPU、NVMe 硬盘、网卡等 PCI 设备或 vGPU 设备直接分配给虚拟机。配置后设备将在虚拟机启动时自动绑定。
               </template>
             </el-alert>
+            <el-form-item label="vGPU 设备">
+              <el-select v-model="form.vgpu_uuid" placeholder="选择 vGPU 实例" style="width: 100%;" filterable clearable @focus="loadVGPUInstances">
+                <el-option v-for="vgpu in vgpuInstances" :key="vgpu.uuid" :label="vgpu.profile?.profile_name + ' (' + vgpu.uuid.substring(0, 8) + ')' || vgpu.uuid" :value="vgpu.uuid" />
+              </el-select>
+              <div class="form-tip">
+                <el-icon><InfoFilled /></el-icon>
+                选择已创建的 vGPU 实例，将其绑定到当前虚拟机。需确保宿主机已启用 vGPU 功能且有可用实例。
+              </div>
+            </el-form-item>
+            <el-divider content-position="left">PCI 直通设备</el-divider>
             <el-form-item label="直通设备">
               <div style="width: 100%;">
                 <div v-if="form.host_devices.length > 0">
@@ -2562,7 +2586,7 @@ import { spiceEnabledByDefault } from '@/utils/site'
 import { getStorageFiles } from '@/api/storage'
 import { selfCloneVm } from '@/api/user'
 import { getVPCSecurityGroups, getVPCSwitches } from '@/api/vpc'
-import { getCPUAffinityPresets, getSettings, getHostCPUCores, getPublicSystemInfo } from '@/api/settings'
+import { getCPUAffinityPresets, getSettings, getHostCPUCores, getPublicSystemInfo, getVGPUInstances } from '@/api/settings'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Top, Bottom, Delete, Plus, ArrowRight, Discount } from '@element-plus/icons-vue'
 import FormIcons from '@/components/icons/FormIcons.vue'
@@ -2621,6 +2645,19 @@ const osQuickOptions = [
   { value: 'windows', label: 'Windows', icon: '🪟', examples: 'Server 2022 / 2019 / 11' },
   { value: 'other', label: '其他', icon: '🖥️', examples: 'FreeBSD / 自定义' },
 ]
+
+const vgpuInstances = ref([])
+const loadVGPUInstances = async () => {
+  if (!isAdmin.value) {
+    return
+  }
+  try {
+    const res = await getVGPUInstances()
+    vgpuInstances.value = res.data || []
+  } catch (err) {
+    console.error('加载 vGPU 实例失败:', err)
+  }
+}
 
 const osLabel = computed(() => {
   const map = { linux: '🐧 Linux', windows: '🪟 Windows', other: '🖥️ 其他' }
@@ -3684,6 +3721,7 @@ const form = reactive({
   kvm_hidden: false,          // 隐藏 KVM 标志
   vendor_id: '',               // Hyper-V vendor_id 伪装（自定义值）
   nested_virt: true,           // 嵌套虚拟化开关，默认启用
+  vgpu_uuid: '',               // vGPU 设备 UUID
   // 编辑模式 - 新增磁盘
   add_disks: [],
   // 创建模式 - 额外磁盘
@@ -5327,6 +5365,7 @@ const submitForm = async () => {
               kvm_hidden: form.kvm_hidden || undefined,
               vendor_id: form.vendor_id || undefined,
               nested_virt: form.nested_virt !== undefined ? form.nested_virt : true,
+              vgpu_uuid: form.vgpu_uuid || undefined,
             }
             const cpuLimitPercent = buildCPULimitPercentPayload()
             if (cpuLimitPercent !== undefined) { importPayload.cpu_limit_percent = cpuLimitPercent }
@@ -5373,6 +5412,7 @@ const submitForm = async () => {
             kvm_hidden: form.kvm_hidden || undefined,
             vendor_id: form.vendor_id || undefined,
             nested_virt: form.nested_virt !== undefined ? form.nested_virt : true,
+            vgpu_uuid: form.vgpu_uuid || undefined,
           }
           const cpuLimitPercent = buildCPULimitPercentPayload()
           if (cpuLimitPercent !== undefined) {
@@ -5437,6 +5477,7 @@ const submitForm = async () => {
               kvm_hidden: form.kvm_hidden || undefined,
               vendor_id: form.vendor_id || undefined,
               nested_virt: form.nested_virt !== undefined ? form.nested_virt : true,
+              vgpu_uuid: form.vgpu_uuid || undefined,
             }
             const cpuLimitPercent = buildCPULimitPercentPayload()
             if (cpuLimitPercent !== undefined) { batchPayload.cpu_limit_percent = cpuLimitPercent }
@@ -5507,6 +5548,7 @@ const submitForm = async () => {
             kvm_hidden: form.kvm_hidden || undefined,
             vendor_id: form.vendor_id || undefined,
             nested_virt: form.nested_virt !== undefined ? form.nested_virt : true,
+            vgpu_uuid: form.vgpu_uuid || undefined,
           }
           const cpuLimitPercent = buildCPULimitPercentPayload()
           if (cpuLimitPercent !== undefined) {
@@ -5623,6 +5665,7 @@ const submitForm = async () => {
             kvm_hidden: form.kvm_hidden || undefined,
             vendor_id: form.vendor_id || undefined,
             nested_virt: form.nested_virt !== undefined ? form.nested_virt : true,
+            vgpu_uuid: form.vgpu_uuid || undefined,
           }
           const cpuLimitPercent = buildCPULimitPercentPayload()
           if (cpuLimitPercent !== undefined) {

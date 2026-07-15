@@ -711,6 +711,100 @@
                 </div>
               </div>
             </el-form-item>
+
+            <el-divider content-position="left">
+              <el-icon style="margin-right: 4px;"><Monitor /></el-icon>
+              vGPU 管理
+            </el-divider>
+
+            <el-alert
+              title="vGPU 功能基于 VFIO-Mediated Device（mdev）框架，需要宿主机已安装 NVIDIA vGPU Manager 并正确配置驱动。"
+              type="info"
+              :closable="false"
+              style="margin-bottom: 18px;"
+            />
+
+            <el-form-item label="vGPU 类型">
+              <div class="host-setting-field">
+                <div class="host-setting-row" style="margin-bottom: 8px;">
+                  <el-button size="small" type="primary" :loading="vgpuDiscovering" @click="handleDiscoverVGPU">
+                    <el-icon><Refresh /></el-icon>
+                    刷新设备
+                  </el-button>
+                </div>
+                <div v-if="vgpuProfiles.length === 0 && !vgpuDiscovering" style="color: #909399;">
+                  未检测到可用的 vGPU 类型，点击"刷新设备"按钮扫描宿主机 GPU
+                </div>
+                <el-table v-else :data="vgpuProfiles" size="small" style="width: 100%;">
+                  <el-table-column prop="pci_device" label="PCI 设备" width="120" />
+                  <el-table-column prop="profile_name" label="Profile" width="120" />
+                  <el-table-column prop="description" label="描述" />
+                  <el-table-column prop="memory_mb" label="显存(MB)" width="100" />
+                  <el-table-column label="使用情况" width="120">
+                    <template #default="{ row }">
+                      <span>{{ row.used_instances }} / {{ row.max_instances }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="120">
+                    <template #default="{ row }">
+                      <el-button
+                        size="small"
+                        type="primary"
+                        :disabled="row.used_instances >= row.max_instances"
+                        @click="handleCreateVGPU(row)"
+                      >
+                        创建实例
+                      </el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+            </el-form-item>
+
+            <el-form-item label="vGPU 实例">
+              <div class="host-setting-field">
+                <div v-if="vgpuInstances.length === 0" style="color: #909399;">
+                  暂无 vGPU 实例，从上方选择 vGPU 类型创建
+                </div>
+                <el-table v-else :data="vgpuInstances" size="small" style="width: 100%;">
+                  <el-table-column prop="uuid" label="UUID" width="200" />
+                  <el-table-column prop="profile.description" label="类型" />
+                  <el-table-column prop="vm_name" label="绑定虚拟机">
+                    <template #default="{ row }">
+                      <el-tag v-if="row.vm_name" type="success" effect="plain">{{ row.vm_name }}</el-tag>
+                      <span v-else style="color: #909399;">未绑定</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="200">
+                    <template #default="{ row }">
+                      <el-button
+                        v-if="!row.vm_name"
+                        size="small"
+                        type="primary"
+                        @click="handleAttachVGPU(row)"
+                      >
+                        绑定到 VM
+                      </el-button>
+                      <el-button
+                        v-else
+                        size="small"
+                        type="warning"
+                        @click="handleDetachVGPU(row)"
+                      >
+                        解绑
+                      </el-button>
+                      <el-button
+                        size="small"
+                        type="danger"
+                        @click="handleDestroyVGPU(row)"
+                      >
+                        删除
+                      </el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+            </el-form-item>
           </el-tab-pane>
 
           <el-tab-pane label="调度与高级" name="advanced">
@@ -1420,7 +1514,7 @@
 import { computed, ref, reactive, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Check, Connection, CopyDocument, Cpu, Delete, Download, FirstAidKit, FolderOpened, Picture, InfoFilled, Loading, Lock, UserFilled, Message, Monitor, Odometer, Brush, Plus, Refresh, Warning } from '@element-plus/icons-vue'
-import { getHostKSMStatus, getHostKVMUnrestrictedGuestStatus, getHostZRAMStatus, getSettings, getCPUAffinityPresets, getUserStorageISOPath, rotateJWTSecret, saveCPUAffinityPresets, testSMTP, updateHostKSMProfile, updateHostKVMUnrestrictedGuest, updateHostZRAMProfile, updateSettings, getLogStatus, deleteLogs, exportLogs, trimUserStorage, getDiagnosticCategories, exportDiagnostics, getHardwarePassthroughStatus, enableIommu, loadVfioPci } from '@/api/settings'
+import { getHostKSMStatus, getHostKVMUnrestrictedGuestStatus, getHostZRAMStatus, getSettings, getCPUAffinityPresets, getUserStorageISOPath, rotateJWTSecret, saveCPUAffinityPresets, testSMTP, updateHostKSMProfile, updateHostKVMUnrestrictedGuest, updateHostZRAMProfile, updateSettings, getLogStatus, deleteLogs, exportLogs, trimUserStorage, getDiagnosticCategories, exportDiagnostics, getHardwarePassthroughStatus, enableIommu, loadVfioPci, getVGPUProfiles, discoverVGPUProfiles, getVGPUInstances, createVGPUInstance, destroyVGPUInstance, attachVGPUToVM, detachVGPUFromVM } from '@/api/settings'
 import { getAllISOs } from '@/api/infra'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { setSiteTitle, systemHomeIcon, homeTitle, loginPageIcon, productName, browserFavicon, browserTitle } from '@/utils/site'
@@ -1511,6 +1605,11 @@ const showPassthroughConfig = computed(() => hwPassthroughStatus.value?.bios_iom
 const hasPassthroughDevices = computed(() => (hwPassthroughStatus.value?.passthrough_devices?.length || 0) > 0)
 const iommuEnabling = ref(false)
 const vfioLoading = ref(false)
+
+// vGPU 管理状态
+const vgpuProfiles = ref([])
+const vgpuInstances = ref([])
+const vgpuDiscovering = ref(false)
 
 const affinityPresets = ref([])
 const affinityPresetsSaving = ref(false)
@@ -2440,6 +2539,7 @@ const handleExportDiagnostics = async () => {
 watch(activeTab, (tab) => {
   if (tab === 'host' && !hwPassthroughStatus.value) {
     loadHwPassthroughStatus()
+    loadVGPUData()
   }
   if (tab === 'log' && logStatus.files.length === 0) {
     fetchLogStatus()
@@ -2448,6 +2548,133 @@ watch(activeTab, (tab) => {
     fetchDiagnosticCategories()
   }
 })
+
+const loadVGPUData = async () => {
+  try {
+    const [profilesRes, instancesRes] = await Promise.all([
+      getVGPUProfiles(),
+      getVGPUInstances()
+    ])
+    vgpuProfiles.value = profilesRes.data || []
+    vgpuInstances.value = instancesRes.data || []
+  } catch (err) {
+    console.error('加载 vGPU 数据失败', err)
+  }
+}
+
+const handleDiscoverVGPU = async () => {
+  vgpuDiscovering.value = true
+  try {
+    const res = await discoverVGPUProfiles()
+    vgpuProfiles.value = res.data || []
+    ElMessage.success(res.message || '刷新成功')
+    await getVGPUInstances().then(res => {
+      vgpuInstances.value = res.data || []
+    })
+  } catch (err) {
+    console.error('刷新 vGPU 设备失败', err)
+    ElMessage.error('刷新失败')
+  } finally {
+    vgpuDiscovering.value = false
+  }
+}
+
+const handleCreateVGPU = async (profile) => {
+  try {
+    const { useUserStore } = await import('@/store/user')
+    const userStore = useUserStore()
+    const token = userStore.stageToken || ''
+    
+    await ElMessageBox.confirm(
+      `确定要为 ${profile.description} 创建一个新的 vGPU 实例吗？`,
+      '创建 vGPU 实例',
+      { confirmButtonText: '确认创建', cancelButtonText: '取消', type: 'info' }
+    )
+    
+    const res = await createVGPUInstance({ profile_id: profile.id }, token)
+    ElMessage.success(res.message || '创建成功')
+    await loadVGPUData()
+  } catch (action) {
+    if (action !== 'cancel' && action !== 'close') {
+      console.error('创建 vGPU 实例失败', action)
+      ElMessage.error('创建失败')
+    }
+  }
+}
+
+const handleDestroyVGPU = async (instance) => {
+  try {
+    const { useUserStore } = await import('@/store/user')
+    const userStore = useUserStore()
+    const token = userStore.stageToken || ''
+    
+    await ElMessageBox.confirm(
+      `确定要删除 vGPU 实例 ${instance.uuid} 吗？此操作不可恢复。`,
+      '删除 vGPU 实例',
+      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
+    )
+    
+    const res = await destroyVGPUInstance(instance.uuid, token)
+    ElMessage.success(res.message || '删除成功')
+    await loadVGPUData()
+  } catch (action) {
+    if (action !== 'cancel' && action !== 'close') {
+      console.error('删除 vGPU 实例失败', action)
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+const handleAttachVGPU = async (instance) => {
+  try {
+    const { useUserStore } = await import('@/store/user')
+    const userStore = useUserStore()
+    const token = userStore.stageToken || ''
+    
+    const { value: vmName } = await ElMessageBox.prompt(
+      '请输入要绑定的虚拟机名称:',
+      '绑定 vGPU 到虚拟机',
+      { confirmButtonText: '确认绑定', cancelButtonText: '取消' }
+    )
+    
+    if (!vmName) {
+      ElMessage.warning('请输入虚拟机名称')
+      return
+    }
+    
+    const res = await attachVGPUToVM(instance.id, { vm_name: vmName }, token)
+    ElMessage.success(res.message || '绑定成功')
+    await loadVGPUData()
+  } catch (action) {
+    if (action !== 'cancel' && action !== 'close') {
+      console.error('绑定 vGPU 失败', action)
+      ElMessage.error('绑定失败')
+    }
+  }
+}
+
+const handleDetachVGPU = async (instance) => {
+  try {
+    const { useUserStore } = await import('@/store/user')
+    const userStore = useUserStore()
+    const token = userStore.stageToken || ''
+    
+    await ElMessageBox.confirm(
+      `确定要从虚拟机 ${instance.vm_name} 解绑 vGPU 实例 ${instance.uuid} 吗？`,
+      '解绑 vGPU',
+      { confirmButtonText: '确认解绑', cancelButtonText: '取消', type: 'warning' }
+    )
+    
+    const res = await detachVGPUFromVM(instance.id, token)
+    ElMessage.success(res.message || '解绑成功')
+    await loadVGPUData()
+  } catch (action) {
+    if (action !== 'cancel' && action !== 'close') {
+      console.error('解绑 vGPU 失败', action)
+      ElMessage.error('解绑失败')
+    }
+  }
+}
 
 onMounted(fetchData)
 </script>

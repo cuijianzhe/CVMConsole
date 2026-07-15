@@ -252,3 +252,58 @@ export async function exportDiagnostics(data) {
   })
   return response.data
 }
+
+export function getVGPUProfiles() {
+  return request({
+    url: '/host/vgpu/profiles',
+    method: 'get'
+  })
+}
+
+export function discoverVGPUProfiles() {
+  return request({
+    url: '/host/vgpu/profiles/discover',
+    method: 'post'
+  })
+}
+
+export function getVGPUInstances() {
+  return request({
+    url: '/host/vgpu/instances',
+    method: 'get'
+  })
+}
+
+export function createVGPUInstance(data, token = '') {
+  return request({
+    url: '/host/vgpu/instances',
+    method: 'post',
+    data,
+    headers: withStageToken(token)
+  })
+}
+
+export function destroyVGPUInstance(uuid, token = '') {
+  return request({
+    url: `/host/vgpu/instances/${uuid}`,
+    method: 'delete',
+    headers: withStageToken(token)
+  })
+}
+
+export function attachVGPUToVM(id, data, token = '') {
+  return request({
+    url: `/host/vgpu/instances/${id}/attach`,
+    method: 'put',
+    data,
+    headers: withStageToken(token)
+  })
+}
+
+export function detachVGPUFromVM(id, token = '') {
+  return request({
+    url: `/host/vgpu/instances/${id}/detach`,
+    method: 'put',
+    headers: withStageToken(token)
+  })
+}

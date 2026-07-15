@@ -68,6 +68,8 @@ type CreateVMParams struct {
 	KVMHidden       *bool                          `json:"kvm_hidden,omitempty"`      // 隐藏 KVM 标志（<kvm><hidden state='on'/></kvm>）
 	VendorID        string                         `json:"vendor_id,omitempty"`       // Hyper-V vendor_id 伪装（空表示不设置）
 	NestedVirt      *bool                          `json:"nested_virt,omitempty"`     // 嵌套虚拟化开关，nil/true 默认启用，false 关闭
+	VGPUProfileID   uint                           `json:"vgpu_profile_id,omitempty"` // vGPU 配置文件 ID
+	VGPUUUID        string                         `json:"vgpu_uuid,omitempty"`       // vGPU 设备 UUID
 }
 
 // ExtraDiskParam is now defined in storage/disk package; alias in disk_compat.go.
@@ -608,6 +610,16 @@ func CreateVM(params *CreateVMParams, progressFn func(int, string)) (string, err
 		if err != nil {
 			_ = os.Remove(diskPath)
 			return "", fmt.Errorf("应用硬件直通设备失败: %w", err)
+		}
+	}
+
+	// vGPU 设备
+	if params.VGPUUUID != "" {
+		progressFn(55, "配置 vGPU 设备...")
+		vmXML, err = vm_xml.ApplyVGPUToDomainXML(vmXML, params.VGPUUUID)
+		if err != nil {
+			_ = os.Remove(diskPath)
+			return "", fmt.Errorf("应用 vGPU 设备失败: %w", err)
 		}
 	}
 

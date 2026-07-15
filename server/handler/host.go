@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"kvm_console/service"
+	"kvm_console/service/host"
 )
 
 type HostKVMIntelUnrestrictedGuestRequest struct {
@@ -345,5 +347,185 @@ func LoadVfioPci(c *gin.Context) {
 		"code":    code,
 		"message": result.Message,
 		"data":    result,
+	})
+}
+
+type CreateVGPUInstanceRequest struct {
+	ProfileID uint `json:"profile_id" binding:"required"`
+}
+
+type AttachVGPURequest struct {
+	VMName string `json:"vm_name" binding:"required"`
+}
+
+func GetVGPUProfiles(c *gin.Context) {
+	profiles, err := host.GetVGPUProfiles()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "获取 vGPU 类型失败: " + err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "ok",
+		"data":    profiles,
+	})
+}
+
+func DiscoverVGPUProfiles(c *gin.Context) {
+	if err := host.UpdateVGPUProfilesInDB(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "发现 vGPU 设备失败: " + err.Error(),
+		})
+		return
+	}
+	profiles, err := host.GetVGPUProfiles()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "获取 vGPU 类型失败: " + err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "发现 vGPU 设备成功",
+		"data":    profiles,
+	})
+}
+
+func GetVGPUInstances(c *gin.Context) {
+	instances, err := host.GetVGPUInstances()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "获取 vGPU 实例失败: " + err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "ok",
+		"data":    instances,
+	})
+}
+
+func CreateVGPUInstance(c *gin.Context) {
+	if !requireHighRiskVerification(c, "create_vgpu_instance") {
+		return
+	}
+
+	var req CreateVGPUInstanceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "参数错误",
+		})
+		return
+	}
+
+	instance, err := host.CreateVGPUInstance(req.ProfileID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "创建 vGPU 实例成功",
+		"data":    instance,
+	})
+}
+
+func DestroyVGPUInstance(c *gin.Context) {
+	if !requireHighRiskVerification(c, "destroy_vgpu_instance") {
+		return
+	}
+
+	uuid := c.Param("uuid")
+	if err := host.DestroyVGPUInstanceByUUID(uuid); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "删除 vGPU 实例成功",
+	})
+}
+
+func AttachVGPUToVM(c *gin.Context) {
+	if !requireHighRiskVerification(c, "attach_vgpu_to_vm") {
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "参数错误",
+		})
+		return
+	}
+
+	var req AttachVGPURequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "参数错误",
+		})
+		return
+	}
+
+	if err := host.AttachVGPUToVM(uint(id), req.VMName); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "绑定 vGPU 到虚拟机成功",
+	})
+}
+
+func DetachVGPUFromVM(c *gin.Context) {
+	if !requireHighRiskVerification(c, "detach_vgpu_from_vm") {
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "参数错误",
+		})
+		return
+	}
+
+	if err := host.DetachVGPUFromVM(uint(id)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "从虚拟机解绑 vGPU 成功",
 	})
 }

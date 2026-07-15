@@ -497,6 +497,14 @@ func Setup() *gin.Engine {
 				host.GET("/passthrough", handler.GetPassthroughDevices)
 				host.POST("/passthrough/bind", middleware.AdminMiddleware(), handler.BindPCIDevice)
 				host.POST("/passthrough/unbind", middleware.AdminMiddleware(), handler.UnbindPCIDevice)
+				// vGPU 管理
+				host.GET("/vgpu/profiles", middleware.AdminMiddleware(), handler.GetVGPUProfiles)
+				host.POST("/vgpu/profiles/discover", middleware.AdminMiddleware(), handler.DiscoverVGPUProfiles)
+				host.GET("/vgpu/instances", middleware.AdminMiddleware(), handler.GetVGPUInstances)
+				host.POST("/vgpu/instances", middleware.AdminMiddleware(), handler.CreateVGPUInstance)
+				host.DELETE("/vgpu/instances/:uuid", middleware.AdminMiddleware(), handler.DestroyVGPUInstance)
+				host.PUT("/vgpu/instances/:id/attach", middleware.AdminMiddleware(), handler.AttachVGPUToVM)
+				host.PUT("/vgpu/instances/:id/detach", middleware.AdminMiddleware(), handler.DetachVGPUFromVM)
 			}
 
 			// ==================== 任务队列 ====================

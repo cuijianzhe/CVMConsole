@@ -69,6 +69,8 @@ type CloneParams struct {
 	NestedVirt            *bool                          `json:"nested_virt,omitempty"`         // 嵌套虚拟化开关
 	KVMHidden             *bool                          `json:"kvm_hidden,omitempty"`          // 隐藏 KVM 标志
 	VendorID              string                         `json:"vendor_id,omitempty"`           // Hyper-V vendor_id 伪装
+	VGPUProfileID         uint                           `json:"vgpu_profile_id,omitempty"`     // vGPU 配置文件 ID
+	VGPUUUID              string                         `json:"vgpu_uuid,omitempty"`           // vGPU 设备 UUID
 }
 
 // BatchCloneParams 批量克隆参数
