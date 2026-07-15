@@ -438,7 +438,7 @@ func deletePortForwardWithOptions(ruleID int, preserveProbeState bool) error {
 
 	// 删除 FORWARD 规则
 	if destIP != "" && destPort != "" {
-		utils.ExecShell(fmt.Sprintf(
+		utils.ExecShellQuiet(fmt.Sprintf(
 			"iptables -D FORWARD -d %s -p %s --dport %s -j ACCEPT 2>/dev/null",
 			utils.ShellSingleQuote(destIP), utils.ShellSingleQuote(proto), utils.ShellSingleQuote(destPort)))
 	}
