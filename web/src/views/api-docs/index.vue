@@ -401,7 +401,9 @@ const fieldDescriptions = {
   vms: '虚拟机名称列表。',
   weekdays: '每周执行日期。',
   watchdog: '虚拟机 watchdog 设备策略。',
-  xml: 'libvirt domain XML 内容'
+  xml: 'libvirt domain XML 内容',
+  vgpu_uuid: 'vGPU 实例 UUID，由宿主机 vGPU 管理接口创建后分配给虚拟机。',
+  profile_id: 'vGPU Profile ID，标识 vGPU 类型（如显存大小、算力配置）。'
 }
 
 const ignoredFieldTokens = new Set([
