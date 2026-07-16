@@ -1041,7 +1041,6 @@ write_env() {
 
     # === 关键配置：任何模式下都必须写入或补齐 ===
     env_set "KVM_PORT" "$KVM_PORT"
-    env_default "KVM_DB_PATH" "${INSTALL_DIR}/data/kvm_console.db"
     env_default "KVM_JWT_SECRET" "$(random_secret)"
     env_default "KVM_JWT_SECRET_ROTATE_HOURS" "24"
 
@@ -1061,6 +1060,16 @@ write_env() {
     env_default "KVM_ADMIN_PASS" "admin123"
     env_default "KVM_SERVICE_UNIT_NAME" "${SERVICE_NAME}.service"
     env_default "KVM_SMTP_PASSWORD_ENC" ""
+
+    # === 数据库配置 ===
+    #数据库类型，支持 sqlite 和 mysql
+    env_default "KVM_DB_TYPE" "sqlite"
+    env_default "KVM_DB_PATH" "${INSTALL_DIR}/data/kvm_console.db"
+    env_default "KVM_DB_HOST" "localhost"
+    env_default "KVM_DB_PORT" "3306"
+    env_default "KVM_DB_USERNAME" "root"
+    env_default "KVM_DB_PASSWORD" ""
+    env_default "KVM_DB_DATABASE" "kvm_console"
 
     # === 以下为可配置项：仅首次安装或修复时写入默认值 ===
     # 更新时跳过，保持 .env 现有内容不动，面板保存设置时会同步写 .env
@@ -1093,7 +1102,7 @@ write_env() {
         env_default "KVM_SMTP_HOST" ""
         env_default "KVM_SMTP_PORT" "587"
         env_default "KVM_SMTP_USERNAME" ""
-        env_default "KVM_SMTP_FROM_NAME" "QVMConsole"
+        env_default "KVM_SMTP_FROM_NAME" "CMConsole"
         env_default "KVM_SMTP_FROM_ADDRESS" ""
         env_default "KVM_SMTP_SECURITY" "starttls"
         env_default "KVM_SMTP_TIMEOUT_SECONDS" "15"
