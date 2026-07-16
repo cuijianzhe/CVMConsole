@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# QVMConsole 安装 / 更新 / 卸载脚本
+#CVMConsole 安装 / 更新 / 卸载脚本
 # ============================================================
 
 set -Eeuo pipefail
@@ -16,12 +16,12 @@ warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
 success() { echo -e "${GREEN}[✓]${NC} $1"; }
 
-APP_NAME="QVMConsole"
+APP_NAME="CVMConsole"
 INSTALL_DIR="/opt/kvm-console"
 SERVICE_NAME="kvm-console"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 ENV_FILE="${INSTALL_DIR}/.env"
-GITHUB_REPO="yxsj245/kvm_console"
+GITHUB_REPO="cuijianzhe/CVMConsole
 GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 
 STORAGE_IMG="/var/lib/kvm-user-storage.img"
@@ -367,7 +367,7 @@ check_locale() {
 
 当前检测到: LANG=${lang:-（空）}${lc_all:+ , LC_ALL=${lc_all}}
 
-QVMConsole 大部分功能依赖命令返回的信息进行正确识别，
+CVMConsole 大部分功能依赖命令返回的信息进行正确识别，
 非英文环境下可能导致错误匹配逻辑失效。造成功能异常
 
 请将系统语言环境设置为 en_US.UTF-8 后重启系统再执行安装，例如：
@@ -1094,7 +1094,7 @@ write_env() {
         env_default "KVM_MAX_BURST_OUTBOUND" "0"
         env_default "KVM_RESCUE_ISO" ""
         env_default "KVM_PUBLIC_BASE_URL" ""
-        env_default "KVM_SITE_TITLE" "QVMConsole"
+        env_default "KVM_SITE_TITLE" "CVMConsole"
         env_default "KVM_DEVELOPMENT_MODE" "false"
         env_default "KVM_MAINTENANCE_MODE" "false"
         env_default "KVM_MAINTENANCE_SERVICE_UNITS" "kvm-console.service,libvirtd.service,libvirtd.socket,libvirtd-ro.socket,libvirtd-admin.socket"

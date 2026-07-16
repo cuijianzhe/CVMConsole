@@ -67,6 +67,26 @@ func InitDB() {
 	DBType = dbType
 
 	if dbType == "mysql" {
+		initDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4&parseTime=True&loc=Local",
+			config.GlobalConfig.DBUsername,
+			config.GlobalConfig.DBPassword,
+			config.GlobalConfig.DBHost,
+			config.GlobalConfig.DBPort,
+		)
+		initDB, err := gorm.Open(mysql.Open(initDSN), &gorm.Config{
+			Logger: &gormAppLogger{},
+		})
+		if err != nil {
+			logger.App.Error("连接 MySQL 数据库失败", "error", err)
+			os.Exit(1)
+		}
+		if err := initDB.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci", config.GlobalConfig.DBDatabase)).Error; err != nil {
+			logger.App.Error("创建 MySQL 数据库失败", "error", err)
+			os.Exit(1)
+		}
+		sqlDB, _ := initDB.DB()
+		sqlDB.Close()
+
 		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 			config.GlobalConfig.DBUsername,
 			config.GlobalConfig.DBPassword,
