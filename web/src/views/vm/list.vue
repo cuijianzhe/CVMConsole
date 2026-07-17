@@ -258,6 +258,7 @@
                               <el-dropdown-item v-if="isAdmin" command="migrate" :disabled="isMigrating(row)">迁移</el-dropdown-item>
                               <el-dropdown-item v-if="isAdmin && row.is_linked_clone" command="make_independent" divided :disabled="isMigrating(row) || row.status !== 'shut off'">转为独立虚拟机</el-dropdown-item>
                               <el-dropdown-item command="snapshot" :disabled="isMigrating(row)">快照管理</el-dropdown-item>
+                              <el-dropdown-item v-if="!isLightweight" command="resize_disk" :disabled="isMigrating(row)">扩容磁盘</el-dropdown-item>
                               <el-dropdown-item divided :command="row.in_rescue ? 'rescue_stop' : 'rescue_start'" :disabled="isMigrating(row)">
                                 <span :style="{ color: row.in_rescue ? '#E6A23C' : '#409EFF' }">{{ row.in_rescue ? '关闭救援系统' : '启动救援系统' }}</span>
                               </el-dropdown-item>
@@ -428,6 +429,7 @@
                             <el-dropdown-item v-if="isAdmin" command="migrate" :disabled="isMigrating(row)">迁移</el-dropdown-item>
                             <el-dropdown-item v-if="isAdmin && row.is_linked_clone" command="make_independent" divided :disabled="isMigrating(row) || row.status !== 'shut off'">转为独立虚拟机</el-dropdown-item>
                             <el-dropdown-item command="snapshot" :disabled="isMigrating(row)">快照管理</el-dropdown-item>
+                            <el-dropdown-item v-if="!isLightweight" command="resize_disk" :disabled="isMigrating(row)">扩容磁盘</el-dropdown-item>
                             <el-dropdown-item divided :command="row.in_rescue ? 'rescue_stop' : 'rescue_start'" :disabled="isMigrating(row)">
                               <span :style="{ color: row.in_rescue ? '#E6A23C' : '#409EFF' }">{{ row.in_rescue ? '关闭救援系统' : '启动救援系统' }}</span>
                             </el-dropdown-item>
@@ -568,6 +570,7 @@
                         <el-dropdown-item v-if="isAdmin" command="migrate" :disabled="isMigrating(row)">迁移</el-dropdown-item>
                         <el-dropdown-item v-if="isAdmin && row.is_linked_clone" command="make_independent" divided :disabled="isMigrating(row) || row.status !== 'shut off'">转为独立虚拟机</el-dropdown-item>
                         <el-dropdown-item command="snapshot" :disabled="isMigrating(row)">快照管理</el-dropdown-item>
+                        <el-dropdown-item v-if="!isLightweight" command="resize_disk" :disabled="isMigrating(row)">扩容磁盘</el-dropdown-item>
                         <el-dropdown-item divided :command="row.in_rescue ? 'rescue_stop' : 'rescue_start'" :disabled="isMigrating(row)">
                           <span :style="{ color: row.in_rescue ? '#E6A23C' : '#409EFF' }">{{ row.in_rescue ? '关闭救援系统' : '启动救援系统' }}</span>
                         </el-dropdown-item>
@@ -704,6 +707,7 @@
                             <el-dropdown-item v-if="isAdmin" command="migrate" :disabled="isMigrating(row)">迁移</el-dropdown-item>
                             <el-dropdown-item v-if="isAdmin && row.is_linked_clone" command="make_independent" divided :disabled="isMigrating(row) || row.status !== 'shut off'">转为独立虚拟机</el-dropdown-item>
                             <el-dropdown-item command="snapshot" :disabled="isMigrating(row)">快照管理</el-dropdown-item>
+                            <el-dropdown-item v-if="!isLightweight" command="resize_disk" :disabled="isMigrating(row)">扩容磁盘</el-dropdown-item>
                             <el-dropdown-item divided :command="row.in_rescue ? 'rescue_stop' : 'rescue_start'" :disabled="isMigrating(row)">
                               <span :style="{ color: row.in_rescue ? '#E6A23C' : '#409EFF' }">{{ row.in_rescue ? '关闭救援系统' : '启动救援系统' }}</span>
                             </el-dropdown-item>
@@ -905,6 +909,7 @@
                   <el-dropdown-item v-if="isAdmin" command="migrate" :disabled="isMigrating(row)">迁移</el-dropdown-item>
                   <el-dropdown-item v-if="isAdmin && row.is_linked_clone" command="make_independent" divided :disabled="isMigrating(row) || row.status !== 'shut off'">转为独立虚拟机</el-dropdown-item>
                   <el-dropdown-item command="snapshot" :disabled="isMigrating(row)">快照管理</el-dropdown-item>
+                  <el-dropdown-item v-if="!isLightweight" command="resize_disk" :disabled="isMigrating(row)">扩容磁盘</el-dropdown-item>
                   <el-dropdown-item divided :command="row.in_rescue ? 'rescue_stop' : 'rescue_start'" :disabled="isMigrating(row)">
                     <span :style="{ color: row.in_rescue ? '#E6A23C' : '#409EFF' }">
                       {{ row.in_rescue ? '关闭救援系统' : '启动救援系统' }}
@@ -1037,6 +1042,7 @@
                       <el-dropdown-item v-if="isAdmin" command="migrate" :disabled="isMigrating(row)">迁移</el-dropdown-item>
                       <el-dropdown-item v-if="isAdmin && row.is_linked_clone" command="make_independent" divided :disabled="isMigrating(row) || row.status !== 'shut off'">转为独立虚拟机</el-dropdown-item>
                       <el-dropdown-item command="snapshot" :disabled="isMigrating(row)">快照管理</el-dropdown-item>
+                      <el-dropdown-item v-if="!isLightweight" command="resize_disk" :disabled="isMigrating(row)">扩容磁盘</el-dropdown-item>
                       <el-dropdown-item divided :command="row.in_rescue ? 'rescue_stop' : 'rescue_start'" :disabled="isMigrating(row)">
                         <span :style="{ color: row.in_rescue ? '#E6A23C' : '#409EFF' }">{{ row.in_rescue ? '关闭救援系统' : '启动救援系统' }}</span>
                       </el-dropdown-item>
@@ -1114,7 +1120,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, reactive } from 'vue'
-import { getDiskList, getVmIP, getVmList, operateVm, rescueVm, lockVm, unlockVm, makeVMIndependent } from '@/api/vm'
+import { getDiskList, getVmIP, getVmList, operateVm, rescueVm, lockVm, unlockVm, makeVMIndependent, resizeDisk } from '@/api/vm'
 import { getSelfVMs, getSelfLightweightVmRegistrations, confirmSelfLightweightVmRegistration } from '@/api/user'
 import { getUserInfo } from '@/api/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -1762,6 +1768,65 @@ const handleReinstall = (row) => {
   reinstallRef.value?.open(row)
 }
 
+const handleResizeDisk = async (row) => {
+  if (isLightweight.value || isMigrating(row)) return
+  try {
+    const res = await getDiskList(row.name)
+    const disks = res.data || []
+    if (!disks.length) {
+      ElMessage.warning('未找到磁盘信息')
+      return
+    }
+    const diskOptions = disks.map(d => ({
+      label: `${d.device} (${d.capacity_gb || '未知'} GB)`,
+      value: d
+    }))
+    const selected = await ElMessageBox.confirm(
+      `<div style="max-height: 300px; overflow-y: auto;">
+        <p style="margin-bottom: 12px;">请选择要扩容的磁盘：</p>
+        <div>${diskOptions.map((d, i) => `
+          <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+            <input type="radio" name="disk-select" value="${i}" ${i === 0 ? 'checked' : ''}>
+            <span style="margin-left: 8px;">${d.label}</span>
+          </label>
+        `).join('')}</div>
+      </div>`,
+      '扩容磁盘',
+      {
+        confirmButtonText: '下一步',
+        cancelButtonText: '取消',
+        dangerouslyUseHTMLString: true
+      }
+    )
+    const diskIndex = parseInt(selected) || 0
+    const disk = disks[diskIndex]
+    const currentSize = disk.capacity_gb || 0
+    const { value: newSize } = await ElMessageBox.prompt(
+      `当前容量: ${currentSize} GB\n请输入新的容量（GB），只能扩大不能缩小:`,
+      `扩容磁盘 ${disk.device}`,
+      {
+        confirmButtonText: '扩容',
+        cancelButtonText: '取消',
+        inputValue: '',
+        inputPattern: /^\d+$/,
+        inputErrorMessage: '请输入有效的数字',
+      }
+    )
+    const newSizeNum = parseInt(newSize)
+    if (newSizeNum <= currentSize) {
+      ElMessage.warning('新容量必须大于当前容量')
+      return
+    }
+    await resizeDisk(row.name, disk.device, newSizeNum)
+    ElMessage.success(`磁盘 ${disk.device} 扩容成功`)
+    fetchData()
+  } catch (err) {
+    if (err !== 'cancel') {
+      ElMessage.error('扩容失败')
+    }
+  }
+}
+
 const handleRemarkSuccess = ({ name, remark }) => {
   const nextData = tableData.value.map(vm => (
     vm.name === name
@@ -1960,6 +2025,8 @@ const handleMore = async (command, row) => {
     await handleOperate(row, 'destroy')
   } else if (command === 'snapshot') {
     snapshotRef.value?.open(row.name, row.status)
+  } else if (command === 'resize_disk') {
+    handleResizeDisk(row)
   } else if (command === 'network') {
     networkRef.value?.open(row.name)
   } else if (command === 'reinstall') {
