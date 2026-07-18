@@ -21,7 +21,7 @@ INSTALL_DIR="/opt/kvm-console"
 SERVICE_NAME="kvm-console"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 ENV_FILE="${INSTALL_DIR}/.env"
-GITHUB_REPO="cuijianzhe/CVMConsole
+GITHUB_REPO="cuijianzhe/CVMConsole"
 GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 
 STORAGE_IMG="/var/lib/kvm-user-storage.img"
