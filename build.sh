@@ -119,7 +119,7 @@ fi
 
 echo ""
 echo -e "${CYAN}╔══════════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║         QVMConsole 构建打包脚本                  ║${NC}"
+echo -e "${CYAN}║         CVMConsole 构建打包脚本                  ║${NC}"
 echo -e "${CYAN}╠══════════════════════════════════════════════════╣${NC}"
 echo -e "${CYAN}║${NC}  版本:   ${GREEN}${BUILD_VERSION}${NC}"
 echo -e "${CYAN}║${NC}  时间:   ${GREEN}${BUILD_TIME}${NC}"
