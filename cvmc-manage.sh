@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
-# QVMConsole 管理脚本 (qvmc-manage)
-# 用于直接在服务器上管理 QVMConsole 的账户与安全设置
+# CVMConsole 管理脚本 (qvmc-manage)
+# 用于直接在服务器上管理 CVMConsole 的账户与安全设置
 # =============================================================================
 set -euo pipefail
 
@@ -55,7 +55,40 @@ load_env() {
 }
 load_env
 
-# ---- 自动检测数据库路径 ----
+# ---- 自动检测数据库类型和路径 ----
+detect_db_type() {
+    # 1. 环境变量优先
+    if [ -n "${KVM_DB_TYPE:-}" ]; then
+        echo "$KVM_DB_TYPE"
+        return
+    fi
+
+    # 2. 询问用户选择数据库类型（输出到 stderr，避免被 $(...) 捕获）
+    echo "" >&2
+    echo -e "${BOLD}========================================${NC}" >&2
+    echo -e "${BOLD}   选择数据库类型${NC}" >&2
+    echo -e "${BOLD}========================================${NC}" >&2
+    echo "" >&2
+    echo -e "  ${BOLD}${GREEN}1${NC}. SQLite (本地文件)" >&2
+    echo -e "  ${BOLD}${GREEN}2${NC}. MySQL (远端数据库)" >&2
+    echo "" >&2
+    echo -ne "${CYAN}请输入选项 [1-2]: ${NC}" >&2
+    read -r choice
+
+    case "$choice" in
+        1|sqlite|SQLite|SQLITE)
+            echo "sqlite"
+            ;;
+        2|mysql|MySQL|MYSQL)
+            echo "mysql"
+            ;;
+        *)
+            echo -e "${RED}无效选项，默认使用 SQLite${NC}" >&2
+            echo "sqlite"
+            ;;
+    esac
+}
+
 detect_db_path() {
     # 1. 环境变量优先
     if [ -n "${KVM_DB_PATH:-}" ] && [ -f "$KVM_DB_PATH" ]; then
@@ -81,7 +114,63 @@ detect_db_path() {
     echo "${PROJECT_DIR}/data/kvm_console.db"
 }
 
+DB_TYPE="$(detect_db_type)"
 DB_PATH="$(detect_db_path)"
+
+# MySQL 配置（支持从环境变量或用户输入获取）
+get_mysql_config() {
+    # 如果环境变量已配置，直接使用
+    if [ -n "${KVM_DB_HOST:-}" ] && [ -n "${KVM_DB_USERNAME:-}" ]; then
+        MYSQL_HOST="${KVM_DB_HOST:-10.100.7.115}"
+        MYSQL_PORT="${KVM_DB_PORT:-31306}"
+        MYSQL_USER="${KVM_DB_USERNAME:-root}"
+        MYSQL_PASS="${KVM_DB_PASSWORD:-EpNohDLhVnXhrWv}"
+        MYSQL_DB="${KVM_DB_DATABASE:-kvm_console}"
+        return
+    fi
+
+    # 询问用户输入 MySQL 连接信息（输出到 stderr，避免被捕获）
+    echo "" >&2
+    echo -e "${BOLD}========================================${NC}" >&2
+    echo -e "${BOLD}   MySQL 连接配置${NC}" >&2
+    echo -e "${BOLD}========================================${NC}" >&2
+    echo "" >&2
+
+    read -p "  数据库主机 (默认 localhost): " input_host
+    MYSQL_HOST="${input_host:-localhost}"
+
+    read -p "  数据库端口 (默认 3306): " input_port
+    MYSQL_PORT="${input_port:-3306}"
+
+    read -p "  数据库用户名 (默认 root): " input_user
+    MYSQL_USER="${input_user:-root}"
+
+    read -s -p "  数据库密码 (回车跳过): " input_pass
+    echo "" >&2
+    MYSQL_PASS="${input_pass:-}"
+
+    read -p "  数据库名 (默认 kvm_console): " input_db
+    MYSQL_DB="${input_db:-kvm_console}"
+
+    echo "" >&2
+    echo -e "${YELLOW}连接信息: mysql://${MYSQL_USER}@${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}${NC}" >&2
+    if [ -z "$MYSQL_PASS" ]; then
+        echo -e "${YELLOW}密码: 空${NC}" >&2
+    else
+        echo -e "${YELLOW}密码: ******${NC}" >&2
+    fi
+}
+
+# 根据数据库类型加载配置
+if [ "$DB_TYPE" = "mysql" ]; then
+    get_mysql_config
+else
+    MYSQL_HOST="${KVM_DB_HOST:-localhost}"
+    MYSQL_PORT="${KVM_DB_PORT:-3306}"
+    MYSQL_USER="${KVM_DB_USERNAME:-root}"
+    MYSQL_PASS="${KVM_DB_PASSWORD:-}"
+    MYSQL_DB="${KVM_DB_DATABASE:-kvm_console}"
+fi
 
 # ---- 默认管理员配置 ----
 ADMIN_USER="${KVM_ADMIN_USER:-admin}"
@@ -118,12 +207,18 @@ except ImportError:
     return 1
 }
 
-# 检查 sqlite3 是否可用
+# 检查依赖是否可用
 check_deps() {
     local missing=()
 
-    if ! command -v sqlite3 &>/dev/null; then
-        missing+=("sqlite3")
+    if [ "$DB_TYPE" = "mysql" ]; then
+        if ! command -v mysql &>/dev/null; then
+            missing+=("mysql-client")
+        fi
+    else
+        if ! command -v sqlite3 &>/dev/null; then
+            missing+=("sqlite3")
+        fi
     fi
     if ! command -v python3 &>/dev/null; then
         missing+=("python3")
@@ -131,21 +226,41 @@ check_deps() {
 
     if [ ${#missing[@]} -gt 0 ]; then
         echo -e "${RED}缺少必要依赖: ${missing[*]}${NC}"
-        echo -e "${YELLOW}请安装后重试。例如 (Debian/Ubuntu): sudo apt install ${missing[*]} python3-bcrypt${NC}"
+        if [ "$DB_TYPE" = "mysql" ]; then
+            echo -e "${YELLOW}请安装后重试。例如 (Debian/Ubuntu): sudo apt install ${missing[*]} python3-bcrypt${NC}"
+        else
+            echo -e "${YELLOW}请安装后重试。例如 (Debian/Ubuntu): sudo apt install ${missing[*]} python3-bcrypt${NC}"
+        fi
         exit 1
     fi
 }
 
 # 检查数据库是否可访问
 check_db() {
-    if [ ! -f "$DB_PATH" ]; then
-        echo -e "${RED}错误: 数据库文件不存在: ${DB_PATH}${NC}"
-        echo -e "${YELLOW}提示: 请确认 QVMConsole 已至少启动过一次，或设置 KVM_DB_PATH 环境变量${NC}"
-        exit 1
-    fi
-    if ! sqlite3 "$DB_PATH" "SELECT 1;" &>/dev/null; then
-        echo -e "${RED}错误: 无法读取数据库: ${DB_PATH}${NC}"
-        exit 1
+    if [ "$DB_TYPE" = "mysql" ]; then
+        # MySQL 连接测试
+        local mysql_cmd="mysql -h $MYSQL_HOST -P $MYSQL_PORT -u $MYSQL_USER"
+        if [ -n "$MYSQL_PASS" ]; then
+            mysql_cmd="$mysql_cmd -p$MYSQL_PASS"
+        fi
+        mysql_cmd="$mysql_cmd -D $MYSQL_DB -e \"SELECT 1;\""
+
+        if ! eval "$mysql_cmd" &>/dev/null; then
+            echo -e "${RED}错误: 无法连接 MySQL 数据库${NC}"
+            echo -e "${YELLOW}连接信息: host=$MYSQL_HOST port=$MYSQL_PORT db=$MYSQL_DB user=$MYSQL_USER${NC}"
+            exit 1
+        fi
+    else
+        # SQLite 文件检查
+        if [ ! -f "$DB_PATH" ]; then
+            echo -e "${RED}错误: 数据库文件不存在: ${DB_PATH}${NC}"
+            echo -e "${YELLOW}提示: 请确认 QVMConsole 已至少启动过一次，或设置 KVM_DB_PATH 环境变量${NC}"
+            exit 1
+        fi
+        if ! sqlite3 "$DB_PATH" "SELECT 1;" &>/dev/null; then
+            echo -e "${RED}错误: 无法读取数据库: ${DB_PATH}${NC}"
+            exit 1
+        fi
     fi
 }
 
@@ -153,6 +268,48 @@ check_db() {
 sqlite_escape() {
     local val="$1"
     echo "${val//\'/''}"
+}
+
+# MySQL 字符串转义（转义单引号、反斜杠等特殊字符）
+mysql_escape() {
+    local val="$1"
+    # 转义反斜杠
+    val="${val//\\/\\\\}"
+    # 转义单引号
+    val="${val//\'/\\\'}"
+    # 转义双引号
+    val="${val//\"/\\\"}"
+    echo "$val"
+}
+
+# 执行数据库查询
+db_query() {
+    local query="$1"
+    if [ "$DB_TYPE" = "mysql" ]; then
+        local mysql_cmd="mysql -h $MYSQL_HOST -P $MYSQL_PORT -u $MYSQL_USER"
+        if [ -n "$MYSQL_PASS" ]; then
+            mysql_cmd="$mysql_cmd -p$MYSQL_PASS"
+        fi
+        mysql_cmd="$mysql_cmd -D $MYSQL_DB -N -s -e \"$query\""
+        eval "$mysql_cmd"
+    else
+        sqlite3 "$DB_PATH" "$query"
+    fi
+}
+
+# 执行数据库命令（不返回结果）
+db_exec() {
+    local query="$1"
+    if [ "$DB_TYPE" = "mysql" ]; then
+        local mysql_cmd="mysql -h $MYSQL_HOST -P $MYSQL_PORT -u $MYSQL_USER"
+        if [ -n "$MYSQL_PASS" ]; then
+            mysql_cmd="$mysql_cmd -p$MYSQL_PASS"
+        fi
+        mysql_cmd="$mysql_cmd -D $MYSQL_DB -e \"$query\""
+        eval "$mysql_cmd" &>/dev/null
+    else
+        sqlite3 "$DB_PATH" "$query"
+    fi
 }
 
 # 安全确认
@@ -358,9 +515,17 @@ reset_admin_password() {
     echo -e "${BOLD}========================================${NC}"
     echo ""
 
+    # 根据数据库类型选择转义函数
+    local escape_fn
+    if [ "$DB_TYPE" = "mysql" ]; then
+        escape_fn="mysql_escape"
+    else
+        escape_fn="sqlite_escape"
+    fi
+
     local admin_exists safe_user
-    safe_user=$(sqlite_escape "$ADMIN_USER")
-    admin_exists=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM users WHERE username='$safe_user' AND deleted_at IS NULL;")
+    safe_user=$($escape_fn "$ADMIN_USER")
+    admin_exists=$(db_query "SELECT COUNT(*) FROM users WHERE username='$safe_user' AND deleted_at IS NULL;")
 
     if [ "$admin_exists" -eq 0 ]; then
         echo -e "${YELLOW}管理员账号 '${ADMIN_USER}' 不存在，将新建${NC}"
@@ -368,8 +533,8 @@ reset_admin_password() {
         echo -e "${YELLOW}管理员账号 '${ADMIN_USER}' 已存在，将重置密码并清除安全绑定${NC}"
 
         local totp_enabled email_bound
-        totp_enabled=$(sqlite3 "$DB_PATH" "SELECT totp_enabled FROM users WHERE username='$safe_user' AND deleted_at IS NULL;")
-        email_bound=$(sqlite3 "$DB_PATH" "SELECT email FROM users WHERE username='$safe_user' AND deleted_at IS NULL;")
+        totp_enabled=$(db_query "SELECT totp_enabled FROM users WHERE username='$safe_user' AND deleted_at IS NULL;")
+        email_bound=$(db_query "SELECT email FROM users WHERE username='$safe_user' AND deleted_at IS NULL;")
 
         if [ "$totp_enabled" = "1" ]; then
             echo -e "  - TOTP 令牌: ${RED}已绑定${NC} → 将被清除"
@@ -396,16 +561,24 @@ reset_admin_password() {
         return 1
     fi
     local safe_pass
-    safe_pass=$(sqlite_escape "$hashed_password")
+    safe_pass=$($escape_fn "$hashed_password")
     echo -e " ${GREEN}完成${NC}"
+
+    # 根据数据库类型选择时间函数
+    local now_func
+    if [ "$DB_TYPE" = "mysql" ]; then
+        now_func="NOW()"
+    else
+        now_func="datetime('now')"
+    fi
 
     if [ "$admin_exists" -eq 0 ]; then
         # 创建新管理员
-        sqlite3 "$DB_PATH" "INSERT INTO users (username, password_hash, role, status, cloud_type, created_at, updated_at) VALUES ('$safe_user', '$safe_pass', 'admin', 'active', 'elastic', datetime('now'), datetime('now'));"
+        db_exec "INSERT INTO users (username, password_hash, role, status, cloud_type, created_at, updated_at) VALUES ('$safe_user', '$safe_pass', 'admin', 'active', 'elastic', $now_func, $now_func);"
         echo -e "${GREEN}✓ 管理员账号 '${ADMIN_USER}' 已创建${NC}"
     else
         # 更新密码并清除安全绑定
-        sqlite3 "$DB_PATH" "UPDATE users SET password_hash='$safe_pass', totp_enabled=0, totp_secret_enc='', totp_recovery_codes_enc='', totp_bound_at=NULL, email='', email_verified_at=NULL, updated_at=datetime('now') WHERE username='$safe_user' AND deleted_at IS NULL;"
+        db_exec "UPDATE users SET password_hash='$safe_pass', totp_enabled=0, totp_secret_enc='', totp_recovery_codes_enc='', totp_bound_at=NULL, email='', email_verified_at=NULL, updated_at=$now_func WHERE username='$safe_user' AND deleted_at IS NULL;"
         echo -e "${GREEN}✓ 管理员密码已重置${NC}"
         if [ "$totp_enabled" = "1" ]; then
             echo -e "${GREEN}✓ TOTP 令牌已清除${NC}"
@@ -428,7 +601,11 @@ clear_totp() {
 
     # 查询所有启用了 TOTP 的用户
     local totp_users
-    totp_users=$(sqlite3 "$DB_PATH" -separator '|' "SELECT id, username, role, email FROM users WHERE totp_enabled=1 AND deleted_at IS NULL ORDER BY id;")
+    if [ "$DB_TYPE" = "mysql" ]; then
+        totp_users=$(db_query "SELECT CONCAT(id, '|', username, '|', role, '|', IFNULL(email, '')) FROM users WHERE totp_enabled=1 AND deleted_at IS NULL ORDER BY id;")
+    else
+        totp_users=$(sqlite3 "$DB_PATH" -separator '|' "SELECT id, username, role, email FROM users WHERE totp_enabled=1 AND deleted_at IS NULL ORDER BY id;")
+    fi
 
     if [ -z "$totp_users" ]; then
         echo -e "${GREEN}当前没有已绑定 TOTP 的用户${NC}"
@@ -471,7 +648,6 @@ clear_totp() {
     sel_id=$(echo "$selected" | cut -d'|' -f1)
     sel_username=$(echo "$selected" | cut -d'|' -f2)
     sel_role=$(echo "$selected" | cut -d'|' -f3)
-    safe_username=$(sqlite_escape "$sel_username")
 
     echo ""
     echo -e "将清除以下账户的 TOTP 令牌:"
@@ -482,7 +658,15 @@ clear_totp() {
         return
     fi
 
-    sqlite3 "$DB_PATH" "UPDATE users SET totp_enabled=0, totp_secret_enc='', totp_recovery_codes_enc='', totp_bound_at=NULL, updated_at=datetime('now') WHERE id=$sel_id AND deleted_at IS NULL;"
+    # 根据数据库类型选择时间函数
+    local now_func
+    if [ "$DB_TYPE" = "mysql" ]; then
+        now_func="NOW()"
+    else
+        now_func="datetime('now')"
+    fi
+
+    db_exec "UPDATE users SET totp_enabled=0, totp_secret_enc='', totp_recovery_codes_enc='', totp_bound_at=NULL, updated_at=$now_func WHERE id=$sel_id AND deleted_at IS NULL;"
 
     echo -e "${GREEN}✓ 账户 '${sel_username}' 的 TOTP 令牌已清除${NC}"
     press_enter
@@ -497,7 +681,11 @@ list_users() {
     echo ""
 
     local users
-    users=$(sqlite3 "$DB_PATH" -separator '|' "SELECT id, username, role, status, totp_enabled, email FROM users WHERE deleted_at IS NULL ORDER BY id;")
+    if [ "$DB_TYPE" = "mysql" ]; then
+        users=$(db_query "SELECT CONCAT(id, '|', username, '|', role, '|', status, '|', totp_enabled, '|', IFNULL(email, '')) FROM users WHERE deleted_at IS NULL ORDER BY id;")
+    else
+        users=$(sqlite3 "$DB_PATH" -separator '|' "SELECT id, username, role, status, totp_enabled, email FROM users WHERE deleted_at IS NULL ORDER BY id;")
+    fi
 
     if [ -z "$users" ]; then
         echo -e "${YELLOW}数据库中没有用户${NC}"
@@ -528,7 +716,12 @@ show_menu() {
     echo -e "${BOLD}${CYAN}╚══════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "  项目目录: ${CYAN}${PROJECT_DIR}${NC}"
-    echo -e "  数据库:   ${CYAN}${DB_PATH}${NC}"
+    echo -e "  数据库类型: ${CYAN}${DB_TYPE}${NC}"
+    if [ "$DB_TYPE" = "mysql" ]; then
+        echo -e "  数据库:   ${CYAN}mysql://${MYSQL_USER}@${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}${NC}"
+    else
+        echo -e "  数据库:   ${CYAN}${DB_PATH}${NC}"
+    fi
     echo -e "  管理员:   ${CYAN}${ADMIN_USER}${NC}"
     echo ""
     echo -e "  ${BOLD}${GREEN}1${NC}. 重置默认管理员密码 (并清除 TOTP/邮箱绑定)"
