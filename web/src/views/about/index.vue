@@ -60,10 +60,10 @@
             <span class="info-label">CPU 核数</span>
             <span class="info-value">{{ sysInfo.num_cpu || '-' }}</span>
           </div>
-          <div class="info-item">
+          <!-- <div class="info-item">
             <span class="info-label">Go 版本</span>
             <span class="info-value">{{ sysInfo.go_version || '-' }}</span>
-          </div>
+          </div> -->
           <div class="info-item">
             <span class="info-label">QEMU 版本</span>
             <span class="info-value">{{ sysInfo.qemu || '-' }}</span>

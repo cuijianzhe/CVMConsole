@@ -34,7 +34,7 @@ func GetPublicSystemInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
 		"data": gin.H{
-			"go_version":    runtime.Version(),
+			// "go_version":    runtime.Version(),
 			"os":            runtime.GOOS,
 			"distro":        getDistroName(),
 			"arch":          arch.GetHostArchDisplayName(),
