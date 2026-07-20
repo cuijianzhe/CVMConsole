@@ -115,6 +115,15 @@ func prepareLinuxNoCloudInit(params *CloneParams, cloneDisk string) error {
 		"--quiet",
 	}
 
+	if params.Password == "" {
+		args = append(args,
+			"--run-command", `for cfg in /etc/cloud/cloud.cfg /etc/cloud/cloud.cfg.d/*.cfg; do `+
+				`[ -f "$cfg" ] || continue; `+
+				`sed -i '/^\s*-\s*set_passwords/d' "$cfg"; `+
+				`done`,
+		)
+	}
+
 	// 7. 离线修改密码（通过 virt-customize --password，直接修改 /etc/shadow，无需 cloud-init）
 	// root 密码始终设置；templateUser 若不是 root 则也设置（避免对 root 重复设置导致 virt-customize 报错）
 	if params.Password != "" {
