@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"kvm_console/logger"
 	"kvm_console/model"
+	"kvm_console/service/libvirt_rpc"
 	"kvm_console/utils"
 )
 
@@ -29,6 +33,16 @@ func AttachVMInterface(vmName string, sw model.VPCSwitch, nicModel string, inter
 
 	if state == "running" {
 		// 运行中：热插网口
+		// 对于 q35/PCIe 机型，需要为热插设备分配空闲的 PCIe root port
+		liveXML, err := libvirt_rpc.GetDomainXMLRPC(vmName, 0)
+		if err == nil && hasPCIERootController(liveXML) {
+			hotplugXML, err := buildInterfaceHotplugXML(vmName, interfaceXML)
+			if err != nil {
+				return fmt.Errorf("热插网口失败: %w", err)
+			}
+			interfaceXML = hotplugXML
+		}
+
 		xmlPath := filepath.Join(os.TempDir(), fmt.Sprintf("_vm-nic-attach-%s-%d.xml", D.SafeVMXMLFileName(vmName), interfaceOrder))
 		if err := os.WriteFile(xmlPath, []byte(interfaceXML), 0600); err != nil {
 			return fmt.Errorf("写入网口 XML 失败: %w", err)
@@ -379,4 +393,78 @@ func getAllVMInterfaceMACs(vmName string) []string {
 		}
 	}
 	return macs
+}
+
+// hasPCIERootController 检查虚拟机是否使用 q35/PCIe 芯片组
+func hasPCIERootController(xmlContent string) bool {
+	return strings.Contains(xmlContent, "model='pcie-root'") ||
+		strings.Contains(xmlContent, `model="pcie-root"`)
+}
+
+// buildInterfaceHotplugXML 为热插网口添加 PCI 地址（q35/PCIe 机型）
+func buildInterfaceHotplugXML(vmName string, interfaceXML string) (string, error) {
+	infoPCIResult, err := libvirt_rpc.QemuMonitorCommandRPC(vmName, "info pci", libvirt_rpc.DomainQemuMonitorCommandHmp)
+	if err != nil {
+		return "", fmt.Errorf("获取运行中虚拟机 PCI 拓扑失败: %w", err)
+	}
+
+	freeBuses := parseFreePCIERootPortBuses(infoPCIResult)
+	if len(freeBuses) == 0 {
+		return "", fmt.Errorf("当前虚拟机没有空闲的 pcie-root-port 热插槽，请先关机后再添加网口")
+	}
+
+	freeBus := freeBuses[len(freeBuses)-1]
+	addrLine := fmt.Sprintf("      <address type='pci' domain='0x0000' bus='0x%02x' slot='0x00' function='0x0'/>", freeBus)
+	return strings.Replace(interfaceXML, "</interface>", addrLine+"\n    </interface>", 1), nil
+}
+
+// parseFreePCIERootPortBuses 解析 QEMU monitor 的 "info pci" 输出，找出空闲的 pcie-root-port 总线
+func parseFreePCIERootPortBuses(infoPCI string) []int {
+	rootPortBusRegex := regexp.MustCompile(`secondary bus (\d+)`)
+	busHeaderRegex := regexp.MustCompile(`Bus\s+(\d+),\s+device\s+\d+,\s+function\s+\d+:`)
+
+	available := make(map[int]bool)
+	used := make(map[int]bool)
+
+	lines := strings.Split(infoPCI, "\n")
+	for _, rawLine := range lines {
+		line := strings.TrimSpace(rawLine)
+		if line == "" {
+			continue
+		}
+
+		if strings.Contains(line, "PCI bridge: PCI device 1b36:000c") {
+			continue
+		}
+
+		if match := rootPortBusRegex.FindStringSubmatch(line); len(match) >= 2 {
+			bus, err := strconv.Atoi(match[1])
+			if err == nil && bus > 0 {
+				available[bus] = true
+			}
+			continue
+		}
+
+		if match := busHeaderRegex.FindStringSubmatch(line); len(match) >= 2 {
+			bus, err := strconv.Atoi(match[1])
+			if err == nil && bus > 0 {
+				used[bus] = true
+			}
+		}
+	}
+
+	for bus := range used {
+		delete(available, bus)
+	}
+
+	if len(available) == 0 {
+		return nil
+	}
+
+	result := make([]int, 0, len(available))
+	for bus := range available {
+		result = append(result, bus)
+	}
+	sort.Ints(result)
+	return result
 }
