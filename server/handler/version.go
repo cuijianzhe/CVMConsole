@@ -215,7 +215,7 @@ type ovsDependencyInfo struct {
 func getOVSDependencyInfo() ovsDependencyInfo {
 	info := ovsDependencyInfo{
 		PackageName: "openvswitch-switch",
-		ServiceName: ovs.DetectOpenvswitchServiceName(),
+		ServiceName: detectOVSServiceName(),
 	}
 	// 检查 ovs-vsctl 是否已安装
 	if _, err := exec.LookPath("ovs-vsctl"); err == nil {
@@ -237,6 +237,19 @@ func getOVSDependencyInfo() ovsDependencyInfo {
 		info.InstallCommand = "# 请根据系统包管理器手动安装 OVS"
 	}
 	return info
+}
+
+// detectOVSServiceName 检测 OVS 服务名称
+func detectOVSServiceName() string {
+	pkgMgr := detectPackageManager()
+	switch pkgMgr {
+	case "apt":
+		return "openvswitch-switch"
+	case "dnf", "yum":
+		return "openvswitch"
+	default:
+		return "openvswitch-switch"
+	}
 }
 
 // ── 系统信息辅助函数 ──
