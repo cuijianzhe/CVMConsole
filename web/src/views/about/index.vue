@@ -98,8 +98,6 @@ const isDev = import.meta.env.DEV
 const versionInfo = ref({ version: '', build_time: '', site_title: '' })
 const sysInfo = ref({})
 const sysLoading = ref(false)
-const currentYear = new Date().getFullYear()
-
 const fetchVersion = async () => {
   try {
     const res = await getPublicVersion()
@@ -261,10 +259,6 @@ onMounted(() => {
 
 /* 响应式 */
 @media (max-width: 768px) {
-  .tech-grid {
-    grid-template-columns: 1fr;
-  }
-
   .info-grid {
     grid-template-columns: 1fr;
   }
