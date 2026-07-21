@@ -99,9 +99,9 @@ func importVMLinuxDefine(params *ImportVMParams, destDiskPath, format string, ra
 	}
 	appliedBootType := ""
 	if needUEFI {
-		bootType := normalizedBootType
-		if bootType == "" {
-			bootType = vm_xml.VMBootTypeUEFI
+		bootType := vm_xml.VMBootTypeUEFI
+		if normalizedBootType == vm_xml.VMBootTypeUEFISecure {
+			bootType = vm_xml.VMBootTypeUEFISecure
 		}
 		vmXML, err = vm_xml.ApplyVMBootTypeToDomainXML(params.Name, vmXML, bootType)
 		if err != nil {
@@ -248,9 +248,9 @@ func importDiskByPathLinuxDefine(params *ImportDiskByPathParams, destDiskPath, f
 	}
 	appliedBootType := ""
 	if needUEFI {
-		bootType := normalizedBootType
-		if bootType == "" {
-			bootType = vm_xml.VMBootTypeUEFI
+		bootType := vm_xml.VMBootTypeUEFI
+		if normalizedBootType == vm_xml.VMBootTypeUEFISecure {
+			bootType = vm_xml.VMBootTypeUEFISecure
 		}
 		vmXML, err = vm_xml.ApplyVMBootTypeToDomainXML(params.Name, vmXML, bootType)
 		if err != nil {

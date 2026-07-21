@@ -195,8 +195,8 @@ func ImportDiskByPath(ctx context.Context, params *ImportDiskByPathParams, progr
 		needUEFI = true
 	} else if params.BootType == "" || params.BootType == "bios" {
 		efiCheck := utils.ExecShell(fmt.Sprintf(
-			"virt-filesystems -a '%s' --filesystems --long 2>/dev/null | head -5 | grep -q 'vfat' && echo 'uefi'",
-			destDiskPath))
+			"virt-filesystems -a %s --filesystems --long 2>/dev/null | awk 'tolower($0) ~ /(^|[[:space:]])vfat([[:space:]]|$)|efi/ {found=1} END {if (found) print \"uefi\"; else print \"bios\"}'",
+			utils.ShellSingleQuote(destDiskPath)))
 		if efiCheck.Error == nil && strings.TrimSpace(efiCheck.Stdout) == "uefi" {
 			needUEFI = true
 		}
