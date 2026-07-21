@@ -53,6 +53,7 @@
                   <div class="node-identity">
                     <div class="node-name">{{ node.admin_name || node.name }}</div>
                     <div class="node-file">{{ node.name }}.qcow2</div>
+                    <div v-if="node.created_at" class="node-created">{{ formatDateTime(node.created_at) }}</div>
                   </div>
                   <span class="os-tag" :class="osTypeClass(node.type)">{{ templateTypeLabel(node.type) }}</span>
                   <span v-if="templateCategoryLabel(node.type, node.category)" class="tag tag-default">
@@ -1044,6 +1045,13 @@ const handleDelete = async () => {
   }
 }
 
+const formatDateTime = (value) => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleString()
+}
+
 onMounted(fetchData)
 </script>
 
@@ -1254,6 +1262,14 @@ onMounted(fetchData)
   text-overflow: ellipsis;
 }
 
+.node-created {
+  font-size: 11px;
+  color: #bbb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .tag {
   display: inline-flex;
   align-items: center;
@@ -1425,6 +1441,7 @@ html.dark .toggle-btn:hover {
 
 html.dark .node-name { color: var(--el-text-color-primary); }
 html.dark .node-file { color: var(--el-text-color-placeholder); }
+html.dark .node-created { color: var(--el-text-color-secondary); }
 
 html.dark .tag-success { background: rgba(82, 196, 26, 0.15); color: #73d13d; border-color: rgba(82, 196, 26, 0.25); }
 html.dark .tag-info    { background: rgba(24, 144, 255, 0.15); color: #69c0ff; border-color: rgba(24, 144, 255, 0.25); }
