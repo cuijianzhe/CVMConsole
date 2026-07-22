@@ -61,16 +61,16 @@ const (
 	TaskTypeMakeVMIndependent               = "make_vm_independent"                // 链式克隆虚拟机转为独立虚拟机
 )
 
-// Task 异步任务模型（纯内存存储，不持久化）
+// Task 异步任务模型
 type Task struct {
-	ID        uint      `json:"id"`
-	Type      string    `json:"type"`       // 任务类型
-	Status    string    `json:"status"`     // 任务状态
-	Params    string    `json:"params"`     // 任务参数（JSON）
-	Result    string    `json:"result"`     // 执行结果（JSON）
-	Progress  int       `json:"progress"`   // 进度（0-100）
-	Message   string    `json:"message"`    // 状态消息
-	CreatedBy string    `json:"created_by"` // 创建人
-	CreatedAt time.Time `json:"created_at"`
+	ID        uint      `json:"id" gorm:"primaryKey"`
+	Type      string    `json:"type" gorm:"type:varchar(50);index"`        // 任务类型
+	Status    string    `json:"status" gorm:"type:varchar(20);index"`      // 任务状态
+	Params    string    `json:"params" gorm:"type:text"`                   // 任务参数（JSON）
+	Result    string    `json:"result" gorm:"type:text"`                   // 执行结果（JSON）
+	Progress  int       `json:"progress" gorm:"default:0"`                 // 进度（0-100）
+	Message   string    `json:"message" gorm:"type:varchar(500)"`          // 状态消息
+	CreatedBy string    `json:"created_by" gorm:"type:varchar(100);index"` // 创建人
+	CreatedAt time.Time `json:"created_at" gorm:"index"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

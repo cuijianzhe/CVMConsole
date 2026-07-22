@@ -38,33 +38,114 @@ type TaskEvent struct {
 	Message  string `json:"message"`  // 状态消息
 }
 
-// ===================== 内存任务存储 =====================
+// ===================== 任务存储（内存缓存 + 数据库持久化） =====================
 
 var (
-	taskStore    = make(map[uint]*model.Task)        // 任务存储（内存）
+	taskStore    = make(map[uint]*model.Task)        // 任务缓存（内存）
 	taskCancelFn = make(map[uint]context.CancelFunc) // 运行中任务的取消函数
 	taskStoreMu  sync.RWMutex
-	taskIDSeq    uint64 // 自增 ID 序列
+	taskIDSeq    uint64 // 自增 ID 序列（从数据库最大值开始）
 )
+
+// initTaskIDSeq 从数据库初始化任务 ID 序列
+func initTaskIDSeq() {
+	var maxID uint
+	if err := model.DB.Model(&model.Task{}).Select("MAX(id)").Scan(&maxID).Error; err != nil {
+		logger.App.Warn("初始化任务ID序列失败，从1开始", "error", err)
+		maxID = 0
+	}
+	taskIDSeq = uint64(maxID)
+}
 
 // nextTaskID 生成下一个任务 ID
 func nextTaskID() uint {
 	return uint(atomic.AddUint64(&taskIDSeq, 1))
 }
 
-// storeTask 存储任务
+// storeTask 存储任务（缓存 + 数据库）
 func storeTask(task *model.Task) {
 	taskStoreMu.Lock()
 	defer taskStoreMu.Unlock()
 	taskStore[task.ID] = task
+
+	if err := model.DB.Create(task).Error; err != nil {
+		logger.App.Error("存储任务到数据库失败", "error", err)
+	}
 }
 
-// getTask 获取任务
+// getTask 获取任务（优先从缓存）
 func getTask(id uint) (*model.Task, bool) {
 	taskStoreMu.RLock()
 	defer taskStoreMu.RUnlock()
 	task, ok := taskStore[id]
-	return task, ok
+	if ok {
+		return task, true
+	}
+
+	var dbTask model.Task
+	if err := model.DB.First(&dbTask, id).Error; err != nil {
+		return nil, false
+	}
+
+	taskStore[id] = &dbTask
+	return &dbTask, true
+}
+
+// updateTask 更新任务字段（缓存 + 数据库）
+func updateTask(id uint, updater func(task *model.Task)) {
+	taskStoreMu.Lock()
+	defer taskStoreMu.Unlock()
+
+	task, ok := taskStore[id]
+	if !ok {
+		var dbTask model.Task
+		if err := model.DB.First(&dbTask, id).Error; err != nil {
+			logger.App.Error("更新任务时从数据库获取失败", "error", err)
+			return
+		}
+		task = &dbTask
+		taskStore[id] = task
+	}
+
+	updater(task)
+	task.UpdatedAt = time.Now()
+
+	if err := model.DB.Save(task).Error; err != nil {
+		logger.App.Error("更新任务到数据库失败", "error", err)
+	}
+}
+
+// deleteTask 删除任务（缓存 + 数据库）
+func deleteTask(id uint) {
+	taskStoreMu.Lock()
+	defer taskStoreMu.Unlock()
+
+	if err := model.DB.Delete(&model.Task{}, id).Error; err != nil {
+		logger.App.Error("删除任务从数据库失败", "error", err)
+	}
+
+	delete(taskStore, id)
+}
+
+// loadTasksFromDB 从数据库加载任务到缓存
+func loadTasksFromDB() {
+	taskStoreMu.Lock()
+	defer taskStoreMu.Unlock()
+
+	var tasks []model.Task
+	if err := model.DB.Find(&tasks).Error; err != nil {
+		logger.App.Error("从数据库加载任务失败", "error", err)
+		return
+	}
+
+	for i := range tasks {
+		taskStore[tasks[i].ID] = &tasks[i]
+		if uint64(tasks[i].ID) > taskIDSeq {
+			taskIDSeq = uint64(tasks[i].ID)
+		}
+	}
+
+	logger.App.Info("已从数据库加载任务", "count", len(tasks))
 }
 
 // HasActiveTask 判断是否存在等待中或运行中的指定类型任务。
@@ -83,23 +164,6 @@ func HasActiveTask(taskType string, match func(params string) bool) bool {
 		}
 	}
 	return false
-}
-
-// updateTask 更新任务字段
-func updateTask(id uint, updater func(task *model.Task)) {
-	taskStoreMu.Lock()
-	defer taskStoreMu.Unlock()
-	if task, ok := taskStore[id]; ok {
-		updater(task)
-		task.UpdatedAt = time.Now()
-	}
-}
-
-// deleteTask 删除任务
-func deleteTask(id uint) {
-	taskStoreMu.Lock()
-	defer taskStoreMu.Unlock()
-	delete(taskStore, id)
 }
 
 // storeCancelFn 存储取消函数
@@ -148,7 +212,6 @@ func broadcastEvent(event TaskEvent) {
 		select {
 		case ch <- event:
 		default:
-			// 客户端缓冲区满，跳过
 		}
 	}
 }
@@ -172,10 +235,13 @@ var taskChan = make(chan uint, 100)
 
 // Start 启动任务队列消费者和自动清理
 func Start(workerCount int) {
+	initTaskIDSeq()
+	loadTasksFromDB()
+
 	for i := 0; i < workerCount; i++ {
 		go worker(i)
 	}
-	// 启动 24 小时自动清理协程
+
 	go autoCleanup()
 	logger.App.Info("任务队列已启动", "workers", workerCount)
 }
@@ -192,10 +258,8 @@ func Submit(taskType, params, createdBy string) (*model.Task, error) {
 		UpdatedAt: time.Now(),
 	}
 
-	// 存入内存
 	storeTask(task)
 
-	// 广播新任务事件
 	broadcastEvent(TaskEvent{
 		TaskID:   task.ID,
 		Type:     task.Type,
@@ -204,7 +268,6 @@ func Submit(taskType, params, createdBy string) (*model.Task, error) {
 		Message:  "任务已提交",
 	})
 
-	// 发送到任务通道
 	taskChan <- task.ID
 	logger.App.Info("任务已提交", "id", task.ID, "type", taskType)
 	return task, nil
@@ -234,13 +297,11 @@ func processTask(workerID int, taskID uint) {
 		return
 	}
 
-	// 检查是否已取消
 	if task.Status == model.TaskStatusCanceled {
 		logger.App.Info("任务已取消跳过", "worker", workerID, "id", taskID)
 		return
 	}
 
-	// 创建可取消的 context
 	ctx, cancel := context.WithCancel(context.Background())
 	storeCancelFn(taskID, cancel)
 	defer func() {
@@ -248,7 +309,6 @@ func processTask(workerID int, taskID uint) {
 		removeCancelFn(taskID)
 	}()
 
-	// 更新状态为运行中
 	updateTask(taskID, func(t *model.Task) {
 		t.Status = model.TaskStatusRunning
 		t.Message = "任务开始执行"
@@ -264,7 +324,6 @@ func processTask(workerID int, taskID uint) {
 
 	logger.App.Info("开始执行任务", "worker", workerID, "id", taskID, "type", task.Type)
 
-	// 查找处理器
 	handlersMu.RLock()
 	handler, exists := handlers[task.Type]
 	handlersMu.RUnlock()
@@ -285,7 +344,6 @@ func processTask(workerID int, taskID uint) {
 		return
 	}
 
-	// 进度回调（同时更新内存和广播 SSE，并检查取消状态）
 	progressFn := func(progress int, message string) {
 		updateTask(taskID, func(t *model.Task) {
 			t.Progress = progress
@@ -300,12 +358,10 @@ func processTask(workerID int, taskID uint) {
 		})
 	}
 
-	// 执行任务
 	startTime := time.Now()
 	result, err := handler(ctx, task, progressFn)
 	duration := time.Since(startTime)
 
-	// 判断是否是取消导致的错误
 	if err != nil && (err == ErrTaskCanceled || ctx.Err() == context.Canceled) {
 		updateTask(taskID, func(t *model.Task) {
 			t.Status = model.TaskStatusCanceled
@@ -394,7 +450,12 @@ func GetTaskForUser(taskID uint, username, role string) (*model.Task, error) {
 
 	task, ok := taskStore[taskID]
 	if !ok {
-		return nil, ErrTaskNotFound
+		var dbTask model.Task
+		if err := model.DB.First(&dbTask, taskID).Error; err != nil {
+			return nil, ErrTaskNotFound
+		}
+		task = &dbTask
+		taskStore[taskID] = task
 	}
 	if !canAccessTask(task, username, role) {
 		return nil, ErrTaskAccessDenied
@@ -407,7 +468,6 @@ func GetTaskListFilteredForUser(page, pageSize int, status, taskType, username, 
 	taskStoreMu.RLock()
 	defer taskStoreMu.RUnlock()
 
-	// 筛选
 	var filtered []*model.Task
 	for _, task := range taskStore {
 		if !canAccessTask(task, username, role) {
@@ -422,14 +482,12 @@ func GetTaskListFilteredForUser(page, pageSize int, status, taskType, username, 
 		filtered = append(filtered, task)
 	}
 
-	// 按创建时间倒序排列
 	sort.Slice(filtered, func(i, j int) bool {
 		return filtered[i].CreatedAt.After(filtered[j].CreatedAt)
 	})
 
 	total := int64(len(filtered))
 
-	// 分页
 	offset := (page - 1) * pageSize
 	if offset >= len(filtered) {
 		return []model.Task{}, total, nil
@@ -439,7 +497,6 @@ func GetTaskListFilteredForUser(page, pageSize int, status, taskType, username, 
 		end = len(filtered)
 	}
 
-	// 返回副本，避免外部修改
 	result := make([]model.Task, 0, end-offset)
 	for _, t := range filtered[offset:end] {
 		result = append(result, *t)
@@ -462,7 +519,12 @@ func CancelTaskForUser(taskID uint, username, role string) error {
 
 	task, ok := taskStore[taskID]
 	if !ok {
-		return ErrTaskNotFound
+		var dbTask model.Task
+		if err := model.DB.First(&dbTask, taskID).Error; err != nil {
+			return ErrTaskNotFound
+		}
+		task = &dbTask
+		taskStore[taskID] = task
 	}
 	if !canAccessTask(task, username, role) {
 		return ErrTaskAccessDenied
@@ -470,20 +532,22 @@ func CancelTaskForUser(taskID uint, username, role string) error {
 
 	switch task.Status {
 	case model.TaskStatusPending:
-		// 等待中的任务：直接标记取消
 		task.Status = model.TaskStatusCanceled
 		task.Message = "任务已取消"
 		task.UpdatedAt = time.Now()
+		if err := model.DB.Save(task).Error; err != nil {
+			logger.App.Error("取消任务更新数据库失败", "error", err)
+		}
 
 	case model.TaskStatusRunning:
-		// 运行中的任务：触发 context 取消信号
 		if cancelFn, exists := taskCancelFn[taskID]; exists {
 			cancelFn()
 		}
-		// 状态会在 processTask 中检测到取消后更新
-		// 先标记消息让前端即时看到
 		task.Message = "正在取消任务..."
 		task.UpdatedAt = time.Now()
+		if err := model.DB.Save(task).Error; err != nil {
+			logger.App.Error("取消任务更新数据库失败", "error", err)
+		}
 
 	default:
 		return fmt.Errorf("任务已结束，无法取消（当前状态: %s）", task.Status)
@@ -518,6 +582,9 @@ func ClearFinishedTasksForUser(username, role string) (int64, error) {
 		if task.Status == model.TaskStatusSuccess ||
 			task.Status == model.TaskStatusFailed ||
 			task.Status == model.TaskStatusCanceled {
+			if err := model.DB.Delete(&model.Task{}, id).Error; err != nil {
+				logger.App.Error("清理任务从数据库失败", "error", err)
+			}
 			delete(taskStore, id)
 			count++
 		}
@@ -546,10 +613,12 @@ func cleanupExpiredTasks() {
 	cutoff := time.Now().Add(-24 * time.Hour)
 	count := 0
 	for id, task := range taskStore {
-		// 只清理已结束的任务（不清理正在运行或等待中的）
 		if task.CreatedAt.Before(cutoff) &&
 			task.Status != model.TaskStatusPending &&
 			task.Status != model.TaskStatusRunning {
+			if err := model.DB.Delete(&model.Task{}, id).Error; err != nil {
+				logger.App.Error("清理过期任务从数据库失败", "error", err)
+			}
 			delete(taskStore, id)
 			count++
 		}
