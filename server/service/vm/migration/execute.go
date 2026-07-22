@@ -119,7 +119,7 @@ func executeColdMigration(ctx context.Context, node model.HostNode, preview *VMM
 		if _, err := service.RemoteSSHCommand(ctx, node, "test ! -e "+utils.ShellSingleQuote(disk.TargetPath), 30*time.Second); err != nil {
 			return fmt.Errorf("目标磁盘已存在或无法访问: %s", disk.TargetPath)
 		}
-		if err := service.RemoteRsyncFile(ctx, node, disk.SourcePath, disk.TargetPath, 6*time.Hour); err != nil {
+		if err := service.RemoteRsyncFileWithoutTimeout(ctx, node, disk.SourcePath, disk.TargetPath); err != nil {
 			return fmt.Errorf("复制磁盘 %s 失败: %w", disk.SourcePath, err)
 		}
 		_, _ = service.RemoteSSHCommand(ctx, node, "chown libvirt-qemu:kvm "+utils.ShellSingleQuote(disk.TargetPath)+" || true", 30*time.Second)
@@ -199,7 +199,7 @@ func executeLiveMigration(ctx context.Context, node model.HostNode, preview *VMM
 		utils.ShellSingleQuote("tcp://"+migrateHost),
 		utils.ShellSingleQuote(preview.VMName),
 		utils.ShellSingleQuote(sshURI))
-	result := utils.ExecShellContextWithTimeout(ctx, cmd, 6*time.Hour)
+	result := utils.ExecShellContext(ctx, cmd)
 	if result.Error != nil {
 		return fmt.Errorf("热迁移失败: %s", firstNonEmpty(result.Stderr, result.Error.Error()))
 	}

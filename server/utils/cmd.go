@@ -78,11 +78,18 @@ func ExecCommandContextWithTimeout(ctx context.Context, name string, timeout tim
 		}
 	}
 
-	// 超时控制
+	// 超时控制。timeout 小于等于 0 时仅响应上下文取消，不自动终止命令。
 	done := make(chan error, 1)
 	go func() {
 		done <- cmd.Wait()
 	}()
+	var timeoutCh <-chan time.Time
+	var timer *time.Timer
+	if timeout > 0 {
+		timer = time.NewTimer(timeout)
+		defer timer.Stop()
+		timeoutCh = timer.C
+	}
 
 	select {
 	case err := <-done:
@@ -104,7 +111,7 @@ func ExecCommandContextWithTimeout(ctx context.Context, name string, timeout tim
 		}
 		return result
 
-	case <-time.After(timeout):
+	case <-timeoutCh:
 		killProcessTree(cmd)
 		select {
 		case <-done:
@@ -145,6 +152,11 @@ func ExecShell(command string) *CmdResult {
 // ExecShellWithTimeout 执行 Shell 命令（带超时）
 func ExecShellWithTimeout(command string, timeout time.Duration) *CmdResult {
 	return ExecCommandWithTimeout("bash", timeout, "-c", command)
+}
+
+// ExecShellContext 执行 Shell 命令，仅响应上下文取消，不设置自动超时。
+func ExecShellContext(ctx context.Context, command string) *CmdResult {
+	return ExecCommandContextWithTimeout(ctx, "bash", 0, "-c", command)
 }
 
 // ExecShellContextWithTimeout 执行 Shell 命令（支持取消和超时）

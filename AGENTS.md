@@ -22,3 +22,4 @@
 22. 所有输入密码的地方必须要接入密码泄露检测的函数
 23. 涉及架构专属等特殊场景的功能，前端应当只有在对应架构上再显示此功能
 24. 新增功能字段时，如果前端高级设置表单同时存在于编辑模式的选项卡和创建模式的步骤引导中，需要**两个位置都添加**（编辑模式在 VmForm.vue 的 `<el-tab-pane name="advanced">` 内，创建模式在 `createStep === 'advanced'` 的 step-pane 内）。后端同理：ISO 创建路径（CreateVmRequest → CreateVMParams → CreateVM）和模板克隆路径（CloneVmRequest/BatchCloneRequest → CloneParams/BatchCloneParams → CloneVM/defineAndStartNonWindowsClone/cloneWindows）是独立链路，需要**同步补齐字段**和 XML 注入。
+25. 本项目没有测试代码。不需要写测试代码 代码写完之后直接告诉我即可，我自己去测试。
