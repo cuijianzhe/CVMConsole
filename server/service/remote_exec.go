@@ -114,6 +114,11 @@ func RemoteRsyncFile(ctx context.Context, node model.HostNode, sourcePath, targe
 	return nil
 }
 
+// RemoteRsyncFileWithoutTimeout 复制远程文件，仅响应上下文取消，不设置自动超时。
+func RemoteRsyncFileWithoutTimeout(ctx context.Context, node model.HostNode, sourcePath, targetPath string) error {
+	return RemoteRsyncFile(ctx, node, sourcePath, targetPath, 0)
+}
+
 func WriteRemoteFile(ctx context.Context, node model.HostNode, content, targetPath string, timeout time.Duration) error {
 	tmp, err := os.CreateTemp("", "kvm-migration-*")
 	if err != nil {

@@ -363,7 +363,7 @@ func executeLiveVMDiskMigration(ctx context.Context, plan *vmDiskMigrationPlan, 
 		cmdParts = append(cmdParts, "--reuse-external")
 	}
 	cmd := strings.Join(cmdParts, " ")
-	result := utils.ExecShellContextWithTimeout(ctx, cmd, 8*time.Hour)
+	result := utils.ExecShellContext(ctx, cmd)
 	if result.Error != nil {
 		_ = abortLiveDiskBlockJob(plan)
 		_ = os.Remove(plan.TargetPath)
@@ -401,7 +401,7 @@ func prepareLiveShallowDiskTarget(ctx context.Context, plan *vmDiskMigrationPlan
 		" -b " + utils.ShellSingleQuote(plan.BackingPath) +
 		" " + utils.ShellSingleQuote(plan.TargetPath) +
 		" " + strconv.FormatInt(plan.VirtualSize, 10)
-	result := utils.ExecShellContextWithTimeout(ctx, cmd, 10*time.Minute)
+	result := utils.ExecShellContext(ctx, cmd)
 	if result.Error != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -426,7 +426,7 @@ func executeColdVMDiskMigration(ctx context.Context, plan *vmDiskMigrationPlan, 
 
 	if plan.BackingPath != "" {
 		progress(62, "正在修正链式硬盘 backing 路径...")
-		if err := rebaseDiskBackingUnsafe(plan); err != nil {
+		if err := rebaseDiskBackingUnsafe(ctx, plan); err != nil {
 			_ = os.Remove(plan.TargetPath)
 			return err
 		}
@@ -472,7 +472,7 @@ func CopyDiskFileSparse(ctx context.Context, sourcePath, targetPath string) erro
 	}
 	cmd := "cp --sparse=always --reflink=auto --preserve=mode,ownership,timestamps " +
 		utils.ShellSingleQuote(sourcePath) + " " + utils.ShellSingleQuote(targetPath)
-	result := utils.ExecShellContextWithTimeout(ctx, cmd, 8*time.Hour)
+	result := utils.ExecShellContext(ctx, cmd)
 	if result.Error != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -482,7 +482,7 @@ func CopyDiskFileSparse(ctx context.Context, sourcePath, targetPath string) erro
 	return nil
 }
 
-func rebaseDiskBackingUnsafe(plan *vmDiskMigrationPlan) error {
+func rebaseDiskBackingUnsafe(ctx context.Context, plan *vmDiskMigrationPlan) error {
 	if strings.TrimSpace(plan.BackingPath) == "" {
 		return nil
 	}
@@ -494,7 +494,7 @@ func rebaseDiskBackingUnsafe(plan *vmDiskMigrationPlan) error {
 		" -F " + utils.ShellSingleQuote(backingFormat) +
 		" -b " + utils.ShellSingleQuote(plan.BackingPath) +
 		" " + utils.ShellSingleQuote(plan.TargetPath)
-	result := utils.ExecShellContextWithTimeout(context.Background(), cmd, 10*time.Minute)
+	result := utils.ExecShellContext(ctx, cmd)
 	if result.Error != nil {
 		return fmt.Errorf("修正 backing 路径失败: %s", D.FirstNonEmpty(result.Stderr, result.Error.Error()))
 	}
