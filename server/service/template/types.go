@@ -38,6 +38,8 @@ var (
 		defaultLinuxTemplateCategory,
 		"Debian",
 		"CentOS",
+		"UOS",
+		"Kylin",
 	}
 
 	windowsTemplateCategories = []string{
@@ -52,6 +54,12 @@ var (
 	openwrtTemplateCategories = []string{
 		defaultOpenWrtTemplateCategory,
 		"iStoreOS",
+	}
+
+	otherTemplateCategories = []string{
+		"FnOS",
+		"OpenWrt",
+		"其它",
 	}
 )
 

@@ -167,9 +167,9 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 	params.DiskSize = resolvedDiskSize
 
 	isWindows := tplType == "windows"
-	isFnOS := tplType == "fnos"
-	isOther := tplType == "other"
-	isOpenWrt := tplType == "openwrt"
+	isFnOS := tplType == "fnos" || (tplType == "other" && strings.EqualFold(params.TemplateCategory, "FnOS"))
+	isOther := tplType == "other" && !strings.EqualFold(params.TemplateCategory, "FnOS") && !strings.EqualFold(params.TemplateCategory, "OpenWrt")
+	isOpenWrt := tplType == "openwrt" || (tplType == "other" && strings.EqualFold(params.TemplateCategory, "OpenWrt"))
 	isNoInit := (meta != nil && strings.ToLower(strings.TrimSpace(meta.CloudInitMode)) == "none") || params.DisableSystemInit
 
 	// 克隆前存储空间预检查
@@ -181,7 +181,7 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 	templateFormat := detectTemplateDiskFormat(templatePath)
 
 	if isOther {
-		// ===== Other 类型：直接复制模板磁盘，不做任何初始化 =====
+		// ===== Other 类型（纯 Other 分类）：直接复制模板磁盘，不做任何初始化 =====
 		progressFn(10, "复制模板磁盘（完整复制）...")
 		result := utils.ExecCommandLongRunning("cp", "--sparse=always", templatePath, cloneDisk)
 		if result.Error != nil {

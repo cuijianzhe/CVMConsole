@@ -125,7 +125,7 @@ func normalizeTemplateCategory(templateType, category string) string {
 
 func normalizeTemplateCategoryForName(templateType, category, templateName string) string {
 	normalizedType := normalizeTemplateType(templateType)
-	if normalizedType != "linux" && normalizedType != "windows" && normalizedType != "openwrt" {
+	if normalizedType != "linux" && normalizedType != "windows" && normalizedType != "other" {
 		return ""
 	}
 	category = strings.TrimSpace(category)
@@ -133,8 +133,8 @@ func normalizeTemplateCategoryForName(templateType, category, templateName strin
 		if normalizedType == "windows" {
 			return detectWindowsTemplateCategoryFromName(templateName)
 		}
-		if normalizedType == "openwrt" {
-			return detectOpenWrtTemplateCategoryFromName(templateName)
+		if normalizedType == "other" {
+			return "其它"
 		}
 		return defaultLinuxTemplateCategory
 	}
@@ -144,9 +144,9 @@ func normalizeTemplateCategoryForName(templateType, category, templateName strin
 	case "windows":
 		allowedCategories = windowsTemplateCategories
 		defaultCategory = detectWindowsTemplateCategoryFromName(templateName)
-	case "openwrt":
-		allowedCategories = openwrtTemplateCategories
-		defaultCategory = detectOpenWrtTemplateCategoryFromName(templateName)
+	case "other":
+		allowedCategories = otherTemplateCategories
+		defaultCategory = "其它"
 	default:
 		allowedCategories = linuxTemplateCategories
 		defaultCategory = defaultLinuxTemplateCategory

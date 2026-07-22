@@ -1,11 +1,13 @@
 export const DEFAULT_LINUX_TEMPLATE_CATEGORY = 'Ubuntu'
 export const DEFAULT_WINDOWS_TEMPLATE_CATEGORY = 'WindowsServer2022'
-export const DEFAULT_OPENWRT_TEMPLATE_CATEGORY = 'OpenWrt'
+export const DEFAULT_OTHER_TEMPLATE_CATEGORY = 'FnOS'
 
 export const LINUX_TEMPLATE_CATEGORY_OPTIONS = [
   'Ubuntu',
   'Debian',
   'CentOS',
+  'UOS',
+  'Kylin',
 ]
 
 export const WINDOWS_TEMPLATE_CATEGORY_OPTIONS = [
@@ -17,22 +19,22 @@ export const WINDOWS_TEMPLATE_CATEGORY_OPTIONS = [
   '其它',
 ]
 
-export const OPENWRT_TEMPLATE_CATEGORY_OPTIONS = [
+export const OTHER_TEMPLATE_CATEGORY_OPTIONS = [
+  'FnOS',
   'OpenWrt',
-  'iStoreOS',
+  '其它',
 ]
 
 export const normalizeTemplateType = (type) => (type || '').toString().trim().toLowerCase()
 
 export const templateTypeLabel = (type) => ({
   windows: 'Windows',
-  fnos: 'FnOS',
-  openwrt: 'OpenWrt',
+  other: 'Other',
 }[normalizeTemplateType(type)] || 'Linux')
 
 export const normalizeTemplateCategory = (type, category) => {
   const normalizedType = normalizeTemplateType(type)
-  if (normalizedType !== 'linux' && normalizedType !== 'windows' && normalizedType !== 'openwrt') {
+  if (normalizedType !== 'linux' && normalizedType !== 'windows' && normalizedType !== 'other') {
     return ''
   }
   const normalized = (category || '').toString().trim()
@@ -40,9 +42,9 @@ export const normalizeTemplateCategory = (type, category) => {
   if (normalizedType === 'windows') {
     options = WINDOWS_TEMPLATE_CATEGORY_OPTIONS
     defaultCategory = DEFAULT_WINDOWS_TEMPLATE_CATEGORY
-  } else if (normalizedType === 'openwrt') {
-    options = OPENWRT_TEMPLATE_CATEGORY_OPTIONS
-    defaultCategory = DEFAULT_OPENWRT_TEMPLATE_CATEGORY
+  } else if (normalizedType === 'other') {
+    options = OTHER_TEMPLATE_CATEGORY_OPTIONS
+    defaultCategory = DEFAULT_OTHER_TEMPLATE_CATEGORY
   } else {
     options = LINUX_TEMPLATE_CATEGORY_OPTIONS
     defaultCategory = DEFAULT_LINUX_TEMPLATE_CATEGORY
@@ -56,7 +58,7 @@ export const normalizeTemplateCategory = (type, category) => {
 
 export const templateCategoryLabel = (type, category) => {
   const normalizedType = normalizeTemplateType(type)
-  if (normalizedType !== 'linux' && normalizedType !== 'windows' && normalizedType !== 'openwrt') {
+  if (normalizedType !== 'linux' && normalizedType !== 'windows' && normalizedType !== 'other') {
     return ''
   }
   return normalizeTemplateCategory(normalizedType, category)

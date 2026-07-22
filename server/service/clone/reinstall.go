@@ -146,7 +146,9 @@ func ReinstallVM(ctx context.Context, params *ReinstallParams, progressFn func(i
 	}
 	cloneParams.DiskSize = resolvedDiskSize
 
-	requireCredentials := cloneParams.TemplateType == "linux" || cloneParams.TemplateType == "windows" || cloneParams.TemplateType == "fnos"
+	isFnOS := cloneParams.TemplateType == "fnos" || (cloneParams.TemplateType == "other" && strings.EqualFold(cloneParams.TemplateCategory, "FnOS"))
+	isOpenWrt := cloneParams.TemplateType == "openwrt" || (cloneParams.TemplateType == "other" && strings.EqualFold(cloneParams.TemplateCategory, "OpenWrt"))
+	requireCredentials := cloneParams.TemplateType == "linux" || cloneParams.TemplateType == "windows" || isFnOS
 	if err := ValidateCloneCredentialsForTemplate(cloneParams.TemplateType, cloneParams.Hostname, cloneParams.User, cloneParams.Password, requireCredentials); err != nil {
 		return err
 	}
@@ -227,17 +229,21 @@ func ReinstallVM(ctx context.Context, params *ReinstallParams, progressFn func(i
 		return err
 	}
 
-	switch cloneParams.TemplateType {
-	case "fnos":
-		if meta.CloudInitMode != "none" {
-			if err := D.PrepareFnOSSystemDiskExpansion(ctx, systemDisk.Path, progressFn); err != nil {
-				return err
-			}
-			if err := cloneFnOS(cloneParams, systemDisk.Path, progressFn); err != nil {
-				return err
-			}
+	if isFnOS && meta.CloudInitMode != "none" {
+		if err := D.PrepareFnOSSystemDiskExpansion(ctx, systemDisk.Path, progressFn); err != nil {
+			return err
 		}
-	case "linux":
+		if err := cloneFnOS(cloneParams, systemDisk.Path, progressFn); err != nil {
+			return err
+		}
+	}
+	if isOpenWrt && meta.CloudInitMode != "none" {
+		progressFn(25, "配置 OpenWrt 系统...")
+		if err := cloneOpenWrt(cloneParams, systemDisk.Path, progressFn); err != nil {
+			return err
+		}
+	}
+	if cloneParams.TemplateType == "linux" {
 		progressFn(25, "正在重置 Linux 首次启动身份...")
 		if err := prepareLinuxCloneFirstBootIdentity(cloneParams, systemDisk.Path); err != nil {
 			return err

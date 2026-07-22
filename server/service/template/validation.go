@@ -9,9 +9,9 @@ import (
 func ValidateTemplateCategory(templateType, category string) error {
 	normalizedType := normalizeTemplateType(templateType)
 	category = strings.TrimSpace(category)
-	if normalizedType != "linux" && normalizedType != "windows" && normalizedType != "openwrt" {
+	if normalizedType != "linux" && normalizedType != "windows" && normalizedType != "other" {
 		if category != "" {
-			return fmt.Errorf("仅 Linux、Windows 和 OpenWrt 模板支持设置二级分类")
+			return fmt.Errorf("仅 Linux、Windows 和 Other 模板支持设置二级分类")
 		}
 		return nil
 	}
@@ -20,8 +20,8 @@ func ValidateTemplateCategory(templateType, category string) error {
 		switch normalizedType {
 		case "windows":
 			allowedCategories = windowsTemplateCategories
-		case "openwrt":
-			allowedCategories = openwrtTemplateCategories
+		case "other":
+			allowedCategories = otherTemplateCategories
 		default:
 			allowedCategories = linuxTemplateCategories
 		}
@@ -33,10 +33,10 @@ func ValidateTemplateCategory(templateType, category string) error {
 		switch normalizedType {
 		case "windows":
 			return fmt.Errorf("Windows 模板分类仅支持 WindowsServer2025、WindowsServer2022、Windows11、Windows10、WindowsServer2012R2 或 其它")
-		case "openwrt":
-			return fmt.Errorf("OpenWrt 模板分类仅支持 OpenWrt")
+		case "other":
+			return fmt.Errorf("Other 模板分类仅支持 FnOS、OpenWrt 或 其它")
 		default:
-			return fmt.Errorf("Linux 模板分类仅支持 Ubuntu、Debian 或 CentOS")
+			return fmt.Errorf("Linux 模板分类仅支持 Ubuntu、Debian、CentOS、UOS 或 Kylin")
 		}
 	}
 	return nil

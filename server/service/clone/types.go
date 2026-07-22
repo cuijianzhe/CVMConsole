@@ -75,12 +75,13 @@ type CloneParams struct {
 
 // BatchCloneParams 批量克隆参数
 type BatchCloneParams struct {
-	Prefix              string                     `json:"prefix"`                  // 名称前缀
-	StartNum            int                        `json:"start_num"`               // 起始编号
-	Count               int                        `json:"count"`                   // 数量
-	Template            string                     `json:"template"`                // 模板
-	TemplateType        string                     `json:"template_type,omitempty"` // 模板类型
-	CloneMode           string                     `json:"clone_mode,omitempty"`    // 克隆模式: linked / full
+	Prefix              string                     `json:"prefix"`                      // 名称前缀
+	StartNum            int                        `json:"start_num"`                   // 起始编号
+	Count               int                        `json:"count"`                       // 数量
+	Template            string                     `json:"template"`                    // 模板
+	TemplateType        string                     `json:"template_type,omitempty"`     // 模板类型
+	TemplateCategory    string                     `json:"template_category,omitempty"` // 模板分类
+	CloneMode           string                     `json:"clone_mode,omitempty"`        // 克隆模式: linked / full
 	VCPU                int                        `json:"vcpu"`
 	MaxVCPU             int                        `json:"max_vcpu,omitempty"` // CPU 热添加上限
 	RAM                 int                        `json:"ram"`
@@ -128,6 +129,7 @@ type ReinstallParams struct {
 	Name                  string `json:"name"`                              // 虚拟机名称
 	Template              string `json:"template"`                          // 新模板名称
 	TemplateType          string `json:"template_type,omitempty"`           // 模板类型
+	TemplateCategory      string `json:"template_category,omitempty"`       // 模板分类
 	DiskSize              int    `json:"disk_size,omitempty"`               // 系统盘大小（GB）
 	Hostname              string `json:"hostname,omitempty"`                // 主机名
 	User                  string `json:"user,omitempty"`                    // 登录用户

@@ -74,6 +74,7 @@ func BatchCloneVM(ctx context.Context, params *BatchCloneParams, progressFn func
 				Name:                vmName,
 				Template:            params.Template,
 				TemplateType:        params.TemplateType,
+				TemplateCategory:    params.TemplateCategory,
 				CloneMode:           params.CloneMode,
 				VCPU:                params.VCPU,
 				MaxVCPU:             params.MaxVCPU,

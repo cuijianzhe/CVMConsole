@@ -46,12 +46,18 @@ func ValidateCloneCredentials(hostname, username, password string, requireCreden
 
 // NormalizeCloneUsernameForTemplate 根据模板类型补全默认用户名
 func NormalizeCloneUsernameForTemplate(templateType, username string) string {
+	return NormalizeCloneUsernameForTemplateWithCategory(templateType, "", username)
+}
+
+// NormalizeCloneUsernameForTemplateWithCategory 根据模板类型和分类补全默认用户名
+func NormalizeCloneUsernameForTemplateWithCategory(templateType, category, username string) string {
 	trimmedTemplateType := strings.ToLower(strings.TrimSpace(templateType))
 	trimmedUsername := strings.TrimSpace(username)
 	if trimmedTemplateType == "windows" && trimmedUsername == "" {
 		return windowsCloneDefaultUsername
 	}
-	if trimmedTemplateType == "openwrt" {
+	isOpenWrt := trimmedTemplateType == "openwrt" || (trimmedTemplateType == "other" && strings.EqualFold(category, "OpenWrt"))
+	if isOpenWrt {
 		return "root"
 	}
 	return trimmedUsername
@@ -59,9 +65,14 @@ func NormalizeCloneUsernameForTemplate(templateType, username string) string {
 
 // ValidateCloneCredentialsForTemplate 校验模板克隆使用的主机名、用户名和密码
 func ValidateCloneCredentialsForTemplate(templateType, hostname, username, password string, requireCredentials bool) error {
+	return ValidateCloneCredentialsForTemplateWithCategory(templateType, "", hostname, username, password, requireCredentials)
+}
+
+// ValidateCloneCredentialsForTemplateWithCategory 校验模板克隆使用的主机名、用户名和密码（支持分类）
+func ValidateCloneCredentialsForTemplateWithCategory(templateType, category, hostname, username, password string, requireCredentials bool) error {
 	trimmedTemplateType := strings.ToLower(strings.TrimSpace(templateType))
-	// OpenWrt 模板不需要用户名/密码校验（只需 root 密码可选 + 静态 IP）
-	if trimmedTemplateType == "openwrt" {
+	isOpenWrt := trimmedTemplateType == "openwrt" || (trimmedTemplateType == "other" && strings.EqualFold(category, "OpenWrt"))
+	if isOpenWrt {
 		trimmedHostname := strings.TrimSpace(hostname)
 		if trimmedHostname != "" && !cloneHostnameRegexp.MatchString(trimmedHostname) {
 			return fmt.Errorf("主机名只能包含字母、数字和短横线，且不能以短横线开头或结尾")
@@ -71,7 +82,7 @@ func ValidateCloneCredentialsForTemplate(templateType, hostname, username, passw
 		}
 		return nil
 	}
-	normalizedUsername := NormalizeCloneUsernameForTemplate(trimmedTemplateType, username)
+	normalizedUsername := NormalizeCloneUsernameForTemplateWithCategory(trimmedTemplateType, category, username)
 	if trimmedTemplateType == "windows" && normalizedUsername != windowsCloneDefaultUsername {
 		return fmt.Errorf("Windows 模板用户名固定为 administrator，不支持修改")
 	}

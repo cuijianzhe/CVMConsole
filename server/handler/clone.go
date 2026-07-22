@@ -32,6 +32,7 @@ type CloneVmRequest struct {
 	Remark               string                            `json:"remark"`
 	Template             string                            `json:"template" binding:"required"`
 	TemplateType         string                            `json:"template_type"`
+	TemplateCategory     string                            `json:"template_category"`
 	CloneMode            string                            `json:"clone_mode"`
 	VCPU                 int                               `json:"vcpu" binding:"required"`
 	RAM                  int                               `json:"ram" binding:"required"`
@@ -84,6 +85,7 @@ type BatchCloneRequest struct {
 	Count               int                             `json:"count" binding:"required"`
 	Template            string                          `json:"template" binding:"required"`
 	TemplateType        string                          `json:"template_type"`
+	TemplateCategory    string                          `json:"template_category"`
 	CloneMode           string                          `json:"clone_mode"` // 克隆模式: linked / full
 	VCPU                int                             `json:"vcpu" binding:"required"`
 	RAM                 int                             `json:"ram" binding:"required"`
@@ -178,8 +180,9 @@ func CloneVm(c *gin.Context) {
 		cloudInitMode = strings.ToLower(strings.TrimSpace(meta.CloudInitMode))
 	}
 	requireCredentials := cloudInitMode != "none" && !req.DisableSystemInit
-	// OpenWrt 模板不需要常规凭据校验，但需要静态 IP
-	if templateType == "openwrt" {
+	templateCategory := strings.TrimSpace(req.TemplateCategory)
+	isOpenWrt := templateType == "openwrt" || (templateType == "other" && strings.EqualFold(templateCategory, "OpenWrt"))
+	if isOpenWrt {
 		requireCredentials = false
 	}
 	if err := clonepkg.ValidateCloneCredentialsForTemplate(templateType, req.Hostname, req.User, req.Password, requireCredentials); err != nil {
@@ -189,8 +192,7 @@ func CloneVm(c *gin.Context) {
 		})
 		return
 	}
-	// OpenWrt 模板校验静态 IP
-	if templateType == "openwrt" && !req.DisableSystemInit {
+	if isOpenWrt && !req.DisableSystemInit {
 		if err := clonepkg.ValidateOpenWrtStaticIP(req.StaticIP); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"code":    400,
@@ -239,6 +241,7 @@ func CloneVm(c *gin.Context) {
 		Remark:               req.Remark,
 		Template:             req.Template,
 		TemplateType:         req.TemplateType,
+		TemplateCategory:     req.TemplateCategory,
 		CloneMode:            req.CloneMode,
 		VCPU:                 req.VCPU,
 		RAM:                  req.RAM,
@@ -405,6 +408,7 @@ func BatchCloneVm(c *gin.Context) {
 		Count:               req.Count,
 		Template:            req.Template,
 		TemplateType:        req.TemplateType,
+		TemplateCategory:    req.TemplateCategory,
 		CloneMode:           req.CloneMode,
 		VCPU:                req.VCPU,
 		RAM:                 req.RAM,
@@ -538,7 +542,7 @@ func ReinstallVm(c *gin.Context) {
 	if meta.DefaultConfig != nil {
 		firstBootRebootMode = meta.DefaultConfig.FirstBootRebootMode
 	}
-	requireCredentials := templateType == "linux" || templateType == "windows" || templateType == "fnos"
+	requireCredentials := templateType == "linux" || templateType == "windows" || templateType == "fnos" || (templateType == "other" && strings.EqualFold(meta.Category, "FnOS"))
 	req.User = clonepkg.NormalizeCloneUsernameForTemplate(templateType, req.User)
 	if err := clonepkg.ValidateCloneCredentialsForTemplate(templateType, req.Hostname, req.User, req.Password, requireCredentials); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -578,6 +582,7 @@ func ReinstallVm(c *gin.Context) {
 		Name:                 name,
 		Template:             req.Template,
 		TemplateType:         templateType,
+		TemplateCategory:     meta.Category,
 		DiskSize:             diskSize,
 		Hostname:             strings.TrimSpace(req.Hostname),
 		User:                 req.User,
