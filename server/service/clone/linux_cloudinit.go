@@ -212,7 +212,7 @@ func buildNoCloudMetaData(params *CloneParams) string {
 func buildNoCloudUserData(params *CloneParams) string {
 	var sb strings.Builder
 	sb.WriteString("#cloud-config\n\n")
-	sb.WriteString(fmt.Sprintf("hostname: %s\n", params.Hostname))
+	fmt.Fprintf(&sb, "hostname: %s\n", params.Hostname)
 	sb.WriteString("manage_etc_hosts: true\n\n")
 	sb.WriteString("ssh_pwauth: true\n")
 	sb.WriteString("disable_root: false\n\n")
@@ -224,7 +224,7 @@ func buildNoCloudUserData(params *CloneParams) string {
 		}
 		if targetUser != "" && targetUser != "root" {
 			sb.WriteString("users:\n")
-			sb.WriteString(fmt.Sprintf("  - name: %s\n", targetUser))
+			fmt.Fprintf(&sb, "  - name: %s\n", targetUser)
 			sb.WriteString("    lock_passwd: false\n")
 			sb.WriteString("    shell: /bin/bash\n")
 			sb.WriteString("    sudo: ALL=(ALL) NOPASSWD:ALL\n\n")
@@ -279,7 +279,7 @@ func buildNoCloudUserData(params *CloneParams) string {
 	// growpart 对普通分区有效；对 LVM 系统由下方 runcmd 补充处理
 	sb.WriteString("growpart:\n  mode: auto\n  devices: ['/']\nresize_rootfs: true\n\n")
 	sb.WriteString("runcmd:\n")
-	sb.WriteString(fmt.Sprintf("  - hostnamectl set-hostname %s 2>/dev/null || true\n", params.Hostname))
+	fmt.Fprintf(&sb, "  - hostnamectl set-hostname %s 2>/dev/null || true\n", params.Hostname)
 	// 确保 cloud-init 执行后 SSH 配置不被覆盖（部分发行版 cloud-init 会重置 sshd_config）
 	sb.WriteString("  - |\n")
 	sb.WriteString("    sed -i 's/^\\s*#\\?\\s*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config 2>/dev/null || true\n")
@@ -314,7 +314,9 @@ func buildNoCloudUserData(params *CloneParams) string {
 		sb.WriteString("  - |\n")
 		sb.WriteString("    /bin/bash <<'QVMPOSTBOOT'\n")
 		for _, line := range strings.Split(params.PostBootCommand, "\n") {
-			sb.WriteString("    " + line + "\n")
+			sb.WriteString("    ")
+			sb.WriteString(line)
+			sb.WriteString("\n")
 		}
 		sb.WriteString("    QVMPOSTBOOT\n")
 	}
@@ -331,7 +333,8 @@ func buildPostBootBlockingScript(command string) string {
 	sb.WriteString("# 此服务在 SSH 启动前运行，阻塞系统启动直到命令完成\n\n")
 	// 执行用户自定义命令
 	for _, line := range strings.Split(command, "\n") {
-		sb.WriteString(line + "\n")
+		sb.WriteString(line)
+		sb.WriteString("\n")
 	}
 	sb.WriteString("\n")
 	// 执行完毕后自动禁用服务并清理文件
