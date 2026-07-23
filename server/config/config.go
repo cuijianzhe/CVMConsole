@@ -186,6 +186,8 @@ type Config struct {
 	PasswordBreachCheckEnabled bool `json:"password_breach_check_enabled"`
 	// 硬件直通开关（默认关闭，开启后启用 IOMMU 和 vfio-pci 支持）
 	HardwarePassthroughEnabled bool `json:"hardware_passthrough_enabled"`
+	// 命令执行超时时间（秒），默认 30 秒
+	ExecTimeoutSeconds int `json:"exec_timeout_seconds"`
 }
 
 // GlobalConfig 全局配置实例
@@ -326,6 +328,7 @@ func Init() {
 		SessionFingerprintEnabled:             getEnvBool("KVM_SESSION_FINGERPRINT_ENABLED", true),
 		PasswordBreachCheckEnabled:            getEnvBool("KVM_PASSWORD_BREACH_CHECK_ENABLED", true),
 		HardwarePassthroughEnabled:            getEnvBool("KVM_HARDWARE_PASSTHROUGH_ENABLED", false),
+		ExecTimeoutSeconds:                    getEnvInt("KVM_EXEC_TIMEOUT_SECONDS", 30),
 		CORSAllowedOrigins:                    getEnv("KVM_CORS_ALLOWED_ORIGINS", ""),
 	}
 	// 解析可信代理列表
@@ -566,6 +569,7 @@ var PersistableKeys = []string{
 	"password_breach_check_enabled",
 	"igpu_passthrough_enabled",
 	"hardware_passthrough_enabled",
+	"exec_timeout_seconds",
 }
 
 // keyToEnvVar 配置项到环境变量的映射
@@ -644,6 +648,7 @@ var keyToEnvVar = map[string]string{
 	"password_breach_check_enabled":             "KVM_PASSWORD_BREACH_CHECK_ENABLED",
 	"igpu_passthrough_enabled":                  "KVM_IGPU_PASSTHROUGH_ENABLED",
 	"hardware_passthrough_enabled":              "KVM_HARDWARE_PASSTHROUGH_ENABLED",
+	"exec_timeout_seconds":                      "KVM_EXEC_TIMEOUT_SECONDS",
 }
 
 // LoadFromDB 从数据库加载持久化的设置覆盖当前配置
@@ -893,6 +898,10 @@ func (c *Config) LoadFromDB(settings map[string]string) {
 			}
 		case "error_detail_in_response":
 			c.ErrorDetailInResponse = value == "true"
+		case "exec_timeout_seconds":
+			if v, err := strconv.Atoi(value); err == nil && v > 0 {
+				c.ExecTimeoutSeconds = v
+			}
 		}
 	}
 }
@@ -977,6 +986,7 @@ func (c *Config) ToSettingsMap() map[string]string {
 		"request_filter_enabled":                    strconv.FormatBool(c.RequestFilterEnabled),
 		"password_breach_check_enabled":             strconv.FormatBool(c.PasswordBreachCheckEnabled),
 		"hardware_passthrough_enabled":              strconv.FormatBool(c.HardwarePassthroughEnabled),
+		"exec_timeout_seconds":                      strconv.Itoa(c.ExecTimeoutSeconds),
 	}
 }
 

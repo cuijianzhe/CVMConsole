@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"kvm_console/config"
 	"kvm_console/logger"
 )
 
@@ -40,9 +41,17 @@ type CmdResult struct {
 	Error    error  // 错误信息
 }
 
+// getExecTimeout 获取命令执行超时时间，优先使用配置值，默认 30 秒
+func getExecTimeout() time.Duration {
+	if config.GlobalConfig != nil && config.GlobalConfig.ExecTimeoutSeconds > 0 {
+		return time.Duration(config.GlobalConfig.ExecTimeoutSeconds) * time.Second
+	}
+	return 30 * time.Second
+}
+
 // ExecCommand 执行系统命令
 func ExecCommand(name string, args ...string) *CmdResult {
-	return ExecCommandWithTimeout(name, 30*time.Second, args...)
+	return ExecCommandWithTimeout(name, getExecTimeout(), args...)
 }
 
 // ExecCommandWithTimeout 执行系统命令（带超时）
@@ -168,7 +177,7 @@ func ExecShellContextWithTimeout(ctx context.Context, command string, timeout ti
 
 // ExecCommandQuiet 与 ExecCommand 相同，但非零退出码仅记录 DEBUG
 func ExecCommandQuiet(name string, args ...string) *CmdResult {
-	return execCommandWithLogLevel(name, logger.CMD.Debug, 30*time.Second, args...)
+	return execCommandWithLogLevel(name, logger.CMD.Debug, getExecTimeout(), args...)
 }
 
 // ExecCommandQuietWithTimeout 与 ExecCommandWithTimeout 相同，但非零退出码仅记录 DEBUG

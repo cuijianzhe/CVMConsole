@@ -1071,6 +1071,72 @@ configure_port() {
     success "网页端口设置为: $KVM_PORT"
 }
 
+configure_database() {
+    echo ""
+    info "=== 数据库配置 ==="
+    local existing_db_type
+    existing_db_type=$(env_get "KVM_DB_TYPE")
+    
+    if [ -n "$existing_db_type" ] && [ "$MODE" != "install" ]; then
+        read -rp "是否修改数据库配置? [y/N]: " change_db
+        change_db=${change_db:-N}
+        if [[ ! "$change_db" =~ ^[Yy]$ ]]; then
+            info "保持原有数据库配置不变"
+            return
+        fi
+    fi
+
+    echo "请选择数据库类型:"
+    echo "  1. SQLite (默认，无需配置)"
+    echo "  2. MySQL"
+    local db_choice
+    read -rp "请选择 [1/2，默认 1]: " db_choice
+    db_choice=${db_choice:-1}
+
+    case "$db_choice" in
+        1)
+            KVM_DB_TYPE="sqlite"
+            KVM_DB_PATH="${INSTALL_DIR}/data/kvm_console.db"
+            KVM_DB_HOST=""
+            KVM_DB_PORT=""
+            KVM_DB_USERNAME=""
+            KVM_DB_PASSWORD=""
+            KVM_DB_DATABASE=""
+            success "数据库类型设置为: SQLite"
+            ;;
+        2)
+            KVM_DB_TYPE="mysql"
+            read -rp "请输入 MySQL 主机地址 [默认 localhost]: " input_host
+            KVM_DB_HOST=${input_host:-localhost}
+            
+            read -rp "请输入 MySQL 端口 [默认 3306]: " input_db_port
+            KVM_DB_PORT=${input_db_port:-3306}
+            
+            read -rp "请输入 MySQL 用户名 [默认 root]: " input_user
+            KVM_DB_USERNAME=${input_user:-root}
+            
+            read -rsp "请输入 MySQL 密码: " input_pass
+            echo ""
+            KVM_DB_PASSWORD=${input_pass:-}
+            
+            read -rp "请输入数据库名 [默认 kvm_console]: " input_db
+            KVM_DB_DATABASE=${input_db:-kvm_console}
+            
+            success "数据库类型设置为: MySQL (${KVM_DB_HOST}:${KVM_DB_PORT}/${KVM_DB_DATABASE})"
+            ;;
+        *)
+            error "无效的选择，使用默认 SQLite"
+            KVM_DB_TYPE="sqlite"
+            KVM_DB_PATH="${INSTALL_DIR}/data/kvm_console.db"
+            KVM_DB_HOST=""
+            KVM_DB_PORT=""
+            KVM_DB_USERNAME=""
+            KVM_DB_PASSWORD=""
+            KVM_DB_DATABASE=""
+            ;;
+    esac
+}
+
 write_env() {
     info "写入并补齐环境配置..."
     mkdir -p "$INSTALL_DIR"
@@ -1101,13 +1167,27 @@ write_env() {
 
     # === 数据库配置 ===
     #数据库类型，支持 sqlite 和 mysql
-    env_default "KVM_DB_TYPE" "sqlite"
-    env_default "KVM_DB_PATH" "${INSTALL_DIR}/data/kvm_console.db"
-    env_default "KVM_DB_HOST" "localhost"
-    env_default "KVM_DB_PORT" "3306"
-    env_default "KVM_DB_USERNAME" "root"
-    env_default "KVM_DB_PASSWORD" ""
-    env_default "KVM_DB_DATABASE" "kvm_console"
+    if [ -n "$KVM_DB_TYPE" ]; then
+        env_set "KVM_DB_TYPE" "$KVM_DB_TYPE"
+        env_set "KVM_DB_PATH" "${KVM_DB_PATH:-${INSTALL_DIR}/data/kvm_console.db}"
+        env_set "KVM_DB_HOST" "${KVM_DB_HOST:-localhost}"
+        env_set "KVM_DB_PORT" "${KVM_DB_PORT:-3306}"
+        env_set "KVM_DB_USERNAME" "${KVM_DB_USERNAME:-root}"
+        env_set "KVM_DB_PASSWORD" "${KVM_DB_PASSWORD:-}"
+        env_set "KVM_DB_DATABASE" "${KVM_DB_DATABASE:-kvm_console}"
+    else
+        env_default "KVM_DB_TYPE" "sqlite"
+        env_default "KVM_DB_PATH" "${INSTALL_DIR}/data/kvm_console.db"
+        env_default "KVM_DB_HOST" "localhost"
+        env_default "KVM_DB_PORT" "3306"
+        env_default "KVM_DB_USERNAME" "root"
+        env_default "KVM_DB_PASSWORD" ""
+        env_default "KVM_DB_DATABASE" "kvm_console"
+    fi
+
+    # === 命令执行配置 ===
+    # bash 命令执行超时时间（秒），默认 30 秒
+    env_default "KVM_EXEC_TIMEOUT_SECONDS" "30"
 
     # === 以下为可配置项：仅首次安装或修复时写入默认值 ===
     # 更新时跳过，保持 .env 现有内容不动，面板保存设置时会同步写 .env
@@ -1776,6 +1856,7 @@ run_install_or_update() {
     ensure_kvm_runtime
     setup_quota
     configure_port
+    configure_database
     get_release
     install_files
     write_env
