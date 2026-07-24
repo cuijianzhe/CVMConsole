@@ -27,12 +27,29 @@ func (NetworkBridge) TableName() string {
 	return "network_bridges"
 }
 
+// BridgeStaticHost 内存结构，用于文件操作（向后兼容）
 type BridgeStaticHost struct {
 	VMName string
 	MAC    string
 	IP     string
 }
 
+// BridgeStaticHostDB 数据库模型，存储 DHCP 静态绑定
+type BridgeStaticHostDB struct {
+	ID         uint      `json:"id" gorm:"primaryKey"`
+	BridgeName string    `json:"bridge_name" gorm:"index;not null;size:64"` // 网桥名称
+	VMName     string    `json:"vm_name" gorm:"index;not null;size:64"`     // 虚拟机名称
+	MAC        string    `json:"mac" gorm:"not null;size:18"`               // MAC 地址，如 52:54:00:1a:71:24
+	IP         string    `json:"ip" gorm:"index;not null;size:45"`          // 静态 IP 地址
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+func (BridgeStaticHostDB) TableName() string {
+	return "bridge_static_hosts"
+}
+
+// BridgeDHCPLease DHCP 租约结构
 type BridgeDHCPLease struct {
 	ExpiryTime string
 	ExpiryUnix int64

@@ -1,9 +1,10 @@
 package bridge
 
 const (
-	BridgeModeNAT    = "nat"
-	BridgeModeDirect = "bridge"
-	bridgeConfigDir  = "/etc/kvm-console/bridges"
+	BridgeModeNAT     = "nat"
+	BridgeModeDirect  = "bridge"
+	BridgeModePureL2  = "pure-l2"
+	bridgeConfigDir   = "/etc/kvm-console/bridges"
 )
 
 type HostInterfaceInfo struct {

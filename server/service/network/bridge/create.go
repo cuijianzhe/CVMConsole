@@ -335,6 +335,11 @@ func startBridgeDNSMasq(bridge model.NetworkBridge) error {
 	leasesPath := filepath.Join(bridgeConfigDir, fmt.Sprintf("leases-%s", bridge.Name))
 	pidPath := filepath.Join(bridgeConfigDir, fmt.Sprintf("dnsmasq-%s.pid", bridge.Name))
 
+	// 确保 dhcp-hosts 文件与数据库同步（向后兼容：首次启动时从文件迁移）
+	if err := EnsureBridgeStaticHostsFile(bridge.Name); err != nil {
+		logger.App.Warn("同步 DHCP 静态绑定文件失败", "bridge", bridge.Name, "error", err)
+	}
+
 	if _, err := os.Stat(hostsPath); os.IsNotExist(err) {
 		if err := os.WriteFile(hostsPath, []byte(""), 0644); err != nil {
 			return fmt.Errorf("创建 DHCP 静态绑定文件失败: %w", err)
@@ -393,6 +398,10 @@ func stopBridgeDNSMasq(bridgeName string) error {
 }
 
 func reloadBridgeDNSMasq(bridgeName string) error {
+	// 先同步数据库到文件
+	if err := EnsureBridgeStaticHostsFile(bridgeName); err != nil {
+		logger.App.Warn("重载前同步 DHCP 静态绑定文件失败", "bridge", bridgeName, "error", err)
+	}
 	pidPath := filepath.Join(bridgeConfigDir, fmt.Sprintf("dnsmasq-%s.pid", bridgeName))
 	data, err := os.ReadFile(pidPath)
 	if err != nil {
