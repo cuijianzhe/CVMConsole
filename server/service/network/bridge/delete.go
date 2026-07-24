@@ -3,12 +3,37 @@ package bridge
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
+
+// cleanupBridgeDNSMasqFiles 停止网桥关联的 dnsmasq 进程并清理所有配置文件。
+// 仅针对指定网桥，不影响其他网桥或默认 OVS / VPC 的 dnsmasq 进程。
+func cleanupBridgeDNSMasqFiles(bridgeName string) {
+	bridgeName = strings.TrimSpace(bridgeName)
+	if bridgeName == "" {
+		return
+	}
+	// 1. 优先通过 pid 文件精准停止该网桥的 dnsmasq 进程
+	pidPath := filepath.Join(bridgeConfigDir, fmt.Sprintf("dnsmasq-%s.pid", bridgeName))
+	if data, err := os.ReadFile(pidPath); err == nil {
+		if pid := strings.TrimSpace(string(data)); pid != "" {
+			utils.ExecCommand("kill", "-9", pid)
+		}
+	}
+	// 兜底：按命令行特征匹配该网桥的 dnsmasq（匹配 conf 文件路径，不影响其他 dnsmasq）
+	utils.ExecCommand("pkill", "-f", fmt.Sprintf("dnsmasq-%s.conf", bridgeName))
+
+	// 2. 清理所有配置文件（conf / pid / dhcp-hosts / leases）
+	_ = os.Remove(pidPath)
+	_ = os.Remove(filepath.Join(bridgeConfigDir, fmt.Sprintf("dnsmasq-%s.conf", bridgeName)))
+	_ = os.Remove(bridgeDHCPHostsPath(bridgeName))
+	_ = os.Remove(bridgeDHCPLeasesPath(bridgeName))
+}
 
 func DeleteNetworkBridge(id uint) error {
 	if id == 0 {
@@ -50,6 +75,7 @@ func DeleteNetworkBridgeByName(name string) error {
 		return fmt.Errorf("网桥不存在")
 	}
 	_ = os.Remove(bridgeRestoreScriptPath(name))
+	cleanupBridgeDNSMasqFiles(name)
 	// 获取 uplink 用于清理
 	uplink := DetectOVSBridgePhysicalUplink(name)
 	if uplink != "" {
@@ -81,6 +107,7 @@ func deleteBridgeRecord(row *model.NetworkBridge) error {
 		return fmt.Errorf("该网桥仍有交换机使用，不能删除")
 	}
 	_ = os.Remove(bridgeRestoreScriptPath(row.Name))
+	cleanupBridgeDNSMasqFiles(row.Name)
 	// 仅当 OVS 桥实际存在时执行物理清理；桥已不存在则跳过直接清理记录
 	if ovsBridgeExists(row.Name) {
 		if row.MigrateHostIP {
