@@ -424,6 +424,17 @@ func Setup() *gin.Engine {
 				resourceSpec.POST("/batch-delete", handler.BatchDeleteResourceSpecs)
 			}
 
+			// ==================== 云盘规格管理（管理员） ====================
+			cloudDiskSpec := authorized.Group("/cloud-disk-specs")
+			cloudDiskSpec.Use(middleware.AdminMiddleware())
+			{
+				cloudDiskSpec.GET("", handler.ListCloudDiskSpecs)
+				cloudDiskSpec.POST("", handler.CreateCloudDiskSpec)
+				cloudDiskSpec.PUT("/:id", handler.UpdateCloudDiskSpec)
+				cloudDiskSpec.DELETE("/:id", handler.DeleteCloudDiskSpec)
+				cloudDiskSpec.POST("/batch-delete", handler.BatchDeleteCloudDiskSpecs)
+			}
+
 			migration := authorized.Group("/migration")
 			migration.Use(middleware.AdminMiddleware())
 			{
