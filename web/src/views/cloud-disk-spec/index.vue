@@ -331,7 +331,21 @@ const formatCapacity = (gb) => {
 const fetchStoragePools = async () => {
   try {
     const res = await getStoragePoolList()
-    storagePools.value = res.data || []
+    // 递归提取所有可用于创建虚拟机的存储池（过滤掉 VG 等不可用节点）
+    const flattenUsable = (nodes) => {
+      const result = []
+      if (!Array.isArray(nodes)) return result
+      for (const n of nodes) {
+        if (n.can_use_for_vm) {
+          result.push(n)
+        }
+        if (n.children?.length) {
+          result.push(...flattenUsable(n.children))
+        }
+      }
+      return result
+    }
+    storagePools.value = flattenUsable(res.data || [])
   } catch (err) {
     storagePools.value = []
   }
