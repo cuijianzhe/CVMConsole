@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -17,6 +18,71 @@ import (
 	"kvm_console/service/security"
 	"kvm_console/service/snapshot"
 	"kvm_console/utils"
+)
+
+// vmResourceResult VM 资源查询结果
+type vmResourceResult struct {
+	name string
+	cpu  int
+	mem  int
+	disk int
+}
+
+// getVMResourcesConcurrently 并发获取所有 VM 的资源信息
+func getVMResourcesConcurrently(vmNames []string) map[string]struct {
+	cpu  int
+	mem  int
+	disk int
+} {
+	result := make(map[string]struct {
+		cpu  int
+		mem  int
+		disk int
+	})
+
+	if len(vmNames) == 0 {
+		return result
+	}
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	sem := make(chan struct{}, 10) // 限制并发数为 10
+
+	for _, vmName := range vmNames {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(name string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			cpu, mem := GetVMCPUAndMemory(name)
+			disk := getVMDiskCapacityGB(name)
+
+			mu.Lock()
+			result[name] = struct {
+				cpu  int
+				mem  int
+				disk int
+			}{cpu, mem, disk}
+			mu.Unlock()
+		}(vmName)
+	}
+
+	wg.Wait()
+	return result
+}
+
+// vmOwnerCacheEntry 缓存条目
+type vmOwnerCacheEntry struct {
+	username  string
+	expiresAt time.Time
+}
+
+// vmOwnerCache VM 归属用户内存缓存
+var (
+	vmOwnerCache    = make(map[string]vmOwnerCacheEntry)
+	vmOwnerCacheMu  sync.RWMutex
+	vmOwnerCacheTTL = 5 * time.Minute
 )
 
 func isExistingVMAccessUser(username string) bool {
@@ -31,13 +97,15 @@ func isExistingVMAccessUser(username string) bool {
 	return model.DB.Select("id").Where("username = ?", username).First(&user).Error == nil
 }
 
-// ListUsers 获取用户列表（含配额信息）
-func ListUsers() ([]VMUserInfo, error) {
+// ListUsersSimple 获取轻量级用户列表（仅基础信息 + VM 列表，不含配额计算）
+// 用于公网 IP、网络管理等仅需用户基本信息的场景
+func ListUsersSimple() ([]VMUserInfo, error) {
 	var users []model.User
 	if err := model.DB.Find(&users).Error; err != nil {
 		return nil, err
 	}
 
+	// 获取有效 VM 列表
 	allDomainsResult := utils.ExecCommand("virsh", "list", "--all", "--name")
 	validDomains := make(map[string]bool)
 	if allDomainsResult.Error == nil {
@@ -49,23 +117,216 @@ func ListUsers() ([]VMUserInfo, error) {
 		}
 	}
 
-	vmResourceCache := make(map[string]struct {
-		cpu  int
-		mem  int
-		disk int
-	})
+	var result []VMUserInfo
+	for _, u := range users {
+		info := VMUserInfo{
+			ID:           u.ID,
+			Username:     u.Username,
+			Email:        u.Email,
+			Role:         u.Role,
+			Status:       u.Status,
+			MaxVM:        u.MaxVM,
+			MaxCPU:       u.MaxCPU,
+			MaxMemory:    u.MaxMemory,
+			MaxDisk:      u.MaxDisk,
+			MaxPublicIPs: u.MaxPublicIPs,
+		}
 
-	for vmName := range validDomains {
-		cpu, mem := GetVMCPUAndMemory(vmName)
-		disk := getVMDiskCapacityGB(vmName)
-		vmResourceCache[vmName] = struct {
-			cpu  int
-			mem  int
-			disk int
-		}{cpu, mem, disk}
+		if u.Role != "admin" {
+			vms := GetUserVMList(u.Username)
+			var validVMs []string
+			for _, vmName := range vms {
+				if validDomains[vmName] {
+					validVMs = append(validVMs, vmName)
+				}
+			}
+			info.VMs = validVMs
+		}
+
+		result = append(result, info)
 	}
 
+	return result, nil
+}
+
+// quotaCalcResult 并发计算用户配额的结果
+type quotaCalcResult struct {
+	index int
+	info  VMUserInfo
+	err   error
+}
+
+// calcUserQuota 计算单个用户的配额信息
+func calcUserQuota(u model.User, validDomains map[string]bool, vmResourceCache map[string]struct {
+	cpu  int
+	mem  int
+	disk int
+}) VMUserInfo {
+	info := VMUserInfo{
+		ID:                   u.ID,
+		Username:             u.Username,
+		Email:                u.Email,
+		Role:                 u.Role,
+		CloudType:            HookNormalizeCloudType(u.CloudType),
+		DedicatedVPCSwitchID: u.DedicatedVPCSwitchID,
+		Status:               u.Status,
+		MaxCPU:               u.MaxCPU,
+		MaxMemory:            u.MaxMemory,
+		MaxDisk:              u.MaxDisk,
+		MaxVM:                u.MaxVM,
+		MaxStorage:           u.MaxStorage,
+		MaxRuntimeHours:      u.MaxRuntimeHours,
+		EnablePortForward:    u.EnablePortForward,
+		MaxPortForwards:      u.MaxPortForwards,
+		MaxSnapshots:         u.MaxSnapshots,
+		MaxBandwidthUp:       u.MaxBandwidthUp,
+		MaxBandwidthDown:     u.MaxBandwidthDown,
+		MaxTrafficDown:       u.MaxTrafficDown,
+		MaxTrafficUp:         u.MaxTrafficUp,
+		MaxPublicIPs:         u.MaxPublicIPs,
+		SSHEnabled:           u.SSHEnabled,
+	}
+
+	if u.Role != "admin" {
+		vms := GetUserVMList(u.Username)
+
+		var validVMs []string
+		for _, vmName := range vms {
+			if validDomains[vmName] {
+				validVMs = append(validVMs, vmName)
+			}
+		}
+		info.VMs = validVMs
+
+		if !HookIsLightweightCloudType(u.CloudType) {
+			quota := &QuotaUsage{
+				MaxCPU:            u.MaxCPU,
+				MaxMemory:         u.MaxMemory,
+				MaxDisk:           u.MaxDisk,
+				MaxVM:             u.MaxVM,
+				MaxStorage:        u.MaxStorage,
+				MaxRuntimeHours:   u.MaxRuntimeHours,
+				EnablePortForward: u.EnablePortForward,
+				MaxPortForwards:   u.MaxPortForwards,
+				MaxSnapshots:      u.MaxSnapshots,
+				MaxBandwidthUp:    u.MaxBandwidthUp,
+				MaxBandwidthDown:  u.MaxBandwidthDown,
+				MaxTrafficDown:    u.MaxTrafficDown,
+				MaxTrafficUp:      u.MaxTrafficUp,
+				MaxPublicIPs:      u.MaxPublicIPs,
+				UsedVM:            len(validVMs),
+			}
+
+			for _, vmName := range validVMs {
+				if res, ok := vmResourceCache[vmName]; ok {
+					quota.UsedCPU += res.cpu
+					quota.UsedMemory += res.mem / 1024
+					quota.UsedDisk += res.disk
+				}
+			}
+
+			quota.UsedPublicIPs = HookGetUserPublicIPUsage(u.Username)
+			quota.UsedPortForwards = HookGetUserPortForwardUsage(u.Username)
+			quota.UsedSnapshots = snapshot.CountUserSnapshots(u.Username)
+
+			if quotaInfo, err := HookGetUserStorageUsage(u.Username); err == nil && quotaInfo != nil {
+				quota.UsedStorage = quotaInfo.UsedBytes
+			} else {
+				isoDir := GetUserISODir(u.Username)
+				shareDir := GetUserShareDir(u.Username)
+				quota.UsedStorage = getDirSizeBytes(isoDir) + getDirSizeBytes(shareDir)
+			}
+			quota.UsedStorageGB = formatBytes(quota.UsedStorage)
+
+			runtimeSnapshot := BuildUserRuntimeQuotaSnapshot(&u, time.Now())
+			quota.UsedRuntimeSeconds = runtimeSnapshot.UsedSeconds
+			quota.UsedRuntimeDisplay = FormatRuntimeQuotaDuration(runtimeSnapshot.UsedSeconds)
+			quota.RemainingRuntimeSeconds = runtimeSnapshot.RemainingSeconds
+			quota.RemainingRuntimeDisplay = FormatRuntimeQuotaDuration(runtimeSnapshot.RemainingSeconds)
+			quota.RuntimeQuotaReached = runtimeSnapshot.QuotaReached
+
+			trafficInfo := HookGetUserTrafficUsage(u.Username)
+			if trafficInfo != nil {
+				quota.UsedTrafficDown = trafficInfo.UsedTrafficDown
+				quota.UsedTrafficUp = trafficInfo.UsedTrafficUp
+				quota.UsedTrafficDownGB = trafficInfo.UsedTrafficDownGB
+				quota.UsedTrafficUpGB = trafficInfo.UsedTrafficUpGB
+				quota.IsLimitedDown = trafficInfo.IsLimitedDown
+				quota.IsLimitedUp = trafficInfo.IsLimitedUp
+			}
+
+			info.Quota = quota
+		} else {
+			model.DB.Where("username = ?", u.Username).Find(&info.LightweightVMQuotas)
+			for i := range info.LightweightVMQuotas {
+				HookFillLightweightVMQuotaRuntime(&info.LightweightVMQuotas[i])
+			}
+			if regs, err := HookListLightweightVMRegistrations(u.Username, true); err == nil {
+				info.LightweightVMRegistrations = regs
+			}
+		}
+	} else {
+		if quota, err := GetUserQuotaUsage(u.Username); err == nil {
+			info.Quota = quota
+		}
+	}
+
+	return info
+}
+
+// ListUsers 获取用户列表（含配额信息，永远读取数据库缓存）
+// 如果数据库无数据（首次启动），会先执行一次计算并保存
+// 之后所有请求直接读库，返回后异步刷新数据库
+func ListUsers() ([]VMUserInfo, error) {
+	var users []model.User
+	if err := model.DB.Find(&users).Error; err != nil {
+		return nil, err
+	}
+
+	// 检查数据库是否有配额快照数据
+	var snapshotCount int64
+	model.DB.Model(&model.UserQuotaSnapshot{}).Count(&snapshotCount)
+
+	// 如果数据库无数据（首次启动），先同步计算一次并保存
+	if snapshotCount == 0 {
+		if err := RefreshAllUserQuotaSnapshots(); err != nil {
+			return nil, err
+		}
+	}
+
+	// 从数据库读取所有配额快照
+	var snapshots []model.UserQuotaSnapshot
+	model.DB.Find(&snapshots)
+	snapshotMap := make(map[string]*model.UserQuotaSnapshot)
+	for i := range snapshots {
+		snapshotMap[snapshots[i].Username] = &snapshots[i]
+	}
+
+	// 先从数据库读取数据返回
+	result, err := listUsersFromCache(users, snapshotMap)
+
+	// 返回后异步刷新数据库（带防抖，30 秒内不重复刷新）
+	AsyncRefreshQuotaSnapshots()
+
+	return result, err
+}
+
+// listUsersFromCache 从缓存读取用户列表（快速路径）
+func listUsersFromCache(users []model.User, snapshotMap map[string]*model.UserQuotaSnapshot) ([]VMUserInfo, error) {
 	var result []VMUserInfo
+
+	// 获取当前有效域集合（用于过滤已销毁的 VM）
+	validDomains := make(map[string]bool)
+	domainResult := utils.ExecCommand("virsh", "list", "--all", "--name")
+	if domainResult.Error == nil {
+		for _, name := range strings.Split(domainResult.Stdout, "\n") {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				validDomains[name] = true
+			}
+		}
+	}
+
 	for _, u := range users {
 		info := VMUserInfo{
 			ID:                   u.ID,
@@ -92,9 +353,17 @@ func ListUsers() ([]VMUserInfo, error) {
 			SSHEnabled:           u.SSHEnabled,
 		}
 
+		// 所有用户都从缓存读取配额（包括 admin）
+		if snapshot, ok := snapshotMap[u.Username]; ok {
+			info.Quota = SnapshotToQuotaUsage(snapshot, u)
+		} else {
+			// 无缓存，使用空配额
+			info.Quota = buildEmptyQuota(&u)
+		}
+
+		// 只有非 admin 用户需要处理 VM 列表
 		if u.Role != "admin" {
 			vms := GetUserVMList(u.Username)
-
 			var validVMs []string
 			for _, vmName := range vms {
 				if validDomains[vmName] {
@@ -103,65 +372,7 @@ func ListUsers() ([]VMUserInfo, error) {
 			}
 			info.VMs = validVMs
 
-			if !HookIsLightweightCloudType(u.CloudType) {
-				quota := &QuotaUsage{
-					MaxCPU:            u.MaxCPU,
-					MaxMemory:         u.MaxMemory,
-					MaxDisk:           u.MaxDisk,
-					MaxVM:             u.MaxVM,
-					MaxStorage:        u.MaxStorage,
-					MaxRuntimeHours:   u.MaxRuntimeHours,
-					EnablePortForward: u.EnablePortForward,
-					MaxPortForwards:   u.MaxPortForwards,
-					MaxSnapshots:      u.MaxSnapshots,
-					MaxBandwidthUp:    u.MaxBandwidthUp,
-					MaxBandwidthDown:  u.MaxBandwidthDown,
-					MaxTrafficDown:    u.MaxTrafficDown,
-					MaxTrafficUp:      u.MaxTrafficUp,
-					MaxPublicIPs:      u.MaxPublicIPs,
-					UsedVM:            len(validVMs),
-				}
-
-				for _, vmName := range validVMs {
-					if res, ok := vmResourceCache[vmName]; ok {
-						quota.UsedCPU += res.cpu
-						quota.UsedMemory += res.mem / 1024
-						quota.UsedDisk += res.disk
-					}
-				}
-
-				quota.UsedPublicIPs = HookGetUserPublicIPUsage(u.Username)
-				quota.UsedPortForwards = HookGetUserPortForwardUsage(u.Username)
-				quota.UsedSnapshots = snapshot.CountUserSnapshots(u.Username)
-
-				if quotaInfo, err := HookGetUserStorageUsage(u.Username); err == nil && quotaInfo != nil {
-					quota.UsedStorage = quotaInfo.UsedBytes
-				} else {
-					isoDir := GetUserISODir(u.Username)
-					shareDir := GetUserShareDir(u.Username)
-					quota.UsedStorage = getDirSizeBytes(isoDir) + getDirSizeBytes(shareDir)
-				}
-				quota.UsedStorageGB = formatBytes(quota.UsedStorage)
-
-				runtimeSnapshot := BuildUserRuntimeQuotaSnapshot(&u, time.Now())
-				quota.UsedRuntimeSeconds = runtimeSnapshot.UsedSeconds
-				quota.UsedRuntimeDisplay = FormatRuntimeQuotaDuration(runtimeSnapshot.UsedSeconds)
-				quota.RemainingRuntimeSeconds = runtimeSnapshot.RemainingSeconds
-				quota.RemainingRuntimeDisplay = FormatRuntimeQuotaDuration(runtimeSnapshot.RemainingSeconds)
-				quota.RuntimeQuotaReached = runtimeSnapshot.QuotaReached
-
-				trafficInfo := HookGetUserTrafficUsage(u.Username)
-				if trafficInfo != nil {
-					quota.UsedTrafficDown = trafficInfo.UsedTrafficDown
-					quota.UsedTrafficUp = trafficInfo.UsedTrafficUp
-					quota.UsedTrafficDownGB = trafficInfo.UsedTrafficDownGB
-					quota.UsedTrafficUpGB = trafficInfo.UsedTrafficUpGB
-					quota.IsLimitedDown = trafficInfo.IsLimitedDown
-					quota.IsLimitedUp = trafficInfo.IsLimitedUp
-				}
-
-				info.Quota = quota
-			} else {
+			if HookIsLightweightCloudType(u.CloudType) {
 				model.DB.Where("username = ?", u.Username).Find(&info.LightweightVMQuotas)
 				for i := range info.LightweightVMQuotas {
 					HookFillLightweightVMQuotaRuntime(&info.LightweightVMQuotas[i])
@@ -170,16 +381,32 @@ func ListUsers() ([]VMUserInfo, error) {
 					info.LightweightVMRegistrations = regs
 				}
 			}
-		} else {
-			if quota, err := GetUserQuotaUsage(u.Username); err == nil {
-				info.Quota = quota
-			}
 		}
 
 		result = append(result, info)
 	}
 
 	return result, nil
+}
+
+// buildEmptyQuota 构建空配额（用于缓存未命中时的降级）
+func buildEmptyQuota(u *model.User) *QuotaUsage {
+	return &QuotaUsage{
+		MaxCPU:            u.MaxCPU,
+		MaxMemory:         u.MaxMemory,
+		MaxDisk:           u.MaxDisk,
+		MaxVM:             u.MaxVM,
+		MaxStorage:        u.MaxStorage,
+		MaxRuntimeHours:   u.MaxRuntimeHours,
+		EnablePortForward: u.EnablePortForward,
+		MaxPortForwards:   u.MaxPortForwards,
+		MaxSnapshots:      u.MaxSnapshots,
+		MaxBandwidthUp:    u.MaxBandwidthUp,
+		MaxBandwidthDown:  u.MaxBandwidthDown,
+		MaxTrafficDown:    u.MaxTrafficDown,
+		MaxTrafficUp:      u.MaxTrafficUp,
+		MaxPublicIPs:      u.MaxPublicIPs,
+	}
 }
 
 // CreateSystemUser 创建系统用户并添加到数据库
@@ -297,8 +524,37 @@ func ProvisionSystemUserResources(user *model.User, password string) error {
 	return nil
 }
 
-// FindVMOwner 根据 VM 名称查找归属用户
+// FindVMOwner 根据 VM 名称查找归属用户（带内存缓存，避免重复遍历文件系统）
 func FindVMOwner(vmName string) string {
+	vmName = strings.TrimSpace(vmName)
+	if vmName == "" {
+		return ""
+	}
+
+	// 检查缓存
+	vmOwnerCacheMu.RLock()
+	if entry, ok := vmOwnerCache[vmName]; ok && time.Now().Before(entry.expiresAt) {
+		vmOwnerCacheMu.RUnlock()
+		return entry.username
+	}
+	vmOwnerCacheMu.RUnlock()
+
+	// 缓存未命中或已过期，执行文件系统遍历
+	username := findVMOwnerFromFilesystem(vmName)
+
+	// 写入缓存
+	vmOwnerCacheMu.Lock()
+	vmOwnerCache[vmName] = vmOwnerCacheEntry{
+		username:  username,
+		expiresAt: time.Now().Add(vmOwnerCacheTTL),
+	}
+	vmOwnerCacheMu.Unlock()
+
+	return username
+}
+
+// findVMOwnerFromFilesystem 从文件系统查找 VM 归属用户
+func findVMOwnerFromFilesystem(vmName string) string {
 	vmAccessDir := config.GlobalConfig.VMAccessDir
 	entries, err := os.ReadDir(vmAccessDir)
 	if err != nil {
@@ -317,6 +573,20 @@ func FindVMOwner(vmName string) string {
 		}
 	}
 	return ""
+}
+
+// InvalidateVMOwnerCache 清除指定 VM 的归属用户缓存（在 VM 归属变更时调用）
+func InvalidateVMOwnerCache(vmName string) {
+	vmOwnerCacheMu.Lock()
+	delete(vmOwnerCache, strings.TrimSpace(vmName))
+	vmOwnerCacheMu.Unlock()
+}
+
+// ClearAllVMOwnerCache 清除所有 VM 归属用户缓存
+func ClearAllVMOwnerCache() {
+	vmOwnerCacheMu.Lock()
+	vmOwnerCache = make(map[string]vmOwnerCacheEntry)
+	vmOwnerCacheMu.Unlock()
 }
 
 // UpdateUserStatus 更新用户状态

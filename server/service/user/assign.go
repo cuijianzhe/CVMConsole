@@ -29,7 +29,13 @@ func AssignVMsToUserWithQuotas(username string, vmNames []string, lightweightQuo
 	if err := regeneratePolkitRules(); err != nil {
 		return err
 	}
-	defer HookSyncVMCacheOwnersForAssignment(username, vmNames)
+	defer func() {
+		HookSyncVMCacheOwnersForAssignment(username, vmNames)
+		// 清除所有相关 VM 的归属缓存
+		for _, vmName := range vmNames {
+			InvalidateVMOwnerCache(strings.TrimSpace(vmName))
+		}
+	}()
 	if !HookIsLightweightCloudType(user.CloudType) {
 		for _, vmName := range vmNames {
 			if HookIsLightweightCloudVM(vmName) {

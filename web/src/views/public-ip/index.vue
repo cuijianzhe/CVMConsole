@@ -277,7 +277,7 @@ import {
   unbindPublicIP,
   updatePublicIP
 } from '@/api/network'
-import { getUserList } from '@/api/user'
+import { getUserListSimple } from '@/api/user'
 import { getVmList } from '@/api/vm'
 
 const tableData = ref([])
@@ -361,7 +361,8 @@ const paginatedIPData = computed(() => {
 const fetchData = async () => {
   loading.value = true
   try {
-    const [ipRes, userRes, vmRes] = await Promise.all([getPublicIPs(), getUserList(), getVmList()])
+    // 使用轻量级用户列表接口（仅基础信息 + VM 列表，无配额计算）
+    const [ipRes, userRes, vmRes] = await Promise.all([getPublicIPs(), getUserListSimple(), getVmList()])
     tableData.value = ipRes.data || []
     users.value = (userRes.data || [])
     const ownerMap = {}

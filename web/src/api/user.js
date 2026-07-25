@@ -1,11 +1,19 @@
 import request from '@/utils/request'
 
-// 获取用户列表（管理员）
+// 获取用户列表（管理员，含配额等详细信息，耗时较长）
 export function getUserList(params) {
   return request({
     url: '/user/list',
     method: 'get',
     params
+  })
+}
+
+// 获取轻量级用户列表（仅基础信息 + VM 列表，快速响应）
+export function getUserListSimple() {
+  return request({
+    url: '/user/list/simple',
+    method: 'get'
   })
 }
 

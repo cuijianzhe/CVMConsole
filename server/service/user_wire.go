@@ -213,6 +213,10 @@ func ListUsers() ([]VMUserInfo, error) {
 	return userpkg.ListUsers()
 }
 
+func ListUsersSimple() ([]VMUserInfo, error) {
+	return userpkg.ListUsersSimple()
+}
+
 func CreateSystemUser(username, password, role string, maxCPU, maxMemory, maxDisk, maxVM, maxStorage, maxRuntimeHours int, enablePortForward bool, maxPortForwards, maxSnapshots int, maxBandwidthUp, maxBandwidthDown, maxTrafficDown, maxTrafficUp float64) error {
 	return userpkg.CreateSystemUser(username, password, role, maxCPU, maxMemory, maxDisk, maxVM, maxStorage, maxRuntimeHours, enablePortForward, maxPortForwards, maxSnapshots, maxBandwidthUp, maxBandwidthDown, maxTrafficDown, maxTrafficUp)
 }

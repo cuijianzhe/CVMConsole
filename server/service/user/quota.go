@@ -273,6 +273,8 @@ func AddVMToUser(username, vmName string) error {
 		return err
 	}
 	HookUpdateVMCacheOwner(vmName, username)
+	// 清除 VM 归属缓存，确保下次查询到最新结果
+	InvalidateVMOwnerCache(vmName)
 	return nil
 }
 
@@ -301,6 +303,8 @@ func RemoveVMFromUser(username, vmName string) error {
 		return err
 	}
 	HookSyncVMCacheOwner(vmName)
+	// 清除 VM 归属缓存，确保下次查询到最新结果
+	InvalidateVMOwnerCache(vmName)
 	return nil
 }
 

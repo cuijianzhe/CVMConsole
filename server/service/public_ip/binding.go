@@ -10,8 +10,30 @@ import (
 
 	netpkg "kvm_console/service/network"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 )
+
+// findVMOwnerFromCache 从数据库缓存查询 VM 归属用户（基于已有公网 IP 绑定记录）
+func findVMOwnerFromCache(vmName string) string {
+	if model.DB == nil {
+		return ""
+	}
+	vmName = strings.TrimSpace(vmName)
+	if vmName == "" {
+		return ""
+	}
+	var binding model.PublicIPBinding
+	if err := model.DB.Where("vm_name = ?", vmName).First(&binding).Error; err != nil {
+		return ""
+	}
+	username := strings.TrimSpace(binding.Username)
+	if username == "" {
+		return ""
+	}
+	logger.App.Debug("从数据库缓存获取 VM 归属用户", "vm", vmName, "user", username)
+	return username
+}
 
 func PreviewPublicIPBinding(id uint, req PublicIPBindRequest) (*PublicIPPreview, error) {
 	ipRow, err := getPublicIP(id)
@@ -195,7 +217,12 @@ func normalizePublicIPBindRequest(ipRow model.PublicIP, req PublicIPBindRequest,
 		return req, nil, fmt.Errorf("请选择虚拟机")
 	}
 	if req.Username == "" {
-		req.Username = HookFindVMOwner(req.VMName)
+		// 优先从数据库查询该 VM 的现有绑定获取用户名，避免遍历所有用户
+		req.Username = findVMOwnerFromCache(req.VMName)
+		if req.Username == "" && HookFindVMOwner != nil {
+			// 降级：从文件系统遍历查找
+			req.Username = HookFindVMOwner(req.VMName)
+		}
 	}
 	if req.Username == "" {
 		return req, nil, fmt.Errorf("无法识别虚拟机归属用户，请手动选择用户")

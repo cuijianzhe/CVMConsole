@@ -424,6 +424,8 @@ func Setup() *gin.Engine {
 			user.Use(middleware.AdminMiddleware())
 			{
 				user.GET("/list", handler.GetUserList)
+				user.GET("/list/simple", handler.GetUserListSimple)                      // 轻量级用户列表（仅基础信息 + VM 列表）
+				user.POST("/refresh-quota-snapshots", handler.RefreshUserQuotaSnapshots) // 手动刷新配额缓存
 				user.POST("", handler.CreateUser)
 				user.PUT("/:username/vms", handler.AssignVMs)
 				user.POST("/:username/lightweight-registrations", handler.CreateLightweightVMRegistrations)

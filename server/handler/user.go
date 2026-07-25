@@ -72,7 +72,7 @@ type UpdateUserStatusRequest struct {
 	Status string `json:"status" binding:"required"`
 }
 
-// GetUserList 获取用户列表
+// GetUserList 获取用户列表（含配额等详细信息，耗时较长）
 func GetUserList(c *gin.Context) {
 	users, err := service.ListUsers()
 	if err != nil {
@@ -87,6 +87,40 @@ func GetUserList(c *gin.Context) {
 		"code":    200,
 		"message": "ok",
 		"data":    users,
+	})
+}
+
+// GetUserListSimple 获取轻量级用户列表（仅基础信息 + VM 列表，快速响应）
+func GetUserListSimple(c *gin.Context) {
+	users, err := service.ListUsersSimple()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "获取用户列表失败: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "ok",
+		"data":    users,
+	})
+}
+
+// RefreshUserQuotaSnapshots 手动刷新所有用户配额缓存
+func RefreshUserQuotaSnapshots(c *gin.Context) {
+	if err := service.RefreshQuotaSnapshotsNow(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "刷新配额缓存失败: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "配额缓存刷新成功",
 	})
 }
 

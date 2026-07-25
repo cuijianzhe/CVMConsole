@@ -1384,7 +1384,7 @@
 import { computed, watch, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/user'
-import { getUserList } from '@/api/user'
+import { getUserListSimple } from '@/api/user'
 import { getVmList } from '@/api/vm'
 import {
   createNetworkBridge,
@@ -1771,7 +1771,8 @@ async function loadSwitchUserOptions() {
   if (!isAdmin.value) return
   switchUserLoading.value = true
   try {
-    const res = await getUserList()
+    // 使用轻量级用户列表（仅需 username + email）
+    const res = await getUserListSimple()
     switchUserOptions.value = (res.data || []).map(item => ({
       username: item.username,
       label: item.email ? `${item.username} (${item.email})` : item.username
@@ -1846,7 +1847,8 @@ async function loadUserOptions() {
   if (!isAdmin.value) return
   userOptionsLoading.value = true
   try {
-    const res = await getUserList()
+    // 使用轻量级用户列表（仅需基础信息）
+    const res = await getUserListSimple()
     userOptions.value = (res.data || [])
       .filter(item => item.role !== 'admin')
       .map(item => ({
