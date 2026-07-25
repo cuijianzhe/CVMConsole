@@ -425,11 +425,12 @@ func Setup() *gin.Engine {
 				resourceSpec.POST("/batch-delete", handler.BatchDeleteResourceSpecs)
 			}
 
-			// ==================== 云盘规格管理（管理员） ====================
+			// ==================== 云盘规格管理 ====================
+			// 列表对所有已认证用户开放（创建虚拟机时选择云盘规格使用）
+			authorized.GET("/cloud-disk-specs", handler.ListCloudDiskSpecs)
 			cloudDiskSpec := authorized.Group("/cloud-disk-specs")
 			cloudDiskSpec.Use(middleware.AdminMiddleware())
 			{
-				cloudDiskSpec.GET("", handler.ListCloudDiskSpecs)
 				cloudDiskSpec.POST("", handler.CreateCloudDiskSpec)
 				cloudDiskSpec.PUT("/:id", handler.UpdateCloudDiskSpec)
 				cloudDiskSpec.DELETE("/:id", handler.DeleteCloudDiskSpec)

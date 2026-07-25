@@ -51,12 +51,12 @@
             <el-row :gutter="20">
               <el-col :span="12">
                 <el-form-item label="CPU 核心" prop="vcpu">
-                  <el-input-number v-model="form.vcpu" :min="vcpuMin" :max="vcpuMax" style="width: 100%;" :disabled="isEdit && editVmStatus === 'running' && !form.cpu_hotplug_enabled" />
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="内存(GB)" prop="memory">
-                  <el-input-number v-model="form.memory" :min="memoryMin" :max="64" :step="1" style="width: 100%;" @change="handleBaseMemoryChange" />
+                  <el-input-number v-model="form.vcpu" :min="vcpuMin" :max="vcpuMax" style="width: 100%;" :disabled="!!selectedResourceSpecId || (isEdit && editVmStatus === 'running' && !form.cpu_hotplug_enabled)" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="12">
+                    <el-form-item label="内存(GB)" prop="memory">
+                      <el-input-number v-model="form.memory" :min="memoryMin" :max="64" :step="1" style="width: 100%;" :disabled="!!selectedResourceSpecId" @change="handleBaseMemoryChange" />
                 </el-form-item>
               </el-col>
             </el-row>
@@ -815,42 +815,6 @@
                       </el-option-group>
                     </el-select>
                   </el-form-item>
-                  <el-row :gutter="20">
-                    <el-col :span="12">
-                      <el-form-item label="磁盘大小(GB)" prop="disk_size">
-                        <el-input-number v-model="form.disk_size" :min="templateMinDiskSize || 1" :max="2000" :step="10" style="width: 100%;" />
-                        <div style="font-size: 12px; color: #909399; margin-top: 4px;">{{ templateDiskSizeTip }}</div>
-                      </el-form-item>
-                    </el-col>
-                    <el-col :span="12">
-                      <el-form-item label="系统盘驱动" prop="disk_bus">
-                        <el-select v-model="form.disk_bus" style="width: 100%;">
-                          <el-option label="VirtIO" value="virtio" />
-                          <el-option label="SCSI" value="scsi" />
-                          <el-option label="SATA" value="sata" />
-                          <el-option label="IDE" value="ide" />
-                        </el-select>
-                        <div class="form-tip"><el-icon><InfoFilled /></el-icon>优先按模板记录自动带出；旧模板会回退到当前默认值</div>
-                      </el-form-item>
-                    </el-col>
-                  </el-row>
-
-                  <!-- 系统盘 IOPS 限制（仅管理员） -->
-                  <el-row v-if="isAdmin" :gutter="20" style="margin-top: 8px;">
-                    <el-col :span="24">
-                      <el-form-item label="系统盘 IOPS">
-                        <div style="display: flex; gap: 8px; align-items: center; width: 100%; flex-wrap: wrap;">
-                          <span style="font-size: 12px; color: #909399; white-space: nowrap;">总</span>
-                          <el-input-number v-model="form.system_disk_iops_total" :min="0" :step="100" size="small" style="width: 100px;" placeholder="总IOPS" />
-                          <span style="font-size: 12px; color: #909399; white-space: nowrap;">读</span>
-                          <el-input-number v-model="form.system_disk_iops_read" :min="0" :step="100" size="small" style="width: 100px;" placeholder="读IOPS" :disabled="form.system_disk_iops_total > 0" />
-                          <span style="font-size: 12px; color: #909399; white-space: nowrap;">写</span>
-                          <el-input-number v-model="form.system_disk_iops_write" :min="0" :step="100" size="small" style="width: 100px;" placeholder="写IOPS" :disabled="form.system_disk_iops_total > 0" />
-                          <span style="font-size: 11px; color: var(--el-color-warning);">互斥</span>
-                        </div>
-                      </el-form-item>
-                    </el-col>
-                  </el-row>
                 </div>
               </div>
               <div class="form-section-card">
@@ -1110,12 +1074,12 @@
                 <el-row :gutter="20">
                   <el-col :span="12">
                     <el-form-item label="CPU 核心" prop="vcpu">
-                      <el-input-number v-model="form.vcpu" :min="vcpuMin" :max="vcpuMax" style="width: 100%;" :disabled="isEdit && editVmStatus === 'running' && !form.cpu_hotplug_enabled" />
+                      <el-input-number v-model="form.vcpu" :min="vcpuMin" :max="vcpuMax" style="width: 100%;" :disabled="!!selectedResourceSpecId || (isEdit && editVmStatus === 'running' && !form.cpu_hotplug_enabled)" />
                     </el-form-item>
                   </el-col>
                   <el-col :span="12">
                     <el-form-item label="内存(GB)" prop="ram">
-                      <el-input-number v-model="form.ram" :min="1" :max="64" style="width: 100%;" @change="handleBaseMemoryChange" />
+                      <el-input-number v-model="form.ram" :min="1" :max="64" style="width: 100%;" :disabled="!!selectedResourceSpecId" @change="handleBaseMemoryChange" />
                     </el-form-item>
                   </el-col>
                 </el-row>
@@ -1249,7 +1213,7 @@
             <div class="step-pane-info">
               <div class="step-pane-title">存储介质</div>
               <div class="step-pane-desc" v-if="form.create_mode === 'iso'">选择 ISO 镜像并配置系统磁盘</div>
-              <div class="step-pane-desc" v-else-if="isTemplateSourceMode">{{ disableSystemInit ? '选择模板并直接创建（跳过系统初始化）' : '选择模板并配置克隆参数' }}</div>
+              <div class="step-pane-desc" v-else-if="isTemplateSourceMode">{{ disableSystemInit ? '配置系统盘与数据盘（跳过系统初始化）' : '配置系统盘与数据盘' }}</div>
               <div class="step-pane-desc" v-else>选择要导入的磁盘文件</div>
             </div>
           </div>
@@ -1261,7 +1225,7 @@
               </div>
               <div class="form-section-card-body">
                 <el-form-item label="虚拟机硬盘">
-                  <el-select v-model="form.storage_pool_id" placeholder="使用默认存储位置" clearable filterable style="width: 100%;">
+                  <el-select v-model="form.storage_pool_id" placeholder="使用默认存储位置" clearable filterable style="width: 100%;" :disabled="!!selectedSystemDiskSpecId">
                     <el-option v-for="target in storageTargets" :key="target.id" :label="storageTargetLabel(target)" :value="target.id">
                       <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
                         <span>{{ target.display_name }}</span>
@@ -1272,7 +1236,8 @@
                       </div>
                     </el-option>
                   </el-select>
-                  <div class="form-tip"><el-icon><InfoFilled /></el-icon>留空时使用管理员设置的默认存储位置，没有默认时回退系统克隆目录</div>
+                  <div class="form-tip" v-if="selectedSystemDiskSpecId"><el-icon><InfoFilled /></el-icon>已由云盘规格指定存储位置，不可修改</div>
+                  <div class="form-tip" v-else><el-icon><InfoFilled /></el-icon>留空时使用管理员设置的默认存储位置，没有默认时回退系统克隆目录</div>
                 </el-form-item>
               </div>
             </div>
@@ -1334,6 +1299,37 @@
                   <span>系统磁盘</span>
                 </div>
                 <div class="form-section-card-body">
+                  <el-form-item label="选择规格" v-if="systemDiskSpecOptions.length">
+                    <el-select
+                      v-model="selectedSystemDiskSpecId"
+                      placeholder="选择已有云盘规格快速填充（可选）"
+                      clearable
+                      filterable
+                      style="width: 100%;"
+                      @change="handleSystemDiskSpecChange"
+                    >
+                      <el-option
+                        v-for="spec in systemDiskSpecOptions"
+                        :key="spec.id"
+                        :label="`${spec.name}（${spec.capacity_gb}GB）`"
+                        :value="spec.id"
+                      />
+                    </el-select>
+                  </el-form-item>
+                  <template v-if="selectedSystemDiskSpec">
+                    <el-alert type="success" :closable="false" show-icon style="margin-bottom: 12px;">
+                      <template #title>已应用云盘规格：{{ selectedSystemDiskSpec.name }}</template>
+                      <div style="font-size: 12px; line-height: 1.8;">
+                        容量 {{ selectedSystemDiskSpec.capacity_gb }}GB　|　格式 {{ (selectedSystemDiskSpec.disk_format || 'QCOW2').toUpperCase() }}
+                        <template v-if="isAdmin">　|　IOPS：
+                          <span v-if="selectedSystemDiskSpec.iops_mode === 'TOTAL'">总 {{ selectedSystemDiskSpec.total_iops }}</span>
+                          <span v-else>读 {{ selectedSystemDiskSpec.read_iops }} / 写 {{ selectedSystemDiskSpec.write_iops }}</span>
+                        </template>
+                        <template v-if="selectedSystemDiskSpec.storage_location">　|　存储位置 {{ selectedSystemDiskSpec.storage_location }}</template>
+                      </div>
+                    </el-alert>
+                  </template>
+                  <template v-else>
                   <el-row :gutter="20">
                     <el-col :span="12">
                       <el-form-item label="系统盘(GB)" prop="disk_size">
@@ -1378,29 +1374,80 @@
                       </el-form-item>
                     </el-col>
                   </el-row>
+                  </template>
 
                   <el-form-item label="额外磁盘">
-                    <div v-for="(disk, index) in form.extra_disks" :key="index" style="display: flex; gap: 8px; margin-bottom: 8px; width: 100%; flex-wrap: wrap; align-items: center;">
-                      <el-input-number v-model="disk.size" :min="1" :max="2000" placeholder="大小(GB)" style="width: 120px;" />
-                      <el-select v-model="disk.format" style="width: 100px;">
-                        <el-option label="qcow2" value="qcow2" />
-                        <el-option label="raw" value="raw" />
-                      </el-select>
-                      <el-select v-model="disk.bus" placeholder="驱动" style="width: 110px;">
-                        <el-option label="VirtIO" value="virtio" />
-                        <el-option label="SCSI" value="scsi" />
-                        <el-option label="SATA" value="sata" />
-                        <el-option label="IDE" value="ide" />
-                      </el-select>
-                      <el-select v-model="disk.storage_pool_id" placeholder="默认存储" clearable filterable style="width: 180px;">
-                        <el-option v-for="target in storageTargets" :key="target.id" :label="storageTargetLabel(target)" :value="target.id" />
-                      </el-select>
-                      <span style="line-height: 32px; color: #909399;">GB</span>
-                      <el-button v-if="isAdmin" size="small" @click="openCreateExtraDiskIOPSDialog(index)" style="font-size: 11px;">IOPS</el-button>
-                      <el-button type="danger" icon="Delete" size="small" circle @click="form.extra_disks.splice(index, 1)" />
-                      <span v-if="isAdmin && (disk.iops_total > 0 || disk.iops_read > 0 || disk.iops_write > 0)" style="font-size: 11px; color: var(--el-color-warning); width: 100%;">
-                        IOPS: 总{{ disk.iops_total || 0 }} / 读{{ disk.iops_read || 0 }} / 写{{ disk.iops_write || 0 }}
-                      </span>
+                    <div v-for="(disk, index) in form.extra_disks" :key="index" style="width: 100%; margin-bottom: 12px; border: 1px solid var(--el-border-color-lighter); border-radius: 6px; padding: 10px 12px;">
+                      <!-- 第一行：规格 / 大小 / 格式 / 驱动 / 删除 -->
+                      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                        <el-select
+                          v-if="dataDiskSpecOptions.length"
+                          v-model="disk.selected_disk_spec_id"
+                          placeholder="选择规格（可选）"
+                          clearable
+                          filterable
+                          size="small"
+                          style="width: 160px;"
+                          @change="(val) => handleExtraDiskSpecChange(index, val)"
+                        >
+                          <el-option
+                            v-for="spec in dataDiskSpecOptions"
+                            :key="spec.id"
+                            :label="`${spec.name}（${spec.capacity_gb}GB）`"
+                            :value="spec.id"
+                          />
+                        </el-select>
+                        <template v-if="getSelectedDataDiskSpec(disk)">
+                          <el-tag type="success" size="small" style="margin-right: 4px;">
+                            {{ getSelectedDataDiskSpec(disk).name }}
+                          </el-tag>
+                          <span style="font-size: 12px; color: #606266;">
+                            {{ getSelectedDataDiskSpec(disk).capacity_gb }} GB　|　
+                            {{ (getSelectedDataDiskSpec(disk).disk_format || 'QCOW2').toUpperCase() }}
+                            <template v-if="isAdmin">　|　
+                              <span v-if="getSelectedDataDiskSpec(disk).iops_mode === 'TOTAL'">总 IOPS {{ getSelectedDataDiskSpec(disk).total_iops }}</span>
+                              <span v-else>读 {{ getSelectedDataDiskSpec(disk).read_iops }} / 写 {{ getSelectedDataDiskSpec(disk).write_iops }} IOPS</span>
+                            </template>
+                          </span>
+                        </template>
+                        <template v-else>
+                          <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #909399; white-space: nowrap;">
+                            磁盘大小
+                            <el-input-number v-model="disk.size" :min="1" :max="2000" size="small" style="width: 110px;" />
+                            <span>GB</span>
+                          </span>
+                          <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #909399; white-space: nowrap;">
+                            磁盘类型
+                            <el-select v-model="disk.format" size="small" style="width: 100px;">
+                              <el-option label="qcow2" value="qcow2" />
+                              <el-option label="raw" value="raw" />
+                            </el-select>
+                          </span>
+                          <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #909399; white-space: nowrap;">
+                            数据盘驱动
+                            <el-select v-model="disk.bus" size="small" style="width: 100px;">
+                              <el-option label="VirtIO" value="virtio" />
+                              <el-option label="SCSI" value="scsi" />
+                              <el-option label="SATA" value="sata" />
+                              <el-option label="IDE" value="ide" />
+                            </el-select>
+                          </span>
+                        </template>
+                        <div style="flex: 1;"></div>
+                        <el-button type="danger" icon="Delete" size="small" circle @click="form.extra_disks.splice(index, 1)" />
+                      </div>
+                      <!-- 第二行：存储位置 + IOPS -->
+                      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px;">
+                        <span style="font-size: 12px; color: #909399; white-space: nowrap;">存储位置</span>
+                        <el-select v-model="disk.storage_pool_id" placeholder="默认存储位置" clearable filterable size="small" style="width: 220px;" :disabled="!!disk.selected_disk_spec_id">
+                          <el-option v-for="target in storageTargets" :key="target.id" :label="storageTargetLabel(target)" :value="target.id" />
+                        </el-select>
+                        <el-button v-if="isAdmin && !disk.selected_disk_spec_id" size="small" @click="openCreateExtraDiskIOPSDialog(index)">IOPS 限制</el-button>
+                      </div>
+                      <!-- IOPS 数值提示 -->
+                      <div v-if="isAdmin && (disk.iops_total > 0 || disk.iops_read > 0 || disk.iops_write > 0)" style="font-size: 11px; color: var(--el-color-warning); margin-top: 6px;">
+                        IOPS: 总 {{ disk.iops_total || 0 }} / 读 {{ disk.iops_read || 0 }} / 写 {{ disk.iops_write || 0 }}
+                      </div>
                     </div>
                     <el-button type="primary" size="small" plain icon="Plus" @click="addCreateExtraDisk">
                       添加额外磁盘
@@ -1411,41 +1458,162 @@
               </div>
             </template>
 
-            <!-- 模板克隆提示 -->
+            <!-- 模板克隆：系统盘 + 数据盘 -->
             <template v-if="isTemplateSourceMode">
-              <el-alert type="info" :closable="false" show-icon>
-                <template #title>
-                  {{ disableSystemInit ? '已关闭系统初始化，模板与系统盘参数已在「基础信息」步骤中配置完成，可在下方追加数据盘。' : '模板克隆的系统盘和登录凭据已在「基础信息」步骤中配置完成，可在下方追加数据盘。' }}
-                </template>
-              </el-alert>
-              <div class="form-section-card" style="margin-top: 14px;">
+              <div class="form-section-card">
+                <div class="form-section-card-header">
+                  <el-icon><Coin /></el-icon>
+                  <span>系统磁盘</span>
+                </div>
+                <div class="form-section-card-body">
+                  <el-form-item label="选择规格" v-if="systemDiskSpecOptions.length">
+                    <el-select
+                      v-model="selectedSystemDiskSpecId"
+                      placeholder="选择已有云盘规格快速填充（可选）"
+                      clearable
+                      filterable
+                      style="width: 100%;"
+                      @change="handleSystemDiskSpecChange"
+                    >
+                      <el-option
+                        v-for="spec in systemDiskSpecOptions"
+                        :key="spec.id"
+                        :label="`${spec.name}（${spec.capacity_gb}GB）`"
+                        :value="spec.id"
+                      />
+                    </el-select>
+                  </el-form-item>
+                  <template v-if="selectedSystemDiskSpec">
+                    <el-alert type="success" :closable="false" show-icon style="margin-bottom: 12px;">
+                      <template #title>已应用云盘规格：{{ selectedSystemDiskSpec.name }}</template>
+                      <div style="font-size: 12px; line-height: 1.8;">
+                        容量 {{ selectedSystemDiskSpec.capacity_gb }}GB
+                        <template v-if="isAdmin">　|　IOPS：
+                          <span v-if="selectedSystemDiskSpec.iops_mode === 'TOTAL'">总 {{ selectedSystemDiskSpec.total_iops }}</span>
+                          <span v-else>读 {{ selectedSystemDiskSpec.read_iops }} / 写 {{ selectedSystemDiskSpec.write_iops }}</span>
+                        </template>
+                        <template v-if="selectedSystemDiskSpec.storage_location">　|　存储位置 {{ selectedSystemDiskSpec.storage_location }}</template>
+                      </div>
+                    </el-alert>
+                  </template>
+                  <template v-else>
+                  <el-row :gutter="20">
+                    <el-col :span="12">
+                      <el-form-item label="磁盘大小(GB)" prop="disk_size">
+                        <el-input-number v-model="form.disk_size" :min="templateMinDiskSize || 1" :max="2000" :step="10" style="width: 100%;" />
+                        <div style="font-size: 12px; color: #909399; margin-top: 4px;">{{ templateDiskSizeTip }}</div>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="12">
+                      <el-form-item label="系统盘驱动" prop="disk_bus">
+                        <el-select v-model="form.disk_bus" style="width: 100%;">
+                          <el-option label="VirtIO" value="virtio" />
+                          <el-option label="SCSI" value="scsi" />
+                          <el-option label="SATA" value="sata" />
+                          <el-option label="IDE" value="ide" />
+                        </el-select>
+                        <div class="form-tip"><el-icon><InfoFilled /></el-icon>优先按模板记录自动带出；旧模板会回退到当前默认值</div>
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+
+                  <!-- 系统盘 IOPS 限制（仅管理员） -->
+                  <el-row v-if="isAdmin" :gutter="20" style="margin-top: 8px;">
+                    <el-col :span="24">
+                      <el-form-item label="系统盘 IOPS">
+                        <div style="display: flex; gap: 8px; align-items: center; width: 100%; flex-wrap: wrap;">
+                          <span style="font-size: 12px; color: #909399; white-space: nowrap;">总</span>
+                          <el-input-number v-model="form.system_disk_iops_total" :min="0" :step="100" size="small" style="width: 100px;" placeholder="总IOPS" />
+                          <span style="font-size: 12px; color: #909399; white-space: nowrap;">读</span>
+                          <el-input-number v-model="form.system_disk_iops_read" :min="0" :step="100" size="small" style="width: 100px;" placeholder="读IOPS" :disabled="form.system_disk_iops_total > 0" />
+                          <span style="font-size: 12px; color: #909399; white-space: nowrap;">写</span>
+                          <el-input-number v-model="form.system_disk_iops_write" :min="0" :step="100" size="small" style="width: 100px;" placeholder="写IOPS" :disabled="form.system_disk_iops_total > 0" />
+                          <span style="font-size: 11px; color: var(--el-color-warning);">互斥</span>
+                        </div>
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                  </template>
+                </div>
+              </div>
+              <div class="form-section-card">
                 <div class="form-section-card-header">
                   <el-icon><Coin /></el-icon>
                   <span>额外数据盘</span>
                 </div>
                 <div class="form-section-card-body">
                   <el-form-item label="额外磁盘">
-                    <div v-for="(disk, index) in form.extra_disks" :key="index" style="display: flex; gap: 8px; margin-bottom: 8px; width: 100%; flex-wrap: wrap; align-items: center;">
-                      <el-input-number v-model="disk.size" :min="1" :max="2000" placeholder="大小(GB)" style="width: 120px;" />
-                      <el-select v-model="disk.format" style="width: 100px;">
-                        <el-option label="qcow2" value="qcow2" />
-                        <el-option v-if="isAdmin" label="raw" value="raw" />
-                      </el-select>
-                      <el-select v-model="disk.bus" placeholder="驱动" style="width: 110px;">
-                        <el-option label="VirtIO" value="virtio" />
-                        <el-option label="SCSI" value="scsi" />
-                        <el-option label="SATA" value="sata" />
-                        <el-option label="IDE" value="ide" />
-                      </el-select>
-                      <el-select v-model="disk.storage_pool_id" placeholder="默认存储" clearable filterable style="width: 180px;">
-                        <el-option v-for="target in storageTargets" :key="target.id" :label="storageTargetLabel(target)" :value="target.id" />
-                      </el-select>
-                      <span style="line-height: 32px; color: #909399;">GB</span>
-                      <el-button v-if="isAdmin" size="small" @click="openCreateExtraDiskIOPSDialog(index)" style="font-size: 11px;">IOPS</el-button>
-                      <el-button type="danger" icon="Delete" size="small" circle @click="form.extra_disks.splice(index, 1)" />
-                      <span v-if="isAdmin && (disk.iops_total > 0 || disk.iops_read > 0 || disk.iops_write > 0)" style="font-size: 11px; color: var(--el-color-warning); width: 100%;">
-                        IOPS: 总{{ disk.iops_total || 0 }} / 读{{ disk.iops_read || 0 }} / 写{{ disk.iops_write || 0 }}
-                      </span>
+                    <div v-for="(disk, index) in form.extra_disks" :key="index" style="width: 100%; margin-bottom: 12px; border: 1px solid var(--el-border-color-lighter); border-radius: 6px; padding: 10px 12px;">
+                      <!-- 第一行：规格 / 大小 / 格式 / 驱动 / 删除 -->
+                      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                        <el-select
+                          v-if="dataDiskSpecOptions.length"
+                          v-model="disk.selected_disk_spec_id"
+                          placeholder="选择规格（可选）"
+                          clearable
+                          filterable
+                          size="small"
+                          style="width: 160px;"
+                          @change="(val) => handleExtraDiskSpecChange(index, val)"
+                        >
+                          <el-option
+                            v-for="spec in dataDiskSpecOptions"
+                            :key="spec.id"
+                            :label="`${spec.name}（${spec.capacity_gb}GB）`"
+                            :value="spec.id"
+                          />
+                        </el-select>
+                        <template v-if="getSelectedDataDiskSpec(disk)">
+                          <el-tag type="success" size="small" style="margin-right: 4px;">
+                            {{ getSelectedDataDiskSpec(disk).name }}
+                          </el-tag>
+                          <span style="font-size: 12px; color: #606266;">
+                            {{ getSelectedDataDiskSpec(disk).capacity_gb }} GB　|　
+                            {{ (getSelectedDataDiskSpec(disk).disk_format || 'QCOW2').toUpperCase() }}
+                            <template v-if="isAdmin">　|　
+                              <span v-if="getSelectedDataDiskSpec(disk).iops_mode === 'TOTAL'">总 IOPS {{ getSelectedDataDiskSpec(disk).total_iops }}</span>
+                              <span v-else>读 {{ getSelectedDataDiskSpec(disk).read_iops }} / 写 {{ getSelectedDataDiskSpec(disk).write_iops }} IOPS</span>
+                            </template>
+                          </span>
+                        </template>
+                        <template v-else>
+                          <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #909399; white-space: nowrap;">
+                            磁盘大小
+                            <el-input-number v-model="disk.size" :min="1" :max="2000" size="small" style="width: 110px;" />
+                            <span>GB</span>
+                          </span>
+                          <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #909399; white-space: nowrap;">
+                            磁盘类型
+                            <el-select v-model="disk.format" size="small" style="width: 100px;">
+                              <el-option label="qcow2" value="qcow2" />
+                              <el-option v-if="isAdmin" label="raw" value="raw" />
+                            </el-select>
+                          </span>
+                          <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #909399; white-space: nowrap;">
+                            数据盘驱动
+                            <el-select v-model="disk.bus" size="small" style="width: 100px;">
+                              <el-option label="VirtIO" value="virtio" />
+                              <el-option label="SCSI" value="scsi" />
+                              <el-option label="SATA" value="sata" />
+                              <el-option label="IDE" value="ide" />
+                            </el-select>
+                          </span>
+                        </template>
+                        <div style="flex: 1;"></div>
+                        <el-button type="danger" icon="Delete" size="small" circle @click="form.extra_disks.splice(index, 1)" />
+                      </div>
+                      <!-- 第二行：存储位置 + IOPS -->
+                      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px;">
+                        <span style="font-size: 12px; color: #909399; white-space: nowrap;">存储位置</span>
+                        <el-select v-model="disk.storage_pool_id" placeholder="默认存储位置" clearable filterable size="small" style="width: 220px;" :disabled="!!disk.selected_disk_spec_id">
+                          <el-option v-for="target in storageTargets" :key="target.id" :label="storageTargetLabel(target)" :value="target.id" />
+                        </el-select>
+                        <el-button v-if="isAdmin && !disk.selected_disk_spec_id" size="small" @click="openCreateExtraDiskIOPSDialog(index)">IOPS 限制</el-button>
+                      </div>
+                      <!-- IOPS 数值提示 -->
+                      <div v-if="isAdmin && (disk.iops_total > 0 || disk.iops_read > 0 || disk.iops_write > 0)" style="font-size: 11px; color: var(--el-color-warning); margin-top: 6px;">
+                        IOPS: 总 {{ disk.iops_total || 0 }} / 读 {{ disk.iops_read || 0 }} / 写 {{ disk.iops_write || 0 }}
+                      </div>
                     </div>
                     <el-button type="primary" size="small" plain icon="Plus" @click="addCreateExtraDisk">
                       添加额外磁盘
@@ -2632,7 +2800,7 @@
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { updateVm, getVmXML, updateVmXML, createVm, cloneVm, batchCloneVm, getTemplateList, getOSVariants, getVmDetail, getDiskList, resizeDisk, removeDisk, changeDiskBus, attachDisk, changeCDROM, ejectCDROM, removeCDROM, changeFloppy, ejectFloppy, removeFloppy, adminImportDisk, adminImportDiskForVM, getPassthroughDevices, getVmPassthroughDevices, bindPCIDevice, getSpiceStatus, enableSpice, disableSpice } from '@/api/vm'
-import { getAllISOs, getVMStorageTargets } from '@/api/infra'
+import { getAllISOs, getVMStorageTargets, getStoragePoolList } from '@/api/infra'
 import { getUserISOs, selfCreateVm, importVM } from '@/api/storage'
 import { spiceEnabledByDefault } from '@/utils/site'
 import { getStorageFiles } from '@/api/storage'
@@ -2640,6 +2808,7 @@ import { selfCloneVm } from '@/api/user'
 import { getVPCSecurityGroups, getVPCSwitches } from '@/api/vpc'
 import { getCPUAffinityPresets, getSettings, getHostCPUCores, getPublicSystemInfo, getVGPUInstances } from '@/api/settings'
 import { listResourceSpecs } from '@/api/resourceSpec'
+import { listCloudDiskSpecs } from '@/api/cloudDiskSpec'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Top, Bottom, Delete, Plus, ArrowRight, Discount } from '@element-plus/icons-vue'
 import FormIcons from '@/components/icons/FormIcons.vue'
@@ -2672,6 +2841,23 @@ const hostCPUCores = ref(0)
 const hostArch = ref('x86_64')
 const resourceSpecs = ref([])
 const selectedResourceSpecId = ref(null)
+const cloudDiskSpecs = ref([])
+const selectedSystemDiskSpecId = ref(null)
+const storagePoolList = ref([])
+// 存储池 name -> id 映射（用于云盘规格 storage_location 填入 storage_pool_id）
+const storagePoolNameToIdMap = computed(() => {
+  const map = {}
+  const walk = (nodes) => {
+    if (!Array.isArray(nodes)) return
+    for (const n of nodes) {
+      if (n.name) map[n.name] = n.id
+      if (n.children?.length) walk(n.children)
+    }
+  }
+  walk(storagePoolList.value)
+  return map
+})
+const resolveStoragePoolIdByName = (name) => storagePoolNameToIdMap.value[name] || ''
 const registrationContext = reactive({
   dedicated_vpc_switch_id: 0,
   dedicated_vpc_label: ''
@@ -2680,6 +2866,14 @@ const registrationContext = reactive({
 const isTemplateSourceMode = computed(() => form.create_mode === 'template')
 const disableSystemInit = computed(() => isTemplateSourceMode.value && !form.system_init_enabled)
 const disableImportSystemInit = computed(() => form.create_mode === 'import' && !form.system_init_enabled)
+
+// 云盘规格按类型筛选
+const systemDiskSpecOptions = computed(() => cloudDiskSpecs.value.filter((s) => s.disk_type === 'SYSTEM'))
+const dataDiskSpecOptions = computed(() => cloudDiskSpecs.value.filter((s) => s.disk_type === 'DATA'))
+// 当前选中的系统盘规格
+const selectedSystemDiskSpec = computed(() => cloudDiskSpecs.value.find((s) => s.id === selectedSystemDiskSpecId.value))
+// 获取指定数据盘选中的云盘规格
+const getSelectedDataDiskSpec = (disk) => cloudDiskSpecs.value.find((s) => s.id === disk?.selected_disk_spec_id)
 
 // 导入模式系统分类选项（根据 os_type 动态变化）
 const importCategoryOptions = computed(() => {
@@ -4205,6 +4399,7 @@ const addCreateExtraDisk = () => {
     iops_total: 0,
     iops_read: 0,
     iops_write: 0,
+    selected_disk_spec_id: null,
   })
 }
 
@@ -4625,6 +4820,62 @@ const handleResourceSpecChange = (specId) => {
   handleBaseMemoryChange()
 }
 
+// 系统盘选择云盘规格快速填写
+const handleSystemDiskSpecChange = (specId) => {
+  if (!specId) return
+  const spec = cloudDiskSpecs.value.find((s) => s.id === specId)
+  if (!spec) return
+  form.disk_size = spec.capacity_gb
+  if (spec.disk_format) {
+    form.disk_format = spec.disk_format.toLowerCase()
+  }
+  if (spec.iops_mode === 'TOTAL') {
+    form.system_disk_iops_total = spec.total_iops || 0
+    form.system_disk_iops_read = 0
+    form.system_disk_iops_write = 0
+  } else {
+    form.system_disk_iops_total = 0
+    form.system_disk_iops_read = spec.read_iops || 0
+    form.system_disk_iops_write = spec.write_iops || 0
+  }
+  // 填入存储位置
+  if (spec.storage_location) {
+    const poolId = resolveStoragePoolIdByName(spec.storage_location)
+    if (poolId) {
+      form.storage_pool_id = poolId
+    }
+  }
+}
+
+// 数据盘选择云盘规格快速填写
+const handleExtraDiskSpecChange = (index, specId) => {
+  if (!specId) return
+  const spec = cloudDiskSpecs.value.find((s) => s.id === specId)
+  if (!spec) return
+  const disk = form.extra_disks[index]
+  if (!disk) return
+  disk.size = spec.capacity_gb
+  if (spec.disk_format) {
+    disk.format = spec.disk_format.toLowerCase()
+  }
+  if (spec.iops_mode === 'TOTAL') {
+    disk.iops_total = spec.total_iops || 0
+    disk.iops_read = 0
+    disk.iops_write = 0
+  } else {
+    disk.iops_total = 0
+    disk.iops_read = spec.read_iops || 0
+    disk.iops_write = spec.write_iops || 0
+  }
+  // 填入存储位置
+  if (spec.storage_location) {
+    const poolId = resolveStoragePoolIdByName(spec.storage_location)
+    if (poolId) {
+      disk.storage_pool_id = poolId
+    }
+  }
+}
+
 const open = async (row, mode, options = {}) => {
   visible.value = true
   activeTabEdit.value = 'basic'
@@ -4670,6 +4921,25 @@ const open = async (row, mode, options = {}) => {
       const specRes = await listResourceSpecs({ page: 1, page_size: 200 })
       if (specRes.code === 200) {
         resourceSpecs.value = specRes.data?.list || []
+      }
+    } catch {}
+  }
+  // 获取云盘规格列表（用于快速选择系统盘/数据盘大小）
+  selectedSystemDiskSpecId.value = null
+  if (!cloudDiskSpecs.value.length) {
+    try {
+      const diskSpecRes = await listCloudDiskSpecs({ page: 1, page_size: 200 })
+      if (diskSpecRes.code === 200) {
+        cloudDiskSpecs.value = diskSpecRes.data?.list || []
+      }
+    } catch {}
+  }
+  // 获取存储池列表（用于云盘规格 storage_location 名称映射到 storage_pool_id）
+  if (!storagePoolList.value.length) {
+    try {
+      const poolRes = await getStoragePoolList()
+      if (poolRes.code === 200) {
+        storagePoolList.value = poolRes.data || []
       }
     } catch {}
   }
@@ -5187,6 +5457,7 @@ const onClosed = () => {
   registrationContext.dedicated_vpc_switch_id = 0
   registrationContext.dedicated_vpc_label = ''
   selectedResourceSpecId.value = null
+  selectedSystemDiskSpecId.value = null
   initAdvancedIntro()
   extraNics.value = []
   formRef.value?.resetFields()
