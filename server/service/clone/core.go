@@ -170,7 +170,7 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 	isFnOS := tplType == "fnos" || (tplType == "other" && strings.EqualFold(params.TemplateCategory, "FnOS"))
 	isOther := tplType == "other" && !strings.EqualFold(params.TemplateCategory, "FnOS") && !strings.EqualFold(params.TemplateCategory, "OpenWrt")
 	isOpenWrt := tplType == "openwrt" || (tplType == "other" && strings.EqualFold(params.TemplateCategory, "OpenWrt"))
-	isNoInit := (meta != nil && strings.ToLower(strings.TrimSpace(meta.CloudInitMode)) == "none") || params.DisableSystemInit
+	isNoInit := (meta != nil && strings.EqualFold(strings.TrimSpace(meta.CloudInitMode), "none")) || params.DisableSystemInit
 
 	// 克隆前存储空间预检查
 	if err := D.CheckStorageSpace(filepath.Dir(cloneDisk), int64(params.DiskSize)*1024+1024); err != nil {

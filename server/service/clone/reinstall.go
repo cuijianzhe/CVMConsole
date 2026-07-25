@@ -21,7 +21,7 @@ func shutdownVMForReinstall(ctx context.Context, vmName string, progressFn func(
 	err := libvirt_rpc.DestroyDomainRPC(vmName)
 	if err != nil {
 		state, stateErr := libvirt_rpc.GetDomainStateRPC(vmName)
-		if stateErr != nil || (strings.ToLower(state) != "shut off" && strings.ToLower(state) != "shutoff") {
+		if stateErr != nil || (!strings.EqualFold(state, "shut off") && !strings.EqualFold(state, "shutoff")) {
 			return fmt.Errorf("强制断电失败: %w", err)
 		}
 	}
