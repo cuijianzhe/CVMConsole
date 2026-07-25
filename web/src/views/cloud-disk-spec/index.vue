@@ -5,7 +5,7 @@
         <div class="section-header">
           <div class="header-title">
             <h2>云盘规格</h2>
-            <el-text type="info">管理云存储磁盘规格模板，定义容量与 IOPS 指标</el-text>
+            <el-text type="info">管理云存储磁盘规格模板，支持系统盘与数据盘配置</el-text>
           </div>
           <div class="header-actions">
             <el-input
@@ -50,31 +50,42 @@
         stripe
       >
         <el-table-column type="selection" width="50" align="center" />
-        <el-table-column prop="name" label="规格名称" min-width="180" />
+        <el-table-column prop="name" label="规格名称" min-width="160" />
+        <el-table-column label="磁盘类型" min-width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.disk_type === 'SYSTEM' ? 'warning' : 'primary'" size="small">
+              {{ row.disk_type === 'SYSTEM' ? '系统盘' : '数据盘' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="容量" min-width="100" align="center">
           <template #default="{ row }">
             <span>{{ formatCapacity(row.capacity_gb) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="IOPS模式" min-width="120" align="center">
+        <el-table-column label="存储位置" min-width="140" align="center" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-tag :type="row.iops_mode === 'TOTAL' ? 'info' : 'success'" size="small">
-              {{ row.iops_mode === 'TOTAL' ? '总IOPS' : '读写IOPS' }}
-            </el-tag>
+            <span>{{ row.storage_location || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="IOPS" min-width="180" align="center">
+        <el-table-column v-if="hasDataDisks" label="磁盘格式" min-width="100" align="center">
+          <template #default="{ row }">
+            <span v-if="row.disk_type === 'DATA'">{{ row.disk_format || 'QCOW2' }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="IOPS" min-width="160" align="center">
           <template #default="{ row }">
             <span v-if="row.iops_mode === 'TOTAL'">{{ row.total_iops }}</span>
             <span v-else>读 {{ row.read_iops }} / 写 {{ row.write_iops }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="创建时间" min-width="180" align="center">
+        <el-table-column label="创建时间" min-width="170" align="center">
           <template #default="{ row }">
             {{ formatTime(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" align="center" fixed="right">
+        <el-table-column label="操作" width="140" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="openEditDialog(row)">编辑</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
@@ -99,7 +110,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑云盘规格' : '创建云盘规格'"
-      width="600px"
+      width="620px"
       :close-on-click-modal="false"
       destroy-on-close
     >
@@ -110,7 +121,32 @@
         label-width="140px"
       >
         <el-form-item label="规格名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入规格名称，如 high-perf-ssd-1TB" maxlength="50" show-word-limit />
+          <el-input v-model="form.name" placeholder="请输入规格名称" maxlength="50" show-word-limit />
+        </el-form-item>
+
+        <el-form-item label="磁盘类型" prop="disk_type">
+          <el-radio-group v-model="form.disk_type">
+            <el-radio value="SYSTEM">系统盘</el-radio>
+            <el-radio value="DATA">数据盘</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="存储位置" prop="storage_location">
+          <el-select
+            v-model="form.storage_location"
+            placeholder="请选择存储位置"
+            filterable
+            clearable
+            style="width: 100%;"
+          >
+            <el-option
+              v-for="pool in storagePools"
+              :key="pool.id"
+              :label="pool.name"
+              :value="pool.name"
+            />
+          </el-select>
+          <div class="form-tip">留空时使用管理员设置的默认存储位置</div>
         </el-form-item>
 
         <el-form-item label="容量" prop="capacity_gb">
@@ -123,6 +159,17 @@
           </div>
         </el-form-item>
 
+        <template v-if="form.disk_type === 'DATA'">
+          <el-divider content-position="left">磁盘格式</el-divider>
+
+          <el-form-item label="磁盘格式" prop="disk_format">
+            <el-select v-model="form.disk_format" style="width: 200px;">
+              <el-option label="qcow2" value="QCOW2" />
+              <el-option label="RAW" value="RAW" />
+            </el-select>
+          </el-form-item>
+        </template>
+
         <el-divider content-position="left">磁盘 IOPS</el-divider>
 
         <el-form-item label="IOPS模式" prop="iops_mode">
@@ -133,17 +180,17 @@
         </el-form-item>
 
         <el-form-item v-if="form.iops_mode === 'TOTAL'" label="总IOPS" prop="total_iops">
-          <el-input-number v-model="form.total_iops" :min="0" :max="10000000" :step="100" style="width: 200px;" />
+          <el-input-number v-model="form.total_iops" :min="0" :max="10000000" :step="100" style="width: 220px;" />
           <span class="unit-label">IOPS</span>
         </el-form-item>
 
         <template v-if="form.iops_mode === 'READ_WRITE'">
           <el-form-item label="读IOPS" prop="read_iops">
-            <el-input-number v-model="form.read_iops" :min="0" :max="10000000" :step="100" style="width: 200px;" />
+            <el-input-number v-model="form.read_iops" :min="0" :max="10000000" :step="100" style="width: 220px;" />
             <span class="unit-label">IOPS</span>
           </el-form-item>
           <el-form-item label="写IOPS" prop="write_iops">
-            <el-input-number v-model="form.write_iops" :min="0" :max="10000000" :step="100" style="width: 200px;" />
+            <el-input-number v-model="form.write_iops" :min="0" :max="10000000" :step="100" style="width: 220px;" />
             <span class="unit-label">IOPS</span>
           </el-form-item>
         </template>
@@ -165,7 +212,14 @@
 
         <div class="preview-box" v-if="showPreview">
           <div class="preview-row"><span class="preview-label">名称：</span>{{ form.name || '-' }}</div>
+          <div class="preview-row"><span class="preview-label">磁盘类型：</span>{{ form.disk_type === 'SYSTEM' ? '系统盘' : '数据盘' }}</div>
           <div class="preview-row"><span class="preview-label">容量：</span>{{ form.capacity_gb }} {{ form.capacity_unit }}</div>
+          <div class="preview-row" v-if="form.storage_location">
+            <span class="preview-label">存储位置：</span>{{ form.storage_location }}
+          </div>
+          <div class="preview-row" v-if="form.disk_type === 'DATA'">
+            <span class="preview-label">磁盘格式：</span>{{ form.disk_format }}
+          </div>
           <div class="preview-row">
             <span class="preview-label">IOPS：</span>
             <span v-if="form.iops_mode === 'TOTAL'">总 {{ form.total_iops }}</span>
@@ -197,6 +251,7 @@ import {
   deleteCloudDiskSpec,
   batchDeleteCloudDiskSpecs
 } from '@/api/cloudDiskSpec'
+import { getStoragePoolList } from '@/api/infra'
 
 const tableLoading = ref(false)
 const submitLoading = ref(false)
@@ -206,6 +261,7 @@ const selectedRows = ref([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref(null)
+const storagePools = ref([])
 
 const pagination = reactive({
   page: 1,
@@ -216,8 +272,11 @@ const pagination = reactive({
 const form = reactive({
   id: null,
   name: '',
+  disk_type: 'DATA',
   capacity_gb: 100,
   capacity_unit: 'GB',
+  storage_location: '',
+  disk_format: 'QCOW2',
   iops_mode: 'READ_WRITE',
   total_iops: 0,
   read_iops: 0,
@@ -225,8 +284,10 @@ const form = reactive({
   description: ''
 })
 
+const hasDataDisks = computed(() => tableData.value.some(r => r.disk_type === 'DATA'))
+
 const showPreview = computed(() => {
-  return form.name || form.capacity_gb || form.total_iops || form.read_iops || form.write_iops
+  return form.name || form.capacity_gb
 })
 
 const validateName = (_rule, value, callback) => {
@@ -245,11 +306,11 @@ const validateName = (_rule, value, callback) => {
 
 const formRules = {
   name: [{ required: true, validator: validateName, trigger: 'blur' }],
+  disk_type: [{ required: true, message: '请选择磁盘类型', trigger: 'change' }],
   capacity_gb: [
     { required: true, message: '请输入容量', trigger: 'blur' },
     { type: 'number', min: 1, message: '容量必须大于0', trigger: 'blur' }
-  ],
-  iops_mode: [{ required: true, message: '请选择IOPS模式', trigger: 'change' }]
+  ]
 }
 
 const formatTime = (value) => {
@@ -265,6 +326,15 @@ const formatCapacity = (gb) => {
     return `${gb / 1024} TB`
   }
   return `${gb} GB`
+}
+
+const fetchStoragePools = async () => {
+  try {
+    const res = await getStoragePoolList()
+    storagePools.value = res.data || []
+  } catch (err) {
+    storagePools.value = []
+  }
 }
 
 const fetchData = async () => {
@@ -301,8 +371,11 @@ const handleSelectionChange = (rows) => {
 const resetForm = () => {
   form.id = null
   form.name = ''
+  form.disk_type = 'DATA'
   form.capacity_gb = 100
   form.capacity_unit = 'GB'
+  form.storage_location = ''
+  form.disk_format = 'QCOW2'
   form.iops_mode = 'READ_WRITE'
   form.total_iops = 0
   form.read_iops = 0
@@ -313,6 +386,7 @@ const resetForm = () => {
 const openCreateDialog = () => {
   isEdit.value = false
   resetForm()
+  fetchStoragePools()
   dialogVisible.value = true
 }
 
@@ -320,13 +394,17 @@ const openEditDialog = (row) => {
   isEdit.value = true
   form.id = row.id
   form.name = row.name
+  form.disk_type = row.disk_type || 'DATA'
   form.capacity_gb = row.capacity_gb
   form.capacity_unit = 'GB'
+  form.storage_location = row.storage_location || ''
+  form.disk_format = row.disk_format || 'QCOW2'
   form.iops_mode = row.iops_mode || 'READ_WRITE'
   form.total_iops = row.total_iops || 0
   form.read_iops = row.read_iops || 0
   form.write_iops = row.write_iops || 0
   form.description = row.description || ''
+  fetchStoragePools()
   dialogVisible.value = true
 }
 
@@ -334,7 +412,10 @@ const getSubmitData = () => {
   const capacityGB = form.capacity_unit === 'TB' ? form.capacity_gb * 1024 : form.capacity_gb
   const data = {
     name: form.name,
+    disk_type: form.disk_type,
     capacity_gb: capacityGB,
+    storage_location: form.storage_location,
+    disk_format: form.disk_type === 'DATA' ? form.disk_format : 'QCOW2',
     iops_mode: form.iops_mode,
     description: form.description
   }
@@ -479,6 +560,12 @@ onMounted(() => {
   margin-left: 12px;
   color: var(--el-text-color-secondary);
   font-size: 13px;
+}
+
+.form-tip {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 .preview-box {

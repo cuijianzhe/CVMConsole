@@ -141,7 +141,10 @@ func UpdateCloudDiskSpec(c *gin.Context) {
 	}
 
 	spec.Name = req.Name
+	spec.DiskType = req.DiskType
 	spec.CapacityGB = req.CapacityGB
+	spec.StorageLocation = req.StorageLocation
+	spec.DiskFormat = req.DiskFormat
 	spec.IOPSMode = req.IOPSMode
 	spec.TotalIOPS = req.TotalIOPS
 	spec.ReadIOPS = req.ReadIOPS
@@ -251,9 +254,17 @@ func validateCloudDiskSpecRequest(c *gin.Context, req *model.CreateCloudDiskSpec
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "规格名称长度必须在3-50个字符之间"})
 		return errReturn
 	}
+	if req.DiskType != model.DiskTypeSystem && req.DiskType != model.DiskTypeData {
+		req.DiskType = model.DiskTypeData
+	}
 	if req.CapacityGB <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "容量必须大于0"})
 		return errReturn
+	}
+	if req.DiskType == model.DiskTypeData {
+		if req.DiskFormat != model.DiskFormatQCOW2 && req.DiskFormat != model.DiskFormatRAW {
+			req.DiskFormat = model.DiskFormatQCOW2
+		}
 	}
 	if req.IOPSMode != model.IOPSModeTotal && req.IOPSMode != model.IOPSModeReadWrite {
 		req.IOPSMode = model.IOPSModeReadWrite
@@ -268,6 +279,10 @@ func validateCloudDiskSpecRequest(c *gin.Context, req *model.CreateCloudDiskSpec
 			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "读/写IOPS必须为非负整数"})
 			return errReturn
 		}
+	}
+	if len(req.StorageLocation) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "存储位置长度不能超过200个字符"})
+		return errReturn
 	}
 	if len(req.Description) > 200 {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "简介长度不能超过200个字符"})
@@ -285,9 +300,17 @@ func validateCloudDiskSpecUpdateRequest(c *gin.Context, req *model.UpdateCloudDi
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "规格名称长度必须在3-50个字符之间"})
 		return errReturn
 	}
+	if req.DiskType != model.DiskTypeSystem && req.DiskType != model.DiskTypeData {
+		req.DiskType = model.DiskTypeData
+	}
 	if req.CapacityGB <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "容量必须大于0"})
 		return errReturn
+	}
+	if req.DiskType == model.DiskTypeData {
+		if req.DiskFormat != model.DiskFormatQCOW2 && req.DiskFormat != model.DiskFormatRAW {
+			req.DiskFormat = model.DiskFormatQCOW2
+		}
 	}
 	if req.IOPSMode != model.IOPSModeTotal && req.IOPSMode != model.IOPSModeReadWrite {
 		req.IOPSMode = model.IOPSModeReadWrite
@@ -303,6 +326,10 @@ func validateCloudDiskSpecUpdateRequest(c *gin.Context, req *model.UpdateCloudDi
 			return errReturn
 		}
 	}
+	if len(req.StorageLocation) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "存储位置长度不能超过200个字符"})
+		return errReturn
+	}
 	if len(req.Description) > 200 {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "简介长度不能超过200个字符"})
 		return errReturn
@@ -312,13 +339,16 @@ func validateCloudDiskSpecUpdateRequest(c *gin.Context, req *model.UpdateCloudDi
 
 func buildCloudDiskSpecFromRequest(req *model.CreateCloudDiskSpecRequest) model.CloudDiskSpec {
 	return model.CloudDiskSpec{
-		Name:        req.Name,
-		CapacityGB:  req.CapacityGB,
-		IOPSMode:    req.IOPSMode,
-		TotalIOPS:   req.TotalIOPS,
-		ReadIOPS:    req.ReadIOPS,
-		WriteIOPS:   req.WriteIOPS,
-		Description: req.Description,
+		Name:            req.Name,
+		DiskType:        req.DiskType,
+		CapacityGB:      req.CapacityGB,
+		StorageLocation: req.StorageLocation,
+		DiskFormat:      req.DiskFormat,
+		IOPSMode:        req.IOPSMode,
+		TotalIOPS:       req.TotalIOPS,
+		ReadIOPS:        req.ReadIOPS,
+		WriteIOPS:       req.WriteIOPS,
+		Description:     req.Description,
 	}
 }
 
