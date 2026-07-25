@@ -134,7 +134,8 @@ type ImportVMRequest struct {
 	MemoryDynamic    *vm_memory.VMMemoryDynamicRequest `json:"memory_dynamic"`
 	SwitchID         uint                              `json:"switch_id"`
 	SecurityGroupID  uint                              `json:"security_group_id"`
-	StartAfterImport *bool                             `json:"start_after_import"` // 导入完成后是否开启虚拟机，不传默认 true
+	StartAfterImport *bool                             `json:"start_after_import"`  // 导入完成后是否开启虚拟机，不传默认 true
+	UserData         string                            `json:"user_data,omitempty"` // cloud-init UserData 扩展
 }
 
 // ImportVMHandler 导入虚拟机（用户自助）
@@ -243,6 +244,7 @@ func ImportVMHandler(c *gin.Context) {
 		SwitchID:         req.SwitchID,
 		SecurityGroupID:  req.SecurityGroupID,
 		IsAdmin:          role == "admin",
+		UserData:         req.UserData,
 	}
 	// 默认导入后开启虚拟机（向后兼容）
 	if req.StartAfterImport != nil {
@@ -340,7 +342,7 @@ func UploadDiskFile(c *gin.Context) {
 	}
 
 	// 检查配额
-	if err := service.CheckStorageQuota(usernameStr, header.Size); err != nil {
+	if err = service.CheckStorageQuota(usernameStr, header.Size); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{
 			"code":    403,
 			"message": err.Error(),

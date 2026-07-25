@@ -209,7 +209,14 @@ func buildNoCloudMetaData(params *CloneParams) string {
 
 // buildNoCloudUserData 生成 cloud-init user-data cloud-config 内容
 // 负责 hostname 确认 + 用户密码解锁 + 磁盘自动扩容；密码/用户名已在 virt-customize 阶段离线写入 /etc/shadow
+// 如果 params.UserData 以 "#cloud-config" 开头，将完全替换默认配置
+// 否则追加到默认配置后面
 func buildNoCloudUserData(params *CloneParams) string {
+	// 如果用户提供了完整的 cloud-config，直接返回
+	if strings.HasPrefix(strings.TrimSpace(params.UserData), "#cloud-config") {
+		return params.UserData
+	}
+
 	var sb strings.Builder
 	sb.WriteString("#cloud-config\n\n")
 	fmt.Fprintf(&sb, "hostname: %s\n", params.Hostname)
@@ -319,6 +326,13 @@ func buildNoCloudUserData(params *CloneParams) string {
 			sb.WriteString("\n")
 		}
 		sb.WriteString("    QVMPOSTBOOT\n")
+	}
+
+	// 追加用户自定义 UserData（如果存在且不是完整 cloud-config）
+	if strings.TrimSpace(params.UserData) != "" {
+		sb.WriteString("\n# === 用户自定义 UserData ===\n")
+		sb.WriteString(params.UserData)
+		sb.WriteString("\n")
 	}
 
 	return sb.String()

@@ -226,7 +226,7 @@ func portForwardTargetStillExists(destIP, protocol string, portStart, portEnd in
 		if strings.TrimSpace(rule.DestIP) != strings.TrimSpace(destIP) {
 			continue
 		}
-		if strings.ToLower(strings.TrimSpace(rule.Protocol)) != strings.ToLower(strings.TrimSpace(protocol)) {
+		if !strings.EqualFold(strings.TrimSpace(rule.Protocol), strings.TrimSpace(protocol)) {
 			continue
 		}
 		ruleStart, ruleEnd, err := parsePortForwardPortRange(rule.DestPort)

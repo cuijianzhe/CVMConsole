@@ -174,7 +174,8 @@ type windowsConfigDriveMetadata struct {
 //	hostname: 主机名（SetHostNamePlugin 使用）
 //	password: 管理员密码（SetUserPasswordPlugin 使用，为空时不修改原有密码）
 //	username: 新创建的用户名（为空时不创建新用户）
-func createWindowsConfigDriveISO(vmName, hostname, password, username string) (string, error) {
+//	userData: 自定义 UserData（PowerShell 脚本内容，可选）
+func createWindowsConfigDriveISO(vmName, hostname, password, username, userData string) (string, error) {
 	// 生成唯一 instance-id，CloudbaseInit 依赖此字段实现幂等（重启不重复执行插件）
 	randBytes := make([]byte, 4)
 	_, _ = rand.Read(randBytes)
@@ -208,23 +209,28 @@ func createWindowsConfigDriveISO(vmName, hostname, password, username string) (s
 		return "", fmt.Errorf("写入 Config Drive meta_data.json 失败: %w", err)
 	}
 
-	// 写入 user_data PowerShell 脚本（由 UserDataPlugin 执行）
-	// 清除「登录前必须更改密码」标志，确保用户可用密码直接登录
-	// 如果指定了用户名，则创建新用户并添加到管理员组
+	// 写入 user_data（PowerShell 脚本）
 	userDataPath := filepath.Join(metaDir, "user_data")
-	userDataScript := "#ps1_sysnative\r\n" +
-		"net user Administrator /logonpasswordchg:no /active:yes\r\n"
-	// 如果指定了用户名，创建新用户并添加到管理员组
-	if username != "" && !strings.EqualFold(username, "Administrator") {
-		// 创建用户（如果密码不为空，使用指定密码；否则使用随机密码）
-		if password != "" {
-			userDataScript += fmt.Sprintf("net user %s %s /add /logonpasswordchg:no /active:yes\r\n",
-				username, password)
-		} else {
-			userDataScript += fmt.Sprintf("net user %s /add /logonpasswordchg:no /active:yes\r\n", username)
+	var userDataScript string
+	if strings.TrimSpace(userData) != "" {
+		// 用户提供了自定义 UserData
+		userDataScript = userData
+	} else {
+		// 默认脚本：清除「登录前必须更改密码」标志 + 创建新用户
+		userDataScript = "#ps1_sysnative\r\n" +
+			"net user Administrator /logonpasswordchg:no /active:yes\r\n"
+		// 如果指定了用户名，创建新用户并添加到管理员组
+		if username != "" && !strings.EqualFold(username, "Administrator") {
+			// 创建用户（如果密码不为空，使用指定密码；否则使用随机密码）
+			if password != "" {
+				userDataScript += fmt.Sprintf("net user %s %s /add /logonpasswordchg:no /active:yes\r\n",
+					username, password)
+			} else {
+				userDataScript += fmt.Sprintf("net user %s /add /logonpasswordchg:no /active:yes\r\n", username)
+			}
+			// 将用户添加到管理员组
+			userDataScript += fmt.Sprintf("net localgroup administrators %s /add\r\n", username)
 		}
-		// 将用户添加到管理员组
-		userDataScript += fmt.Sprintf("net localgroup administrators %s /add\r\n", username)
 	}
 	if err := os.WriteFile(userDataPath, []byte(userDataScript), 0600); err != nil {
 		return "", fmt.Errorf("写入 Config Drive user_data 失败: %w", err)
@@ -280,8 +286,8 @@ isoCreated:
 
 // CreateWindowsConfigDriveISOExported 是 createWindowsConfigDriveISO 的导出版本
 // 创建符合 OpenStack ConfigDrive 规范的 ISO 镜像（label=config-2）
-func CreateWindowsConfigDriveISOExported(vmName, hostname, password, username string) (string, error) {
-	return createWindowsConfigDriveISO(vmName, hostname, password, username)
+func CreateWindowsConfigDriveISOExported(vmName, hostname, password, username, userData string) (string, error) {
+	return createWindowsConfigDriveISO(vmName, hostname, password, username, userData)
 }
 
 // AddConfigDriveCDROMToXMLExported 是 addConfigDriveCDROMToXML 的导出版本

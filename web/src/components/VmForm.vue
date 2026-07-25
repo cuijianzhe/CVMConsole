@@ -769,6 +769,27 @@
                       </el-form-item>
                     </div>
                   </div>
+                  <div class="form-section-card">
+                    <div class="form-section-card-header">
+                      <el-icon><Document /></el-icon>
+                      <span>UserData（可选）</span>
+                    </div>
+                    <div class="form-section-card-body">
+                      <el-form-item label="UserData">
+                        <el-input
+                          v-model="form.user_data"
+                          type="textarea"
+                          :rows="6"
+                          placeholder="cloud-init UserData（YAML/JSON 格式，可选）"
+                          style="width: 100%;"
+                        />
+                        <div class="form-tip">
+                          <el-icon><InfoFilled /></el-icon>
+                          克隆时注入 cloud-init UserData。若以 #cloud-config 开头则替换默认配置，否则追加到默认配置后
+                        </div>
+                      </el-form-item>
+                    </div>
+                  </div>
                 </template>
               </template>
             </template>
@@ -953,6 +974,27 @@
                       该模板已设置为「不初始化」，克隆时将直接复制磁盘，不会注入用户名、密码和主机名。登录凭据需使用模板中已有的账号。
                     </template>
                   </el-alert>
+                </div>
+              </div>
+              <div class="form-section-card">
+                <div class="form-section-card-header">
+                  <el-icon><Document /></el-icon>
+                  <span>UserData（可选）</span>
+                </div>
+                <div class="form-section-card-body">
+                  <el-form-item label="UserData">
+                    <el-input
+                      v-model="form.user_data"
+                      type="textarea"
+                      :rows="6"
+                      placeholder="cloud-init UserData（YAML/JSON 格式，可选）"
+                      style="width: 100%;"
+                    />
+                    <div class="form-tip">
+                      <el-icon><InfoFilled /></el-icon>
+                      克隆时注入 cloud-init UserData。若以 #cloud-config 开头则替换默认配置，否则追加到默认配置后
+                    </div>
+                  </el-form-item>
                 </div>
               </div>
               <div v-if="isFnOSTemplate && !disableSystemInit" class="form-section-card">
@@ -3760,6 +3802,7 @@ const form = reactive({
   max_port_forwards: 10,
   max_runtime_hours: 0,
   batch_count: 1,       // 批量创建数量（仅模板克隆模式）
+  user_data: '',        // cloud-init UserData 扩展
 })
 
 const getRecommendedVideoModel = (osType) => {
@@ -4686,6 +4729,7 @@ const open = async (row, mode, options = {}) => {
       cpu_topology_mode: row.cpu_topology_mode || 'auto',
       boot_order: ['hd'],
       add_disks: [],
+      user_data: '',
     })
     Object.assign(form.guest_agent, createEmptyGuestAgentConfig())
     Object.assign(form.smbios1, createEmptySMBIOS1Config())
@@ -4737,6 +4781,7 @@ const open = async (row, mode, options = {}) => {
       traffic_down_gb: 0, traffic_up_gb: 0, bandwidth_down_mbps: 0, bandwidth_up_mbps: 0, max_port_forwards: 10, max_runtime_hours: 0, batch_count: 1,
       import_os_category: '', system_init_enabled: true,
       nested_virt: true,
+      user_data: '',
     })
     Object.assign(form.guest_agent, createEmptyGuestAgentConfig())
     Object.assign(form.smbios1, createEmptySMBIOS1Config())
@@ -5366,6 +5411,7 @@ const submitForm = async () => {
               vendor_id: form.vendor_id || undefined,
               nested_virt: form.nested_virt !== undefined ? form.nested_virt : true,
               vgpu_uuid: form.vgpu_uuid || undefined,
+              user_data: form.user_data || undefined,
             }
             const cpuLimitPercent = buildCPULimitPercentPayload()
             if (cpuLimitPercent !== undefined) { importPayload.cpu_limit_percent = cpuLimitPercent }
@@ -5413,6 +5459,7 @@ const submitForm = async () => {
             vendor_id: form.vendor_id || undefined,
             nested_virt: form.nested_virt !== undefined ? form.nested_virt : true,
             vgpu_uuid: form.vgpu_uuid || undefined,
+            user_data: form.user_data || undefined,
           }
           const cpuLimitPercent = buildCPULimitPercentPayload()
           if (cpuLimitPercent !== undefined) {
@@ -5478,6 +5525,7 @@ const submitForm = async () => {
               vendor_id: form.vendor_id || undefined,
               nested_virt: form.nested_virt !== undefined ? form.nested_virt : true,
               vgpu_uuid: form.vgpu_uuid || undefined,
+              user_data: form.user_data || undefined,
             }
             const cpuLimitPercent = buildCPULimitPercentPayload()
             if (cpuLimitPercent !== undefined) { batchPayload.cpu_limit_percent = cpuLimitPercent }
@@ -5549,6 +5597,7 @@ const submitForm = async () => {
             vendor_id: form.vendor_id || undefined,
             nested_virt: form.nested_virt !== undefined ? form.nested_virt : true,
             vgpu_uuid: form.vgpu_uuid || undefined,
+            user_data: form.user_data || undefined,
           }
           const cpuLimitPercent = buildCPULimitPercentPayload()
           if (cpuLimitPercent !== undefined) {
@@ -5595,6 +5644,7 @@ const submitForm = async () => {
               bandwidth_up_mbps: form.bandwidth_up_mbps || 0,
               max_port_forwards: form.max_port_forwards ?? 10,
               max_runtime_hours: form.max_runtime_hours || 0,
+              user_data: clonePayload.user_data,
             }
             emit('draft', registrationDraft)
             ElMessage.success('已加入注册列表，请在列表中确认后保存')

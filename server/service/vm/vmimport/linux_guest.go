@@ -143,6 +143,7 @@ func importVMLinuxDefine(params *ImportVMParams, destDiskPath, format string, ra
 			User:         params.User,
 			Password:     params.Password,
 			TemplateUser: params.TemplateUser,
+			UserData:     params.UserData,
 		}
 		if err := service.PrepareLinuxCloneFirstBootIdentity(linuxParams, destDiskPath); err != nil {
 			_ = utils.ExecCommand("virsh", "undefine", params.Name, "--nvram")
@@ -301,6 +302,7 @@ func importDiskByPathLinuxDefine(params *ImportDiskByPathParams, destDiskPath, f
 			User:         params.User,
 			Password:     params.Password,
 			TemplateUser: params.TemplateUser,
+			UserData:     params.UserData,
 		}
 		if err := service.PrepareLinuxCloneFirstBootIdentity(linuxParams, destDiskPath); err != nil {
 			_ = utils.ExecCommand("virsh", "undefine", params.Name, "--nvram")

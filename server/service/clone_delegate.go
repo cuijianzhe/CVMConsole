@@ -185,8 +185,9 @@ func InjectWindowsCloudbaseInitFiles(vmName, cloneDisk, category, password strin
 //   hostname: 主机名
 //   password: 管理员密码（为空时不修改原有密码）
 //   username: 新创建的用户名（为空时不创建新用户）
-func CreateWindowsConfigDriveISO(vmName, hostname, password, username string) (string, error) {
-	return clonepkg.CreateWindowsConfigDriveISOExported(vmName, hostname, password, username)
+//   userData: 自定义 UserData（PowerShell 脚本内容，可选）
+func CreateWindowsConfigDriveISO(vmName, hostname, password, username, userData string) (string, error) {
+	return clonepkg.CreateWindowsConfigDriveISOExported(vmName, hostname, password, username, userData)
 }
 
 // AddConfigDriveCDROMToXML 向 VM 域 XML 的 </devices> 前注入 Config Drive CD-ROM 设备定义

@@ -159,7 +159,7 @@ func ImportVM(ctx context.Context, params *ImportVMParams, progressFn func(int, 
 	isWindows := initType == "windows"
 
 	if isWindows {
-		if err, needEject := importVMWindowsDefine(params, destDiskPath, format, ramMB, memoryMeta, srcDiskPath, needUEFI); err != nil {
+		if err, needEject := importVMWindowsDefine(params, destDiskPath, format, ramMB, memoryMeta, srcDiskPath); err != nil {
 			return nil, err
 		} else if needEject && params.StartAfterImport {
 			service.ScheduleWindowsConfigDriveEject(params.Name, "virtio", "vda")
@@ -205,7 +205,7 @@ func ImportVM(ctx context.Context, params *ImportVMParams, progressFn func(int, 
 }
 
 // importVMCopyDisk handles disk copy/move for ImportVM
-func importVMCopyDisk(ctx context.Context, srcDiskPath, destDiskPath, format string, copyDisk bool, progressFn func(int, string)) error {
+func importVMCopyDisk(_ context.Context, srcDiskPath, destDiskPath, format string, copyDisk bool, progressFn func(int, string)) error {
 	if copyDisk {
 		// 保留原文件，复制到 CloneDir
 		progressFn(12, fmt.Sprintf("检测到 %s 格式，正在复制磁盘文件到虚拟机目录（保留原文件）...", format))
@@ -281,7 +281,7 @@ func importVMPostDefine(vmName, srcDiskPath, destDiskPath string, copyDisk bool,
 
 // cleanImportDHCPLeases 清理导入VM对应MAC地址的宿主机侧旧DHCP租约
 // 避免磁盘中旧的 machine-id 导致同一 MAC 出现多条不同 client-id 的租约
-func cleanImportDHCPLeases(vmName, network string) {
+func cleanImportDHCPLeases(vmName, _ string) {
 	// 获取 VM 的 MAC 地址
 	mac := ip_resolver.GetFirstVMMAC(vmName)
 	if mac == "" {

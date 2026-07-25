@@ -16,7 +16,7 @@ import (
 
 // importVMWindowsDefine handles Windows VM XML construction and define for ImportVM
 // 返回值：(error, bool) bool 表示是否创建了 Config Drive 需要在启动后弹出
-func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, ramMB int, memoryMeta *vm_memory.VMMemoryMetadata, srcDiskPath string, needUEFI bool) (error, bool) {
+func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, ramMB int, memoryMeta *vm_memory.VMMemoryMetadata, srcDiskPath string) (error, bool) {
 	// 获取宿主机架构 Profile，参数化 arch/machine/emulator/watchdog
 	hostArch := arch.DetectHostArch()
 	profile := arch.GetProfile(hostArch)
@@ -24,7 +24,7 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 	machineType := profile.DefaultMachineType()
 	emulatorPath := profile.EmulatorPath()
 	watchdogModel := profile.DefaultWatchdogModel()
-	isX8664 := archName == arch.ArchX8664
+	isX8664 := strings.EqualFold(archName, arch.ArchX8664)
 
 	// Hyper-V enlightenments 仅在 x86_64 架构上支持
 	var hyperVBlock string
@@ -76,7 +76,7 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 	var isoPath string
 	var isoErr error
 	if params.InitType == "windows" && (params.Hostname != "" || params.Password != "") {
-		isoPath, isoErr = service.CreateWindowsConfigDriveISO(params.Name, params.Hostname, params.Password, params.Username)
+		isoPath, isoErr = service.CreateWindowsConfigDriveISO(params.Name, params.Hostname, params.Password, params.User, params.UserData)
 		if isoErr != nil {
 			logger.App.Warn("创建 Windows Config Drive ISO 失败，CloudbaseInit 将无法自动注入配置",
 				"vm", params.Name, "error", isoErr)
@@ -218,7 +218,7 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 	}
 
 	xmlPath := fmt.Sprintf("/tmp/_vm-import-%s.xml", params.Name)
-	if err := os.WriteFile(xmlPath, []byte(vmXML), 0644); err != nil {
+	if err = os.WriteFile(xmlPath, []byte(vmXML), 0644); err != nil {
 		_ = os.Remove(destDiskPath)
 		return fmt.Errorf("写入虚拟机 XML 失败: %v", err), false
 	}
@@ -245,7 +245,7 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 	machineType := profile.DefaultMachineType()
 	emulatorPath := profile.EmulatorPath()
 	watchdogModel := profile.DefaultWatchdogModel()
-	isX8664 := archName == arch.ArchX8664
+	isX8664 := strings.EqualFold(archName, arch.ArchX8664)
 
 	// Hyper-V enlightenments 仅在 x86_64 架构上支持
 	var hyperVBlock string
@@ -295,7 +295,7 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 	var isoPath string
 	var isoErr error
 	if params.InitType == "windows" && (params.Hostname != "" || params.Password != "") {
-		isoPath, isoErr = service.CreateWindowsConfigDriveISO(params.Name, params.Hostname, params.Password, params.Username)
+		isoPath, isoErr = service.CreateWindowsConfigDriveISO(params.Name, params.Hostname, params.Password, params.User, params.UserData)
 		if isoErr != nil {
 			logger.App.Warn("创建 Windows Config Drive ISO 失败，CloudbaseInit 将无法自动注入配置",
 				"vm", params.Name, "error", isoErr)
@@ -431,7 +431,7 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 	}
 
 	xmlPath := fmt.Sprintf("/tmp/_vm-importd-%s.xml", params.Name)
-	if err := os.WriteFile(xmlPath, []byte(vmXML), 0644); err != nil {
+	if err = os.WriteFile(xmlPath, []byte(vmXML), 0644); err != nil {
 		_ = os.Remove(destDiskPath)
 		return fmt.Errorf("写入虚拟机 XML 失败: %v", err), false
 	}

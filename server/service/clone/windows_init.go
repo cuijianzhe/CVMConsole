@@ -396,7 +396,7 @@ func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ra
 	if !isNoInit && (params.Hostname != "" || params.Password != "") {
 		// 创建 Config Drive ISO（包含实例 hostname、admin_pass、instance-id）
 		// 模板磁盘已预安装 cloudbase-init，只通过 Config Drive 传递配置，不使用 virt-customize（太慢）
-		isoPath, isoErr = createWindowsConfigDriveISO(params.Name, params.Hostname, params.Password, params.User)
+		isoPath, isoErr = createWindowsConfigDriveISO(params.Name, params.Hostname, params.Password, params.User, params.UserData)
 		if isoErr != nil {
 			logger.App.Warn("创建 Windows Config Drive ISO 失败，CloudbaseInit 将无法自动注入配置",
 				"vm", params.Name, "error", isoErr)

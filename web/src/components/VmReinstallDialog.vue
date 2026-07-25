@@ -81,6 +81,17 @@
       <el-form-item v-if="isFnOSTemplate && form.fnos_device_id_mode === 'custom'" label="自定义设备 ID" prop="fnos_device_id">
         <el-input v-model="form.fnos_device_id" placeholder="请输入 32 位或 40 位十六进制设备 ID" />
       </el-form-item>
+      <el-form-item v-if="showCredentialFields" label="UserData">
+        <el-input
+          v-model="form.user_data"
+          type="textarea"
+          :rows="5"
+          placeholder="cloud-init UserData（YAML/JSON 格式，可选）"
+        />
+        <div class="form-inline-hint">
+          克隆时注入 cloud-init UserData。若以 #cloud-config 开头则替换默认配置，否则追加到默认配置后
+        </div>
+      </el-form-item>
     </el-form>
 
     <template #footer>
@@ -114,7 +125,8 @@ const form = reactive({
   user: '',
   password: '',
   fnos_device_id_mode: 'regenerate',
-  fnos_device_id: ''
+  fnos_device_id: '',
+  user_data: ''
 })
 
 const vmName = computed(() => currentVm.value?.name || '')
@@ -262,6 +274,7 @@ function resetForm(vm = {}) {
   form.password = ''
   form.fnos_device_id_mode = 'regenerate'
   form.fnos_device_id = ''
+  form.user_data = ''
 }
 
 function applyTemplateDefaults() {
@@ -315,7 +328,8 @@ async function submitReinstall() {
       user: isWindowsTemplate.value ? windowsTemplateUsername : `${form.user || ''}`.trim(),
       password: form.password,
       preserve_fnos_device_id: isFnOSTemplate.value && (form.fnos_device_id_mode === 'preserve' || form.fnos_device_id_mode === 'custom'),
-      fnos_device_id: isFnOSTemplate.value && form.fnos_device_id_mode === 'custom' ? `${form.fnos_device_id || ''}`.trim() : ''
+      fnos_device_id: isFnOSTemplate.value && form.fnos_device_id_mode === 'custom' ? `${form.fnos_device_id || ''}`.trim() : '',
+      user_data: form.user_data || undefined
     })
     ElMessage.success('重装任务已提交，请在任务中心查看进度')
     visible.value = false

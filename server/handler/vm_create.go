@@ -310,6 +310,7 @@ type ImportDiskByPathRequest struct {
 	StartAfterImport *bool                             `json:"start_after_import"`   // 导入完成后是否开启虚拟机，不传默认 true
 	KVMHidden        *bool                             `json:"kvm_hidden,omitempty"` // 隐藏 KVM 标志
 	VendorID         string                            `json:"vendor_id,omitempty"`  // Hyper-V vendor_id 伪装
+	UserData         string                            `json:"user_data,omitempty"`  // cloud-init UserData 扩展
 }
 
 // AdminImportDisk 管理员通过绝对路径导入磁盘创建虚拟机（异步任务）
@@ -399,6 +400,7 @@ func AdminImportDisk(c *gin.Context) {
 		StartAfterImport: startAfterImport,
 		KVMHidden:        req.KVMHidden,
 		VendorID:         req.VendorID,
+		UserData:         req.UserData,
 	}
 
 	task, err := taskqueue.SubmitWithStruct(model.TaskTypeImportDisk, params, usernameStr)

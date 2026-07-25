@@ -51,6 +51,7 @@ type ImportVMParams struct {
 	StartAfterImport bool                              `json:"start_after_import"`   // 导入完成后是否开启虚拟机，默认 true
 	KVMHidden        *bool                             `json:"kvm_hidden,omitempty"` // 隐藏 KVM 标志
 	VendorID         string                            `json:"vendor_id,omitempty"`  // Hyper-V vendor_id 伪装
+	UserData         string                            `json:"user_data,omitempty"`  // cloud-init UserData 扩展
 }
 
 // ImportVMResult 导入结果
@@ -105,6 +106,7 @@ type ImportDiskByPathParams struct {
 	StartAfterImport bool                              `json:"start_after_import"`           // 导入完成后是否开启虚拟机，默认 true
 	KVMHidden        *bool                             `json:"kvm_hidden,omitempty"`         // 隐藏 KVM 标志
 	VendorID         string                            `json:"vendor_id,omitempty"`          // Hyper-V vendor_id 伪装
+	UserData         string                            `json:"user_data,omitempty"`          // cloud-init UserData 扩展
 }
 
 // ExtraImportDiskEntry 额外导入磁盘条目

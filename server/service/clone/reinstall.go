@@ -83,6 +83,7 @@ func buildReinstallCloneParams(params *ReinstallParams, diskBus string, template
 		FirstBootRebootMode:  D.NormalizeVMFirstBootRebootMode(params.FirstBootRebootMode),
 		PreserveFnOSDeviceID: params.PreserveFnOSDeviceID,
 		FnOSDeviceID:         params.FnOSDeviceID,
+		UserData:             params.UserData,
 	}
 	if cloneParams.TemplateType == "" {
 		cloneParams.TemplateType = strings.ToLower(strings.TrimSpace(templateMeta.Type))
@@ -268,7 +269,7 @@ func ReinstallVM(ctx context.Context, params *ReinstallParams, progressFn func(i
 		// 创建 Config Drive ISO，并更新 VM XML 挂载为 CD-ROM
 		// 传入用户名参数，支持创建新用户
 		isoPath, isoErr := createWindowsConfigDriveISO(
-			params.Name, cloneParams.Hostname, cloneParams.Password, cloneParams.User)
+			params.Name, cloneParams.Hostname, cloneParams.Password, cloneParams.User, cloneParams.UserData)
 		if isoErr != nil {
 			logger.App.Warn("重装时创建 Windows Config Drive ISO 失败，CloudbaseInit 将无法自动注入密码",
 				"vm", params.Name, "error", isoErr)
