@@ -31,6 +31,23 @@
               </template>
             </el-form-item>
             <el-divider content-position="left"><el-icon style="margin-right: 4px;"><Cpu /></el-icon>CPU / 内存</el-divider>
+            <el-form-item label="选择规格" v-if="resourceSpecs.length">
+              <el-select
+                v-model="selectedResourceSpecId"
+                placeholder="选择已有规格快速填充（可选）"
+                clearable
+                filterable
+                style="width: 100%;"
+                @change="handleResourceSpecChange"
+              >
+                <el-option
+                  v-for="spec in resourceSpecs"
+                  :key="spec.id"
+                  :label="`${spec.name}（${spec.cpu_cores}核 / ${spec.memory_gb}GB）`"
+                  :value="spec.id"
+                />
+              </el-select>
+            </el-form-item>
             <el-row :gutter="20">
               <el-col :span="12">
                 <el-form-item label="CPU 核心" prop="vcpu">
@@ -1073,6 +1090,23 @@
                 <span>CPU 与内存</span>
               </div>
               <div class="form-section-card-body">
+                <el-form-item label="选择规格" v-if="resourceSpecs.length">
+                  <el-select
+                    v-model="selectedResourceSpecId"
+                    placeholder="选择已有规格快速填充（可选）"
+                    clearable
+                    filterable
+                    style="width: 100%;"
+                    @change="handleResourceSpecChange"
+                  >
+                    <el-option
+                      v-for="spec in resourceSpecs"
+                      :key="spec.id"
+                      :label="`${spec.name}（${spec.cpu_cores}核 / ${spec.memory_gb}GB）`"
+                      :value="spec.id"
+                    />
+                  </el-select>
+                </el-form-item>
                 <el-row :gutter="20">
                   <el-col :span="12">
                     <el-form-item label="CPU 核心" prop="vcpu">
@@ -2605,6 +2639,7 @@ import { getStorageFiles } from '@/api/storage'
 import { selfCloneVm } from '@/api/user'
 import { getVPCSecurityGroups, getVPCSwitches } from '@/api/vpc'
 import { getCPUAffinityPresets, getSettings, getHostCPUCores, getPublicSystemInfo, getVGPUInstances } from '@/api/settings'
+import { listResourceSpecs } from '@/api/resourceSpec'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Top, Bottom, Delete, Plus, ArrowRight, Discount } from '@element-plus/icons-vue'
 import FormIcons from '@/components/icons/FormIcons.vue'
@@ -2635,6 +2670,8 @@ const cpuAffinityPresets = ref([])
 const cpuAffinityPresetsLoaded = ref(false)
 const hostCPUCores = ref(0)
 const hostArch = ref('x86_64')
+const resourceSpecs = ref([])
+const selectedResourceSpecId = ref(null)
 const registrationContext = reactive({
   dedicated_vpc_switch_id: 0,
   dedicated_vpc_label: ''
@@ -4574,6 +4611,20 @@ const saveVmXMLConfig = async () => {
   }
 }
 
+const handleResourceSpecChange = (specId) => {
+  if (!specId) return
+  const spec = resourceSpecs.value.find((s) => s.id === specId)
+  if (!spec) return
+  form.vcpu = spec.cpu_cores
+  // 创建模式使用 ram，编辑模式使用 memory
+  if (isEdit.value) {
+    form.memory = spec.memory_gb
+  } else {
+    form.ram = spec.memory_gb
+  }
+  handleBaseMemoryChange()
+}
+
 const open = async (row, mode, options = {}) => {
   visible.value = true
   activeTabEdit.value = 'basic'
@@ -4612,6 +4663,16 @@ const open = async (row, mode, options = {}) => {
       isoStorageDir.value = settingsRes.data.iso_dir
     }
   } catch {}
+  // 获取资源规格列表（用于快速选择 CPU/内存）
+  selectedResourceSpecId.value = null
+  if (!resourceSpecs.value.length) {
+    try {
+      const specRes = await listResourceSpecs({ page: 1, page_size: 200 })
+      if (specRes.code === 200) {
+        resourceSpecs.value = specRes.data?.list || []
+      }
+    } catch {}
+  }
   initAdvancedIntro()
   bootTypeTouched.value = false
   registrationMode.value = mode === 'lightweight-register'
@@ -5125,6 +5186,7 @@ const onClosed = () => {
   registrationMode.value = false
   registrationContext.dedicated_vpc_switch_id = 0
   registrationContext.dedicated_vpc_label = ''
+  selectedResourceSpecId.value = null
   initAdvancedIntro()
   extraNics.value = []
   formRef.value?.resetFields()

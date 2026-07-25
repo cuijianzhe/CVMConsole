@@ -413,11 +413,12 @@ func Setup() *gin.Engine {
 				nodes.POST("/:id/probe", handler.ProbeHostNode)
 			}
 
-			// ==================== 资源规格管理（管理员） ====================
+			// ==================== 资源规格管理 ====================
+			// 列表对所有已认证用户开放（创建虚拟机时选择规格使用）
+			authorized.GET("/resource-specs", handler.ListResourceSpecs)
 			resourceSpec := authorized.Group("/resource-specs")
 			resourceSpec.Use(middleware.AdminMiddleware())
 			{
-				resourceSpec.GET("", handler.ListResourceSpecs)
 				resourceSpec.POST("", handler.CreateResourceSpec)
 				resourceSpec.PUT("/:id", handler.UpdateResourceSpec)
 				resourceSpec.DELETE("/:id", handler.DeleteResourceSpec)
