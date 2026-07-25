@@ -689,17 +689,6 @@
               <el-input v-model="form.remark" type="textarea" :rows="3" maxlength="200" show-word-limit placeholder="用于记录用途、环境或业务信息" />
             </el-form-item>
 
-            <el-form-item label="应用场景">
-              <el-select v-model="useCase" placeholder="-- 请选择（可选）--" style="width: 100%;" clearable @change="onUseCaseChange">
-                <el-option label="Web 应用 / API 服务" value="web" />
-                <el-option label="数据库服务器" value="database" />
-                <el-option label="开发测试环境" value="dev" />
-                <el-option label="AI / 机器学习" value="ai" />
-                <el-option label="文件存储 / NAS" value="storage" />
-              </el-select>
-              <div class="form-tip"><el-icon><InfoFilled /></el-icon>选择场景后系统将在下一步推荐最优硬件配置</div>
-            </el-form-item>
-
             <template v-if="!isTemplateSourceMode">
               <el-form-item label="系统类型">
                 <div style="display: flex; gap: 12px;">
@@ -1078,19 +1067,6 @@
             </div>
           </div>
           <div class="step-pane-body">
-            <!-- 智能推荐横幅 -->
-            <div v-if="showSmartRecommend" class="smart-recommend-banner">
-              <div class="rec-icon-col"><FormIcons icon="tip-lightbulb" :size="24" /></div>
-              <div class="rec-content-col">
-                <div class="rec-title">智能推荐方案</div>
-                <div class="rec-desc">{{ smartRecommendDesc }}</div>
-                <div class="rec-actions">
-                  <el-button type="primary" size="small" @click="applySmartRecommend">一键应用推荐</el-button>
-                  <el-button size="small" @click="showSmartRecommend = false">忽略</el-button>
-                </div>
-              </div>
-            </div>
-
             <div class="form-section-card">
               <div class="form-section-card-header">
                 <el-icon><Cpu /></el-icon>
@@ -2679,9 +2655,6 @@ const importCategoryOptions = computed(() => {
   return []
 })
 
-const useCase = ref('')
-const showSmartRecommend = ref(false)
-
 const osQuickOptions = [
   { value: 'linux', label: 'Linux', icon: '🐧', examples: 'Ubuntu / CentOS / Debian' },
   { value: 'windows', label: 'Windows', icon: '🪟', examples: 'Server 2022 / 2019 / 11' },
@@ -3071,16 +3044,6 @@ const vmXMLConfigSummary = computed(() => {
   return '直接查看并编辑持久化 XML / 不支持改名'
 })
 const vmXMLDirty = computed(() => normalizeVmXMLText(vmXMLContent.value) !== normalizeVmXMLText(vmXMLOriginal.value))
-
-const smartRecommendDesc = computed(() => {
-  const osLabelName = form.os_type === 'windows' ? 'Windows' : 'Linux'
-  let cpu = 2, mem = 2, disk = 20, driver = 'VirtIO'
-  if (form.os_type === 'windows') { cpu = 4; mem = 4; disk = 40; driver = 'SATA/e1000e' }
-  if (useCase.value === 'database') { cpu += 2; mem += 4; disk += 40 }
-  else if (useCase.value === 'ai') { cpu += 4; mem += 8; disk += 80 }
-  else if (useCase.value === 'web') { cpu += 1; mem += 2; disk += 10 }
-  return `根据${osLabelName}系统${useCase.value ? '和应用场景' : ''}，推荐配置：CPU ${cpu} 核、内存 ${mem}GB、系统盘 ${disk}GB、${driver} 驱动`
-})
 
 const openRTCConfigDialog = () => {
   rtcConfigVisible.value = true
@@ -3489,26 +3452,6 @@ const goToCreateStep = (index) => {
 const onOsQuickSelect = (os) => {
   form.os_type = os
   onOsTypeChange()
-  showSmartRecommend.value = true
-}
-
-const onUseCaseChange = () => {
-  if (useCase.value) {
-    showSmartRecommend.value = true
-  }
-}
-
-const applySmartRecommend = () => {
-  let cpu = 2, mem = 2, disk = 20
-  if (form.os_type === 'windows') { cpu = 4; mem = 4; disk = 40 }
-  if (useCase.value === 'database') { cpu += 2; mem += 4; disk += 40 }
-  else if (useCase.value === 'ai') { cpu += 4; mem += 8; disk += 80 }
-  else if (useCase.value === 'web') { cpu += 1; mem += 2; disk += 10 }
-  form.vcpu = cpu
-  if (form.create_mode === 'import') form.ram = mem
-  else form.ram = mem
-  if (form.create_mode === 'iso') form.disk_size = disk
-  showSmartRecommend.value = false
 }
 
 const nextStep = async () => {
@@ -6516,50 +6459,6 @@ defineExpose({
   line-height: 1.4;
 }
 
-/* ==================== 智能推荐横幅 ==================== */
-.smart-recommend-banner {
-  display: flex;
-  gap: 12px;
-  padding: 14px 18px;
-  background: linear-gradient(135deg, #ecf5ff, #f0f7ff);
-  border: 1px solid #b3d8ff;
-  border-radius: 10px;
-  margin-bottom: 16px;
-  align-items: flex-start;
-}
-
-.rec-icon-col {
-  flex-shrink: 0;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  color: var(--el-color-warning);
-}
-
-.rec-content-col {
-  flex: 1;
-  min-width: 0;
-}
-
-.rec-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #409eff;
-  margin-bottom: 4px;
-}
-
-.rec-desc {
-  font-size: 12px;
-  color: #606266;
-  margin-bottom: 8px;
-  line-height: 1.5;
-}
-
-.rec-actions {
-  display: flex;
-  gap: 8px;
-}
-
 /* ==================== 分区标题 ==================== */
 .section-header {
   display: flex;
@@ -7128,10 +7027,6 @@ html.dark .mode-card-new { border-color: var(--app-border-light); background: va
 html.dark .mode-card-new.selected { border-color: var(--el-color-primary); background: rgba(64,158,255,0.08); }
 html.dark .mode-card-title { color: var(--el-text-color-primary); }
 html.dark .mode-card-desc { color: var(--el-text-color-secondary); }
-
-html.dark .smart-recommend-banner { background: rgba(64,158,255,0.06); border-color: rgba(64,158,255,0.18); }
-html.dark .rec-title { color: var(--el-color-primary-light-3); }
-html.dark .rec-desc { color: var(--el-text-color-regular); }
 
 html.dark .section-header { border-bottom-color: var(--app-border-light); }
 html.dark .section-icon-box.basic { background: rgba(64,158,255,0.12); }
