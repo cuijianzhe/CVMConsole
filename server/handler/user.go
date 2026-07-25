@@ -258,7 +258,6 @@ func CreateUser(c *gin.Context) {
 		"message": "用户已创建，用户可直接使用初始密码登录",
 		"data":    gin.H{"username": user.Username},
 	})
-	return
 }
 
 // CreateLightweightVMRegistrations 管理员为轻量云用户登记待开通 VM。

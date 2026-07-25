@@ -403,7 +403,8 @@ const fieldDescriptions = {
   watchdog: '虚拟机 watchdog 设备策略。',
   xml: 'libvirt domain XML 内容',
   vgpu_uuid: 'vGPU 实例 UUID，由宿主机 vGPU 管理接口创建后分配给虚拟机。',
-  profile_id: 'vGPU Profile ID，标识 vGPU 类型（如显存大小、算力配置）。'
+  profile_id: 'vGPU Profile ID，标识 vGPU 类型（如显存大小、算力配置）。',
+  user_data: 'cloud-init 自定义注入数据。Linux 支持 YAML 格式（以 #cloud-config 开头则替换默认配置，否则追加），Windows 支持 PowerShell 脚本（以 #ps1_sysnative 开头）。'
 }
 
 const ignoredFieldTokens = new Set([
@@ -513,10 +514,10 @@ const sampleBody = (endpoint) => {
   if (endpoint.body === '无' || endpoint.body?.startsWith('FormData')) return ''
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(endpoint.method)) return ''
   if (endpoint.path === '/vm/create') {
-    return '{"name":"demo","vcpu":2,"ram":4096,"disk_size":40,"disk_format":"qcow2","disk_bus":"virtio","os_variant":"generic","iso_path":"/var/lib/libvirt/images/ISO/example.iso","iso_paths":["/var/lib/libvirt/images/ISO/example.iso","/var/lib/libvirt/images/ISO/virtio-win.iso"],"nic_model":"virtio","autostart":false,"freeze":false,"apic":true,"pae":true,"rtc_offset":"utc","rtc_startdate":"now","guest_agent":{"enabled":true},"smbios1":{"base64":false},"os_type":"linux","machine_type":"q35","boot_type":"bios","watchdog":"none","boot_order":["cdrom","disk"],"video_model":"virtio","cpu_limit_percent":80,"virt_type":"kvm","memory_dynamic":{"dynamic_enabled":false,"memory_backend":"balloon","memory_initial":4096},"switch_id":1,"security_group_id":1,"storage_pool_id":"default","extra_disks":[{"size":20,"format":"qcow2","bus":"virtio","storage_pool_id":"default"}]}'
+    return '{"name":"demo","vcpu":2,"ram":4096,"disk_size":40,"disk_format":"qcow2","disk_bus":"virtio","os_variant":"generic","iso_path":"/var/lib/libvirt/images/ISO/example.iso","iso_paths":["/var/lib/libvirt/images/ISO/example.iso","/var/lib/libvirt/images/ISO/virtio-win.iso"],"nic_model":"virtio","autostart":false,"freeze":false,"apic":true,"pae":true,"rtc_offset":"utc","rtc_startdate":"now","guest_agent":{"enabled":true},"smbios1":{"base64":false},"os_type":"linux","machine_type":"q35","boot_type":"bios","watchdog":"none","boot_order":["cdrom","disk"],"video_model":"virtio","cpu_limit_percent":80,"virt_type":"kvm","memory_dynamic":{"dynamic_enabled":false,"memory_backend":"balloon","memory_initial":4096},"switch_id":1,"security_group_id":1,"storage_pool_id":"default","extra_disks":[{"size":20,"format":"qcow2","bus":"virtio","storage_pool_id":"default"}],"user_data":"#cloud-config\\npackages:\\n  - htop\\nruncmd:\\n  - systemctl enable nginx"}'
   }
   if (endpoint.path === '/self/vm/create') {
-    return '{"name":"demo","vcpu":2,"ram":4096,"disk_size":40,"disk_format":"qcow2","disk_bus":"virtio","os_variant":"generic","iso_path":"/mnt/user/iso/example.iso","iso_paths":["/mnt/user/iso/example.iso","/mnt/user/iso/virtio-win.iso"],"nic_model":"virtio","autostart":false,"freeze":false,"apic":true,"pae":true,"rtc_offset":"utc","rtc_startdate":"now","guest_agent":{"enabled":true},"smbios1":{"base64":false},"os_type":"linux","machine_type":"q35","boot_type":"bios","boot_order":["cdrom","disk"],"video_model":"virtio","memory_dynamic":{"dynamic_enabled":false,"memory_backend":"balloon","memory_initial":4096},"switch_id":1,"security_group_id":1,"storage_pool_id":"default","extra_disks":[{"size":20,"format":"qcow2","bus":"virtio","storage_pool_id":"default"}]}'
+    return '{"name":"demo","vcpu":2,"ram":4096,"disk_size":40,"disk_format":"qcow2","disk_bus":"virtio","os_variant":"generic","iso_path":"/mnt/user/iso/example.iso","iso_paths":["/mnt/user/iso/example.iso","/mnt/user/iso/virtio-win.iso"],"nic_model":"virtio","autostart":false,"freeze":false,"apic":true,"pae":true,"rtc_offset":"utc","rtc_startdate":"now","guest_agent":{"enabled":true},"smbios1":{"base64":false},"os_type":"linux","machine_type":"q35","boot_type":"bios","boot_order":["cdrom","disk"],"video_model":"virtio","memory_dynamic":{"dynamic_enabled":false,"memory_backend":"balloon","memory_initial":4096},"switch_id":1,"security_group_id":1,"storage_pool_id":"default","extra_disks":[{"size":20,"format":"qcow2","bus":"virtio","storage_pool_id":"default"}],"user_data":"#cloud-config\\npackages:\\n  - htop\\nruncmd:\\n  - systemctl enable nginx"}'
   }
   if (endpoint.body?.includes('action(start')) return '{"action":"start"}'
   if (endpoint.body?.includes('enabled')) return '{"enabled":true}'

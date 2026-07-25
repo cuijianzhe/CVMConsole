@@ -29,10 +29,10 @@ function ep(method, path, summary, options = {}) {
   }
 }
 
-const vmCreateBody = 'JSON: name, remark, vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, watchdog, boot_order[], video_model, spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), cpu_limit_percent(仅管理员, 0-100), virt_type(kvm/qemu), arch(x86_64/aarch64/riscv64), memory_dynamic{dynamic_enabled,memory_backend,memory_initial,memory_min,memory_max,memory_auto_balloon,memory_current}, switch_id, security_group_id, storage_pool_id, extra_disks[{size,format,bus,storage_pool_id}], vgpu_uuid(仅管理员, vGPU实例UUID)'
-const selfVmCreateBody = 'JSON: name, remark, vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, boot_order[], video_model, spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), memory_dynamic{dynamic_enabled,memory_backend,memory_initial,memory_min,memory_max,memory_auto_balloon,memory_current}, switch_id, security_group_id, storage_pool_id, extra_disks[{size,format,bus,storage_pool_id}]'
-const cloneBody = 'JSON: template/name, new_name/name, remark, vcpu, ram, disk_size, disk_bus, switch_id, security_group_id, storage_pool_id, extra_disks[{size,format,bus,storage_pool_id}], nic_model, video_model, spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode, cpu_limit_percent(仅管理员, 0-100), first_boot_reboot_mode(normal/cold), preserve_fnos_device_id/fnos_device_id(FnOS 可选), autostart, freeze, apic, pae, rtc_offset, credentials, kvm_hidden(bool), vendor_id(str), nested_virt(bool,默认true), vgpu_uuid(仅管理员, vGPU实例UUID) 等克隆表单字段'
-const reinstallBody = 'JSON: template, disk_size, hostname, user, password, preserve_fnos_device_id, fnos_device_id'
+const vmCreateBody = 'JSON: name, remark, vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, watchdog, boot_order[], video_model, spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), cpu_limit_percent(仅管理员, 0-100), virt_type(kvm/qemu), arch(x86_64/aarch64/riscv64), memory_dynamic{dynamic_enabled,memory_backend,memory_initial,memory_min,memory_max,memory_auto_balloon,memory_current}, switch_id, security_group_id, storage_pool_id, extra_disks[{size,format,bus,storage_pool_id}], vgpu_uuid(仅管理员, vGPU实例UUID), user_data(可选, cloud-init YAML或PowerShell脚本)'
+const selfVmCreateBody = 'JSON: name, remark, vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, boot_order[], video_model, spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), memory_dynamic{dynamic_enabled,memory_backend,memory_initial,memory_min,memory_max,memory_auto_balloon,memory_current}, switch_id, security_group_id, storage_pool_id, extra_disks[{size,format,bus,storage_pool_id}], user_data(可选, cloud-init YAML或PowerShell脚本)'
+const cloneBody = 'JSON: template/name, new_name/name, remark, vcpu, ram, disk_size, disk_bus, switch_id, security_group_id, storage_pool_id, extra_disks[{size,format,bus,storage_pool_id}], nic_model, video_model, spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode, cpu_limit_percent(仅管理员, 0-100), first_boot_reboot_mode(normal/cold), preserve_fnos_device_id/fnos_device_id(FnOS 可选), autostart, freeze, apic, pae, rtc_offset, credentials, kvm_hidden(bool), vendor_id(str), nested_virt(bool,默认true), vgpu_uuid(仅管理员, vGPU实例UUID), user_data(可选, cloud-init YAML或PowerShell脚本) 等克隆表单字段'
+const reinstallBody = 'JSON: template, disk_size, hostname, user, password, preserve_fnos_device_id, fnos_device_id, user_data(可选, cloud-init YAML或PowerShell脚本)'
 const scheduleBody = 'JSON: name, action(start/shutdown/destroy/reboot/delete), cron/execute_at, enabled, timezone, params'
 const portForwardBody = 'JSON: vm_name, guest_ip, guest_port, host_port, protocol(tcp/udp), description, target_type, public_ip_id'
 const publicIPBody = 'JSON: address, cidr, gateway, iface, mac, vm_name, mode, remark, enabled 等公网 IP 配置字段'
@@ -255,11 +255,17 @@ export const endpointGroups = [
         highRisk: 'create_vm',
         requiredFields: ['name', 'vcpu', 'ram', 'disk_size']
       }),
+      ep('POST', '/vm/import-disk', '管理员通过磁盘路径导入虚拟机', {
+        body: 'JSON: name, disk_path(磁盘绝对路径), os_type, os_variant, vcpu, ram, remark, switch_id, security_group_id, storage_pool_id, user_data(可选, cloud-init YAML或PowerShell脚本) 等',
+        response: 'data: task_id。导入操作为异步任务，请继续查询任务详情。',
+        notes: [admin, elastic, '需指定宿主机上已有磁盘文件的绝对路径。', '仅支持 qcow2 和 raw 格式磁盘。'],
+        highRisk: 'import_disk'
+      }),
       ep('GET', '/vm/os-variants', '获取 libosinfo 系统变体列表', { response: 'data: OS variant 列表。' }),
       ep('GET', '/vm/iso-list', '获取全局 ISO 列表', { response: 'data: ISO 文件列表。' }),
       ep('POST', '/vm/clone', '从模板克隆虚拟机', { body: cloneBody, notes: [elastic], highRisk: '创建 VM 类高风险验证按现有策略触发' }),
       ep('POST', '/vm/linked-clone', '原生链式克隆虚拟机', { body: cloneBody, notes: [admin, elastic], highRisk: '创建 VM 类高风险验证按现有策略触发' }),
-      ep('POST', '/vm/batch-clone', '批量克隆虚拟机', { body: 'JSON: prefix(名称前缀), start_num(起始编号), count(创建数量), template, template_type, clone_mode(linked/full), vcpu, ram, disk_size, hostname(可选), user(新建用户), password, freeze, template_root_pass, template_user, video_model, spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), disk_bus, cpu_topology_mode, first_boot_reboot_mode, uefi', notes: [elastic] }),
+      ep('POST', '/vm/batch-clone', '批量克隆虚拟机', { body: 'JSON: prefix(名称前缀), start_num(起始编号), count(创建数量), template, template_type, clone_mode(linked/full), vcpu, ram, disk_size, hostname(可选), user(新建用户), password, freeze, template_root_pass, template_user, video_model, spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), disk_bus, cpu_topology_mode, first_boot_reboot_mode, uefi, user_data(可选, cloud-init YAML或PowerShell脚本)', notes: [elastic] }),
       ep('POST', '/vm/:name/reinstall', '重装虚拟机', {
         pathParams: ['name'],
         body: reinstallBody,
@@ -494,7 +500,7 @@ export const endpointGroups = [
       ep('DELETE', '/self/vm/:name', '用户自助删除自己的 VM', { pathParams: ['name'], body: 'JSON: delete_disks, transfer_disks', notes: [elastic], highRisk: 'delete_vm' }),
       ep('GET', '/self/vm/:name/qcow2-disks', '获取自己的 VM qcow2 磁盘列表', { pathParams: ['name'] }),
       ep('POST', '/self/vm/export', '导出自己的 VM', { body: 'JSON: vm_name, export_name, include_snapshots, target_storage/category', notes: [elastic] }),
-      ep('POST', '/self/vm/import', '导入 VM 到自己账号', { body: 'JSON: file/category/path, name, remark, vcpu, ram, switch_id, security_group_id, credentials 等', notes: [elastic] }),
+      ep('POST', '/self/vm/import', '导入 VM 到自己账号', { body: 'JSON: file/category/path, name, remark, vcpu, ram, switch_id, security_group_id, credentials, user_data(可选, cloud-init YAML或PowerShell脚本) 等', notes: [elastic] }),
       ep('GET', '/self/storage/info', '获取我的存储信息', { notes: [elastic] }),
       ep('POST', '/self/storage/init', '初始化我的存储', { notes: [elastic] }),
       ep('GET', '/self/storage/files/:category', '列出我的存储文件', { pathParams: ['category(iso/share/disk)'], notes: [elastic] }),
