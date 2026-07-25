@@ -65,6 +65,18 @@
           <SidebarIcons icon="storage-pool" />
           <template #title>存储池</template>
         </el-menu-item>
+        <el-sub-menu index="/resource_parent" v-if="isAdmin">
+          <template #title>
+            <SidebarIcons icon="resource" />
+            <span>资源管理</span>
+          </template>
+          <el-menu-item index="/resource-spec">
+            <template #title>资源规格</template>
+          </el-menu-item>
+          <el-menu-item index="/cloud-disk-spec">
+            <template #title>云盘规格</template>
+          </el-menu-item>
+        </el-sub-menu>
         <el-menu-item index="/nodes" v-if="isAdmin">
           <SidebarIcons icon="node" />
           <template #title>节点管理</template>

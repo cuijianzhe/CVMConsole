@@ -413,6 +413,17 @@ func Setup() *gin.Engine {
 				nodes.POST("/:id/probe", handler.ProbeHostNode)
 			}
 
+			// ==================== 资源规格管理（管理员） ====================
+			resourceSpec := authorized.Group("/resource-specs")
+			resourceSpec.Use(middleware.AdminMiddleware())
+			{
+				resourceSpec.GET("", handler.ListResourceSpecs)
+				resourceSpec.POST("", handler.CreateResourceSpec)
+				resourceSpec.PUT("/:id", handler.UpdateResourceSpec)
+				resourceSpec.DELETE("/:id", handler.DeleteResourceSpec)
+				resourceSpec.POST("/batch-delete", handler.BatchDeleteResourceSpecs)
+			}
+
 			migration := authorized.Group("/migration")
 			migration.Use(middleware.AdminMiddleware())
 			{
