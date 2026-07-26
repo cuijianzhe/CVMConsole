@@ -129,6 +129,18 @@ const routes = [
         name: 'About',
         component: () => import('@/views/about/index.vue'),
         meta: { title: '关于项目' }
+      },
+      {
+        path: 'resource-spec',
+        name: 'ResourceSpec',
+        component: () => import('@/views/resource-spec/index.vue'),
+        meta: { title: '资源规格', adminOnly: true }
+      },
+      {
+        path: 'cloud-disk-spec',
+        name: 'CloudDiskSpec',
+        component: () => import('@/views/cloud-disk-spec/index.vue'),
+        meta: { title: '云盘规格', adminOnly: true }
       }
     ]
   }

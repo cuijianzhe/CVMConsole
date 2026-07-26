@@ -413,6 +413,30 @@ func Setup() *gin.Engine {
 				nodes.POST("/:id/probe", handler.ProbeHostNode)
 			}
 
+			// ==================== 资源规格管理 ====================
+			// 列表对所有已认证用户开放（创建虚拟机时选择规格使用）
+			authorized.GET("/resource-specs", handler.ListResourceSpecs)
+			resourceSpec := authorized.Group("/resource-specs")
+			resourceSpec.Use(middleware.AdminMiddleware())
+			{
+				resourceSpec.POST("", handler.CreateResourceSpec)
+				resourceSpec.PUT("/:id", handler.UpdateResourceSpec)
+				resourceSpec.DELETE("/:id", handler.DeleteResourceSpec)
+				resourceSpec.POST("/batch-delete", handler.BatchDeleteResourceSpecs)
+			}
+
+			// ==================== 云盘规格管理 ====================
+			// 列表对所有已认证用户开放（创建虚拟机时选择云盘规格使用）
+			authorized.GET("/cloud-disk-specs", handler.ListCloudDiskSpecs)
+			cloudDiskSpec := authorized.Group("/cloud-disk-specs")
+			cloudDiskSpec.Use(middleware.AdminMiddleware())
+			{
+				cloudDiskSpec.POST("", handler.CreateCloudDiskSpec)
+				cloudDiskSpec.PUT("/:id", handler.UpdateCloudDiskSpec)
+				cloudDiskSpec.DELETE("/:id", handler.DeleteCloudDiskSpec)
+				cloudDiskSpec.POST("/batch-delete", handler.BatchDeleteCloudDiskSpecs)
+			}
+
 			migration := authorized.Group("/migration")
 			migration.Use(middleware.AdminMiddleware())
 			{
