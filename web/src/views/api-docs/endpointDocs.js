@@ -205,6 +205,69 @@ export const endpointGroups = [
     ]
   },
   {
+    name: '资源管理',
+    description: '资源规格（CPU/内存）和云盘规格（磁盘）管理，用于创建虚拟机时快速选择预设配置。',
+    endpoints: [
+      // 资源规格
+      ep('GET', '/resource-specs', '获取资源规格列表', {
+        query: ['page', 'page_size', 'keyword'],
+        notes: ['所有已认证用户可访问，用于创建虚拟机时选择规格。']
+      }),
+      ep('POST', '/resource-specs', '创建资源规格', {
+        body: 'JSON: name, cpu_cores, memory_gb',
+        response: 'data: 新创建的资源规格对象，包含 id, name, cpu_cores, memory_gb, created_at, updated_at。',
+        notes: [admin, '名称需唯一，长度 3-50 个字符。'],
+        requiredFields: ['name', 'cpu_cores', 'memory_gb']
+      }),
+      ep('PUT', '/resource-specs/:id', '更新资源规格', {
+        pathParams: ['id'],
+        body: 'JSON: name, cpu_cores, memory_gb',
+        response: 'data: 更新后的资源规格对象。',
+        notes: [admin],
+        requiredFields: ['name', 'cpu_cores', 'memory_gb']
+      }),
+      ep('DELETE', '/resource-specs/:id', '删除资源规格', {
+        pathParams: ['id'],
+        notes: [admin, '如果有 VM 关联此规格，则不支持删除。']
+      }),
+      ep('POST', '/resource-specs/batch-delete', '批量删除资源规格', {
+        body: 'JSON: ids[]',
+        response: 'data: { deleted: 成功删除的数量 }。',
+        notes: [admin, '如果有 VM 关联某规格，该规格不会被删除。'],
+        requiredFields: ['ids']
+      }),
+
+      // 云盘规格
+      ep('GET', '/cloud-disk-specs', '获取云盘规格列表', {
+        query: ['page', 'page_size', 'keyword'],
+        notes: ['所有已认证用户可访问，用于创建虚拟机时选择云盘规格。']
+      }),
+      ep('POST', '/cloud-disk-specs', '创建云盘规格', {
+        body: 'JSON: name, disk_type, capacity_gb, storage_location, disk_format, iops_mode, total_iops, read_iops, write_iops, description',
+        response: 'data: 新创建的云盘规格对象，包含 id, name, disk_type, capacity_gb, storage_location, disk_format, iops_mode, total_iops, read_iops, write_iops, description, created_at, updated_at。',
+        notes: [admin, '名称需唯一，长度 3-50 个字符。disk_type 为 DATA 时可指定 disk_format。IOPS 为 0 表示不限制。'],
+        requiredFields: ['name', 'disk_type', 'capacity_gb']
+      }),
+      ep('PUT', '/cloud-disk-specs/:id', '更新云盘规格', {
+        pathParams: ['id'],
+        body: 'JSON: name, disk_type, capacity_gb, storage_location, disk_format, iops_mode, total_iops, read_iops, write_iops, description',
+        response: 'data: 更新后的云盘规格对象。',
+        notes: [admin],
+        requiredFields: ['name', 'disk_type', 'capacity_gb']
+      }),
+      ep('DELETE', '/cloud-disk-specs/:id', '删除云盘规格', {
+        pathParams: ['id'],
+        notes: [admin, '如果有 VM 关联此规格，则不支持删除。']
+      }),
+      ep('POST', '/cloud-disk-specs/batch-delete', '批量删除云盘规格', {
+        body: 'JSON: ids[]',
+        response: 'data: { deleted: 成功删除的数量 }。',
+        notes: [admin, '如果有 VM 关联某规格，该规格不会被删除。'],
+        requiredFields: ['ids']
+      })
+    ]
+  },
+  {
     name: '虚拟机',
     description: 'VM 生命周期、详情、监控、网络绑定、调度、磁盘、VNC、快照和救援。',
     endpoints: [

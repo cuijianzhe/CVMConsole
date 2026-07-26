@@ -404,7 +404,17 @@ const fieldDescriptions = {
   xml: 'libvirt domain XML 内容',
   vgpu_uuid: 'vGPU 实例 UUID，由宿主机 vGPU 管理接口创建后分配给虚拟机。',
   profile_id: 'vGPU Profile ID，标识 vGPU 类型（如显存大小、算力配置）。',
-  user_data: 'cloud-init 自定义注入数据。Linux 支持 YAML 格式（以 #cloud-config 开头则替换默认配置，否则追加），Windows 支持 PowerShell 脚本（以 #ps1_sysnative 开头）。'
+  user_data: 'cloud-init 自定义注入数据。Linux 支持 YAML 格式（以 #cloud-config 开头则替换默认配置，否则追加），Windows 支持 PowerShell 脚本（以 #ps1_sysnative 开头）。',
+  cpu_cores: 'CPU 核心数。',
+  memory_gb: '内存大小，单位 GB。',
+  disk_type: '磁盘类型，SYSTEM 系统盘或 DATA 数据盘。',
+  capacity_gb: '磁盘容量，单位 GB。',
+  storage_location: '存储位置，通常为存储池名称或路径。',
+  disk_format: '磁盘格式，QCOW2 或 RAW。',
+  iops_mode: 'IOPS 模式，TOTAL 总 IOPS 或 READ_WRITE 读写 IOPS。',
+  total_iops: '总 IOPS 限制。',
+  read_iops: '读 IOPS 限制。',
+  write_iops: '写 IOPS 限制。'
 }
 
 const ignoredFieldTokens = new Set([

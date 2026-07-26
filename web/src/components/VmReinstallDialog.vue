@@ -85,7 +85,7 @@
         <el-input
           v-model="form.user_data"
           type="textarea"
-          :rows="5"
+          :rows="3"
           placeholder="cloud-init UserData（YAML/JSON 格式，可选）"
         />
         <div class="form-inline-hint">

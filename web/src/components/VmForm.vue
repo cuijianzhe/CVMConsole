@@ -785,7 +785,7 @@
                         <el-input
                           v-model="form.user_data"
                           type="textarea"
-                          :rows="6"
+                          :rows="3"
                           placeholder="cloud-init UserData（YAML/JSON 格式，可选）"
                           style="width: 100%;"
                         />
@@ -956,7 +956,7 @@
                     <el-input
                       v-model="form.user_data"
                       type="textarea"
-                      :rows="6"
+                      :rows="3"
                       placeholder="cloud-init UserData（YAML/JSON 格式，可选）"
                       style="width: 100%;"
                     />
