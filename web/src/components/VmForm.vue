@@ -667,7 +667,7 @@
             <div class="mode-card-new" :class="{ selected: form.create_mode === 'template' }" @click="selectMode('template')">
               <div class="mode-card-check"><FormIcons icon="check" :size="16" /></div>
               <div class="mode-card-icon"><FormIcons icon="mode-copy" :size="40" /></div>
-              <div class="mode-card-title">从模板快速克隆</div>
+              <div class="mode-card-title">从模板快速创建</div>
               <div class="mode-card-desc">基于预配置模板秒级创建，适合批量部署</div>
             </div>
             <div class="mode-card-new" :class="{ selected: form.create_mode === 'import' }" @click="selectMode('import')">
