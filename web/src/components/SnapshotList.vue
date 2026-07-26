@@ -39,10 +39,14 @@
         </el-form-item>
         <el-form-item label="包含内存" v-if="vmIsRunning">
           <el-checkbox v-model="form.include_memory">创建快照时保存虚拟机内存状态</el-checkbox>
-          <div class="el-form-item__help" style="color: #909399; font-size: 12px; line-height: 1.4; margin-top: 4px;">
-            勾选后将创建包含内存的内部快照，恢复时虚拟机将回到运行状态。<br/>
-            不勾选则创建仅磁盘的外部快照。<br/>
-            <span style="color: #E6A23C;">⚠ 内存快照耗时取决于虚拟机内存大小，大内存虚拟机可能需要数分钟，请耐心等待。</span>
+          <div class="el-form-item__help" style="font-size: 12px; line-height: 1.6; margin-top: 6px;">
+            <div :style="{ color: form.include_memory ? '#E6A23C' : '#67C23A', fontWeight: 500 }">
+              <span v-if="form.include_memory">✓ 已勾选：注：建议内部快照用于测试/实验/临时场景，此操作将创建包含内存的内部快照，恢复时虚拟机将回到运行状态</span>
+              <span v-else>○ 未勾选：将创建仅磁盘的外部快照，恢复时虚拟机需冷启动</span>
+            </div>
+            <div style="color: #909399; margin-top: 4px;">
+              ⚠ 内存快照耗时取决于虚拟机内存大小，大内存虚拟机可能需要数分钟，请耐心等待。
+            </div>
           </div>
         </el-form-item>
         <el-form-item label="创建方式" v-if="vmIsRunning && form.include_memory">
@@ -154,7 +158,7 @@ const handleCreate = () => {
     return
   }
   form.description = ''
-  form.include_memory = vmIsRunning.value
+  form.include_memory = false
   form.pause_for_memory_snapshot = true
   createVisible.value = true
 }

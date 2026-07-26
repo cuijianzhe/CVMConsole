@@ -79,7 +79,7 @@ CVMConsole 是一个面向小型企业和个人私有云服务场景的开源虚
 ### 前端
 - **框架**: Vue 3.5.30
 - **UI 库**: Element Plus v2.13.5
-- **HTTP 客户端**: Axios v1.15.2
+- **HTTP 客户端**: Axios v1.18.1
 - **VNC 客户端**: @novnc/novnc v1.7.0
 - **构建工具**: Vite v8.0.0
 
