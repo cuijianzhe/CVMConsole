@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"kvm_console/logger"
 )
 
 // AtomicWriteFile 原子写文件：先写入临时文件，再通过 os.Rename 替换目标文件
@@ -89,21 +91,17 @@ func FileReadable(path string) bool {
 	return true
 }
 
-// ChownLibvirtQEMU 尝试将文件 chown 为 libvirt-qemu:kvm，失败则回退到 qemu:qemu
-// 返回错误仅当两次尝试都失败时
+// ChownLibvirtQEMU 尝试将文件 chown 为 libvirt-qemu:kvm
+// 仅在完全找不到 libvirt-qemu 用户时才返回错误
+// 如果用户存在但 chown 失败（如模板文件权限限制），仅记录警告
 func ChownLibvirtQEMU(path string) error {
-	if uid, gid, err := GetUserIDs("libvirt-qemu", "kvm"); err == nil {
-		if err := os.Chown(path, uid, gid); err == nil {
-			return nil
-		}
-	}
-	// 回退到 qemu:qemu
-	uid, gid, err := GetUserIDs("qemu", "qemu")
+	uid, gid, err := GetUserIDs("libvirt-qemu", "kvm")
 	if err != nil {
-		return fmt.Errorf("chown %s 失败: 无法查找 libvirt-qemu/kvm 或 qemu/qemu: %w", path, err)
+		return fmt.Errorf("chown %s 失败: 无法查找 libvirt-qemu/kvm 用户: %w", path, err)
 	}
 	if err := os.Chown(path, uid, gid); err != nil {
-		return fmt.Errorf("chown %s 失败: %w", path, err)
+		logger.App.Warn("chown 失败（非致命，AppArmor 规则已确保访问）", "path", path, "error", err)
+		return nil
 	}
 	return nil
 }
