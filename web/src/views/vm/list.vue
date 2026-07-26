@@ -1119,11 +1119,11 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, reactive } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, reactive, h } from 'vue'
 import { getDiskList, getVmIP, getVmList, operateVm, rescueVm, lockVm, unlockVm, makeVMIndependent, resizeDisk } from '@/api/vm'
 import { getSelfVMs, getSelfLightweightVmRegistrations, confirmSelfLightweightVmRegistration } from '@/api/user'
 import { getUserInfo } from '@/api/auth'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElRadioGroup, ElRadio } from 'element-plus'
 import { Search, ArrowRight, Grid, List as ListIcon } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import { useVmStore } from '@/store/vm'
@@ -1772,47 +1772,56 @@ const handleResizeDisk = async (row) => {
   if (isLightweight.value || isMigrating(row)) return
   try {
     const res = await getDiskList(row.name)
-    const disks = res.data || []
+    const allDisks = res.data || []
+    // 仅显示可扩容的磁盘（device=disk 且有路径），过滤掉 cdrom/软盘等
+    const disks = allDisks.filter(d => d.device_type === 'disk' && d.path)
     if (!disks.length) {
-      ElMessage.warning('未找到磁盘信息')
+      ElMessage.warning('未找到可扩容的磁盘')
       return
     }
-    const diskOptions = disks.map(d => ({
-      label: `${d.device} (${d.capacity_gb || '未知'} GB)`,
-      value: d
-    }))
-    const selected = await ElMessageBox.confirm(
-      `<div style="max-height: 300px; overflow-y: auto;">
-        <p style="margin-bottom: 12px;">请选择要扩容的磁盘：</p>
-        <div>${diskOptions.map((d, i) => `
-          <label style="display: block; margin-bottom: 8px; cursor: pointer;">
-            <input type="radio" name="disk-select" value="${i}" ${i === 0 ? 'checked' : ''}>
-            <span style="margin-left: 8px;">${d.label}</span>
-          </label>
-        `).join('')}</div>
-      </div>`,
-      '扩容磁盘',
-      {
-        confirmButtonText: '下一步',
-        cancelButtonText: '取消',
-        dangerouslyUseHTMLString: true
+    // 只有一块磁盘时直接进入扩容输入
+    let selectedDevice = disks[0].device
+    if (disks.length > 1) {
+      const selectedDisk = ref(selectedDevice)
+      try {
+        await ElMessageBox({
+          title: '扩容磁盘',
+          message: () => h('div', { style: 'max-height: 300px; overflow-y: auto;' }, [
+            h('p', { style: 'margin-bottom: 12px;' }, '请选择要扩容的磁盘：'),
+            h(ElRadioGroup, {
+              modelValue: selectedDisk.value,
+              'onUpdate:modelValue': (v) => { selectedDisk.value = v },
+              style: 'display: flex; flex-direction: column; gap: 8px;',
+            }, () => disks.map(d => h(ElRadio, {
+              value: d.device,
+              style: 'margin-right: 0;',
+            }, () => `${d.device} (${d.capacity_gb || '未知'} GB${d.bus ? ' / ' + d.bus : ''})`)))
+          ]),
+          confirmButtonText: '下一步',
+          cancelButtonText: '取消',
+          showCancelButton: true,
+          closeOnClickModal: false,
+        })
+        selectedDevice = selectedDisk.value
+      } catch (err) {
+        // 用户取消
+        return
       }
-    )
-    const diskIndex = parseInt(selected) || 0
-    const disk = disks[diskIndex]
-    const currentSize = disk.capacity_gb || 0
+    }
+    const disk = disks.find(d => d.device === selectedDevice) || disks[0]
+    const currentSize = parseFloat(disk.capacity_gb) || 0
     const { value: newSize } = await ElMessageBox.prompt(
-      `当前容量: ${currentSize} GB\n请输入新的容量（GB），只能扩大不能缩小:`,
+      `当前容量: ${currentSize} GB\n请输入新的容量（GB，整数），只能扩大不能缩小:`,
       `扩容磁盘 ${disk.device}`,
       {
         confirmButtonText: '扩容',
         cancelButtonText: '取消',
         inputValue: '',
         inputPattern: /^\d+$/,
-        inputErrorMessage: '请输入有效的数字',
+        inputErrorMessage: '请输入有效的整数',
       }
     )
-    const newSizeNum = parseInt(newSize)
+    const newSizeNum = parseInt(newSize, 10)
     if (newSizeNum <= currentSize) {
       ElMessage.warning('新容量必须大于当前容量')
       return
