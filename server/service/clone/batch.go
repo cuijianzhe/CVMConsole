@@ -65,10 +65,8 @@ func BatchCloneVM(ctx context.Context, params *BatchCloneParams, progressFn func
 
 			vmName := fmt.Sprintf("%s-%s", params.Prefix, padNum(params.StartNum+index))
 
+			// 密码：如果用户指定了密码则使用，否则保持为空（不修改模板原密码）
 			vmPassword := params.Password
-			if vmPassword == "" {
-				vmPassword = GenerateRandomStrongPassword()
-			}
 
 			cloneParams := &CloneParams{
 				Name:                vmName,
