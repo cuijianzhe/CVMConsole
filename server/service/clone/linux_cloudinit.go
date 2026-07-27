@@ -15,7 +15,7 @@ import (
 // 无需 SSH 连接：自动安装 cloud-init（如缺失）、清理身份信息、写入 cloud-init NoCloud seed 文件、离线修改密码与用户名
 // 适用于所有 Linux 模板；若宿主机无网络则跳过包安装，seed 文件将静默失效但不影响 VM 可用性
 // 仅在主机名、用户名或密码至少有一个不为空时才执行初始化
-func prepareLinuxNoCloudInit(params *CloneParams, cloneDisk string) error {
+func prepareLinuxNoCloudInit(params *CloneParams, cloneDisk string, progressFn func(int, string)) error {
 	if params.Hostname == "" && params.User == "" && params.Password == "" {
 		return nil
 	}
@@ -113,6 +113,11 @@ func prepareLinuxNoCloudInit(params *CloneParams, cloneDisk string) error {
 		"--run-command", fmt.Sprintf("printf '%%s\\n' %s > /etc/hostname", utils.ShellSingleQuote(params.Hostname)),
 		"--run-command", buildLinuxHostsCommand(params.Hostname),
 		"--quiet",
+	}
+	if netplanCommand := buildLinuxNetplanMACCompatCommand(params.PrimaryMAC); netplanCommand != "" {
+		args = append(args, "--run-command", netplanCommand)
+	} else {
+		args = append(args, "--run-command", buildLinuxNetplanDHCPHotplugCompatCommand())
 	}
 
 	if params.Password == "" {

@@ -96,6 +96,16 @@ func PrepareTemplate(params *PrepareTemplateParams) error {
 		meta.CloneVisible = true
 	}
 
+	// Linux 模板：预装 cloud-init 和 growpart 依赖（制作时一次性安装，克隆时直接使用）
+	if tplType == "linux" {
+		if err := EnsureLinuxCloudInitDeps(destPath); err != nil {
+			updateLinuxInitStatus(meta, err)
+		} else {
+			updateLinuxInitStatus(meta, nil)
+		}
+	}
+
+	// 计算模板校验和...
 	hash, err := CalculateFileHashes(destPath)
 	if err != nil {
 		_ = os.Remove(destPath)

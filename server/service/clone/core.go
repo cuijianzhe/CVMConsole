@@ -171,6 +171,13 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 	isOther := tplType == "other" && !strings.EqualFold(params.TemplateCategory, "FnOS") && !strings.EqualFold(params.TemplateCategory, "OpenWrt")
 	isOpenWrt := tplType == "openwrt" || (tplType == "other" && strings.EqualFold(params.TemplateCategory, "OpenWrt"))
 	isNoInit := (meta != nil && strings.EqualFold(strings.TrimSpace(meta.CloudInitMode), "none")) || params.DisableSystemInit
+	if params.SwitchID != 0 && params.PrimaryMAC == "" {
+		mac, macErr := GenerateClonePrimaryMAC()
+		if macErr != nil {
+			return nil, fmt.Errorf("生成虚拟机主网卡 MAC 失败: %w", macErr)
+		}
+		params.PrimaryMAC = mac
+	}
 
 	// 克隆前存储空间预检查
 	if err := D.CheckStorageSpace(filepath.Dir(cloneDisk), int64(params.DiskSize)*1024+1024); err != nil {

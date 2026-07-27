@@ -4,22 +4,24 @@ package arch
 
 type x8664Profile struct{}
 
-func (p *x8664Profile) Arch() string                    { return ArchX8664 }
-func (p *x8664Profile) DisplayName() string             { return "x86_64 (AMD64)" }
-func (p *x8664Profile) EmulatorPath() string            { return "/usr/bin/qemu-system-x86_64" }
-func (p *x8664Profile) DefaultMachineType() string      { return "q35" }
-func (p *x8664Profile) SupportedMachineTypes() []string { return []string{"q35", "pc-i440fx", "i440fx"} }
-func (p *x8664Profile) DefaultBootType() string         { return "bios" }
-func (p *x8664Profile) SupportedBootTypes() []string    { return []string{"bios", "uefi", "uefi-secure"} }
-func (p *x8664Profile) DefaultCPUMode() string          { return "host-passthrough" }
-func (p *x8664Profile) SupportedDiskBus() []string      { return []string{"virtio", "scsi", "sata", "ide"} }
-func (p *x8664Profile) GetCDROMBus() string             { return "sata" }
-func (p *x8664Profile) SupportedNicModels() []string    { return []string{"virtio", "e1000e", "rtl8139"} }
-func (p *x8664Profile) SupportsBIOS() bool              { return true }
-func (p *x8664Profile) SupportsSecureBoot() bool        { return true }
-func (p *x8664Profile) SupportsPAE() bool               { return true }
-func (p *x8664Profile) SupportsAPIC() bool              { return true }
-func (p *x8664Profile) DefaultWatchdogModel() string    { return "itco" }
+func (p *x8664Profile) Arch() string               { return ArchX8664 }
+func (p *x8664Profile) DisplayName() string        { return "x86_64 (AMD64)" }
+func (p *x8664Profile) EmulatorPath() string       { return "/usr/bin/qemu-system-x86_64" }
+func (p *x8664Profile) DefaultMachineType() string { return "q35" }
+func (p *x8664Profile) SupportedMachineTypes() []string {
+	return []string{"q35", "pc-i440fx", "i440fx"}
+}
+func (p *x8664Profile) DefaultBootType() string      { return "bios" }
+func (p *x8664Profile) SupportedBootTypes() []string { return []string{"bios", "uefi", "uefi-secure"} }
+func (p *x8664Profile) DefaultCPUMode() string       { return "host-passthrough" }
+func (p *x8664Profile) SupportedDiskBus() []string   { return []string{"virtio", "scsi", "sata", "ide"} }
+func (p *x8664Profile) GetCDROMBus() string          { return "sata" }
+func (p *x8664Profile) SupportedNicModels() []string { return []string{"virtio", "e1000e", "rtl8139"} }
+func (p *x8664Profile) SupportsBIOS() bool           { return true }
+func (p *x8664Profile) SupportsSecureBoot() bool     { return true }
+func (p *x8664Profile) SupportsPAE() bool            { return true }
+func (p *x8664Profile) SupportsAPIC() bool           { return true }
+func (p *x8664Profile) DefaultWatchdogModel() string { return "itco" }
 
 func (p *x8664Profile) DefaultCPUModel(virtType string) string {
 	if virtType == "qemu" {

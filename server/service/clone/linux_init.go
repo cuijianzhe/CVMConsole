@@ -9,7 +9,7 @@ import (
 // prepareLinuxCloneFirstBootIdentity 执行 Linux 克隆完整离线初始化
 // 使用 cloud-init NoCloud 文件方式，无需 SSH 连接
 func prepareLinuxCloneFirstBootIdentity(params *CloneParams, cloneDisk string) error {
-	return prepareLinuxNoCloudInit(params, cloneDisk)
+	return prepareLinuxNoCloudInit(params, cloneDisk, nil)
 }
 
 // PrepareLinuxCloneFirstBootIdentityExported 是 prepareLinuxCloneFirstBootIdentity 的导出版本

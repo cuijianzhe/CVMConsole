@@ -73,6 +73,7 @@ type CloneParams struct {
 	VendorID              string                         `json:"vendor_id,omitempty"`           // Hyper-V vendor_id 伪装
 	VGPUProfileID         uint                           `json:"vgpu_profile_id,omitempty"`     // vGPU 配置文件 ID
 	VGPUUUID              string                         `json:"vgpu_uuid,omitempty"`           // vGPU 设备 UUID
+	PrimaryMAC            string                         `json:"-"`                             // 首网卡 MAC，在离线网络配置与域 XML 间保持一致
 }
 
 // BatchCloneParams 批量克隆参数
