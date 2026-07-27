@@ -754,20 +754,14 @@
                       <span>登录凭据</span>
                     </div>
                     <div class="form-section-card-body">
-                      <el-row :gutter="20">
-                        <el-col :span="12">
-                          <el-form-item label="主机名" prop="hostname">
-                            <el-input v-model="form.hostname" placeholder="自动使用虚拟机名称">
-                              <template #append><el-button @click="handleGenerateTemplateHostname">随机生成</el-button></template>
-                            </el-input>
-                          </el-form-item>
-                        </el-col>
-                        <el-col :span="12">
-                          <el-form-item label="用户名">
-                            <el-input v-model="form.import_user" placeholder="请输入登录用户名" :disabled="form.os_type === 'windows'" />
-                          </el-form-item>
-                        </el-col>
-                      </el-row>
+                      <el-form-item label="主机名" prop="hostname">
+                        <el-input v-model="form.hostname" placeholder="自动使用虚拟机名称" clearable>
+                          <template #append><el-button @click="handleGenerateTemplateHostname">随机生成</el-button></template>
+                        </el-input>
+                      </el-form-item>
+                      <el-form-item label="用户名">
+                        <el-input v-model="form.import_user" placeholder="请输入登录用户名" :disabled="form.os_type === 'windows'" />
+                      </el-form-item>
                       <el-form-item label="密码">
                         <el-input v-model="form.import_password" placeholder="请输入密码" type="password" show-password autocomplete="new-password" style="width: 100%;">
                           <template #append><el-button @click="handleGenerateTemplatePassword">生成强密码</el-button></template>
@@ -865,7 +859,7 @@
                 </div>
                 <div class="form-section-card-body">
                   <el-form-item label="主机名" prop="hostname">
-                    <el-input v-model="form.hostname" placeholder="自动随机生成">
+                    <el-input v-model="form.hostname" placeholder="自动随机生成" clearable>
                       <template #append><el-button @click="handleGenerateTemplateHostname">随机生成</el-button></template>
                     </el-input>
                   </el-form-item>
@@ -900,26 +894,20 @@
                   <span>登录凭据</span>
                 </div>
                 <div class="form-section-card-body">
-                  <el-row :gutter="20">
-                    <el-col :span="12">
-                      <el-form-item label="主机名" prop="hostname">
-                        <el-input v-model="form.hostname" placeholder="自动随机生成">
-                          <template #append><el-button @click="handleGenerateTemplateHostname">随机生成</el-button></template>
-                        </el-input>
-                      </el-form-item>
-                    </el-col>
-                    <el-col :span="12">
-                      <el-form-item prop="import_user">
-                        <template #label>
-                          <span>用户名</span>
-                          <el-tooltip :content="templateUserTip" placement="top" effect="dark">
-                            <el-icon class="label-tip-icon"><QuestionFilled /></el-icon>
-                          </el-tooltip>
-                        </template>
-                        <el-input v-model="form.import_user" :placeholder="templateUserPlaceholder" :disabled="isWindowsTemplate" />
-                      </el-form-item>
-                    </el-col>
-                  </el-row>
+                  <el-form-item label="主机名" prop="hostname">
+                    <el-input v-model="form.hostname" placeholder="自动随机生成" clearable>
+                      <template #append><el-button @click="handleGenerateTemplateHostname">随机生成</el-button></template>
+                    </el-input>
+                  </el-form-item>
+                  <el-form-item prop="import_user">
+                    <template #label>
+                      <span>用户名</span>
+                      <el-tooltip :content="templateUserTip" placement="top" effect="dark">
+                        <el-icon class="label-tip-icon"><QuestionFilled /></el-icon>
+                      </el-tooltip>
+                    </template>
+                    <el-input v-model="form.import_user" :placeholder="templateUserPlaceholder" :disabled="isWindowsTemplate" />
+                  </el-form-item>
                   <el-form-item prop="import_password">
                     <template #label>
                       <span>密码</span>
@@ -999,7 +987,7 @@
                 </div>
                 <div class="form-section-card-body">
                   <el-form-item label="主机名">
-                    <el-input v-model="form.hostname" placeholder="自动随机生成">
+                    <el-input v-model="form.hostname" placeholder="自动随机生成" clearable>
                       <template #append><el-button @click="handleGenerateTemplateHostname">随机生成</el-button></template>
                     </el-input>
                   </el-form-item>

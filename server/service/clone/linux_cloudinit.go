@@ -19,6 +19,9 @@ func prepareLinuxNoCloudInit(params *CloneParams, cloneDisk string, progressFn f
 	if params.Hostname == "" && params.User == "" && params.Password == "" {
 		return nil
 	}
+	if progressFn != nil {
+		progressFn(20, "准备 Linux 离线初始化...")
+	}
 	// 生成 cloud-init seed 文件内容
 	metaData := buildNoCloudMetaData(params)
 	userData := buildNoCloudUserData(params)
@@ -197,6 +200,9 @@ func prepareLinuxNoCloudInit(params *CloneParams, cloneDisk string, progressFn f
 		)
 	}
 
+	if progressFn != nil {
+		progressFn(25, "执行 Linux 离线初始化...")
+	}
 	result := utils.ExecCommandLongRunning("virt-customize", args...)
 	if result.Error != nil {
 		return fmt.Errorf("Linux 克隆离线初始化失败: %s", D.FirstNonEmpty(result.Stderr, result.Error.Error()))
