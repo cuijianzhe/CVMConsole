@@ -11,7 +11,6 @@ import (
 
 	"kvm_console/config"
 	"kvm_console/logger"
-	"kvm_console/service/arch"
 	"kvm_console/service/libvirt_rpc"
 	"kvm_console/service/vm/memory"
 	"kvm_console/service/vm_xml"
@@ -31,7 +30,7 @@ type LinkedCloneParams struct {
 	MaxVCPU             int                     `json:"max_vcpu,omitempty"` // CPU 热添加上限
 	RAM                 int                     `json:"ram"`
 	DiskSize            int                     `json:"disk_size,omitempty"`
-	Network             string                  `json:"network,omitempty"`
+	MachineType         string                  `json:"machine_type,omitempty"`
 	Autostart           bool                    `json:"autostart,omitempty"`
 	Freeze              bool                    `json:"freeze,omitempty"`
 	APIC                *bool                   `json:"apic,omitempty"`
@@ -49,6 +48,7 @@ type LinkedCloneParams struct {
 	FirstBootRebootMode string                  `json:"first_boot_reboot_mode,omitempty"`
 	MemoryDynamic       *VMMemoryDynamicRequest `json:"memory_dynamic,omitempty"`
 	SwitchID            uint                    `json:"switch_id,omitempty"`
+	Network             string                  `json:"network,omitempty"`
 	SecurityGroupID     uint                    `json:"security_group_id,omitempty"`
 	ExtraNics           []AddVMInterfaceRequest `json:"extra_nics,omitempty"`
 	StoragePoolID       string                  `json:"storage_pool_id,omitempty"`
@@ -221,8 +221,7 @@ func LinkedCloneVM(ctx context.Context, params *LinkedCloneParams, progressFn fu
 		fmt.Sprintf("--name %s", utils.ShellSingleQuote(params.Name)),
 		fmt.Sprintf("--ram %d", ramMB),
 		vcpuArg,
-		fmt.Sprintf("--machine %s", arch.GetProfile(arch.DetectHostArch()).DefaultMachineType()),
-		fmt.Sprintf("--disk %s,format=qcow2,bus=%s,discard=unmap,detect_zeroes=unmap", utils.ShellSingleQuote(cloneDisk), params.DiskBus),
+		fmt.Sprintf("--machine %s", params.MachineType),
 		"--osinfo detect=on,require=off",
 	}
 	// 仅在有主网口交换机配置时才添加网络接口，否则显式禁用

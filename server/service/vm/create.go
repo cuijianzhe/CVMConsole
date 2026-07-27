@@ -220,6 +220,10 @@ func CreateVM(params *CreateVMParams, progressFn func(int, string)) (string, err
 	} else if !slices.Contains(profile.SupportedMachineTypes(), params.MachineType) {
 		params.MachineType = profile.DefaultMachineType()
 	}
+	// 归一化机器类型名称（i440fx -> pc-i440fx）
+	if params.MachineType == "i440fx" {
+		params.MachineType = "pc-i440fx"
+	}
 	if params.BootType == "" {
 		params.BootType = profile.DefaultBootType()
 	} else if !slices.Contains(profile.SupportedBootTypes(), params.BootType) {

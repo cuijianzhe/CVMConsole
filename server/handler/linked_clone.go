@@ -2,11 +2,13 @@ package handler
 
 import (
 	"net/http"
+	"slices"
 
 	"github.com/gin-gonic/gin"
 
 	"kvm_console/model"
 	"kvm_console/service"
+	"kvm_console/service/arch"
 	vm_memory "kvm_console/service/vm/memory"
 	"kvm_console/service/vm_xml"
 	"kvm_console/taskqueue"
@@ -22,6 +24,7 @@ type LinkedCloneVmRequest struct {
 	VCPU                int                               `json:"vcpu" binding:"required"`
 	RAM                 int                               `json:"ram" binding:"required"`
 	DiskSize            *int                              `json:"disk_size"`
+	MachineType         string                            `json:"machine_type"`
 	Autostart           bool                              `json:"autostart"`
 	Freeze              bool                              `json:"freeze"`
 	APIC                *bool                             `json:"apic"`
@@ -103,6 +106,18 @@ func LinkedCloneVm(c *gin.Context) {
 		return
 	}
 
+	// 归一化机器类型
+	linkedArch := arch.DetectHostArch()
+	linkedProfile := arch.GetProfile(linkedArch)
+	if req.MachineType == "" {
+		req.MachineType = linkedProfile.DefaultMachineType()
+	} else if req.MachineType == "i440fx" {
+		req.MachineType = "pc-i440fx"
+	}
+	if !slices.Contains(linkedProfile.SupportedMachineTypes(), req.MachineType) {
+		req.MachineType = linkedProfile.DefaultMachineType()
+	}
+
 	params := &service.LinkedCloneParams{
 		Name:                req.Name,
 		Remark:              req.Remark,
@@ -112,6 +127,7 @@ func LinkedCloneVm(c *gin.Context) {
 		VCPU:                req.VCPU,
 		RAM:                 req.RAM,
 		DiskSize:            diskSize,
+		MachineType:         req.MachineType,
 		Autostart:           req.Autostart,
 		Freeze:              req.Freeze,
 		APIC:                req.APIC,

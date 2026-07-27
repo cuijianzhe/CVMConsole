@@ -329,7 +329,7 @@ export const endpointGroups = [
       }),
       ep('GET', '/vm/os-variants', '获取 libosinfo 系统变体列表', { response: 'data: OS variant 列表。' }),
       ep('GET', '/vm/iso-list', '获取全局 ISO 列表', { response: 'data: ISO 文件列表。' }),
-      ep('POST', '/vm/clone', '从模板克隆虚拟机（支持链式/完整克隆）', {
+      ep('POST', '/vm/clone', '从模板创建虚拟机（支持链式/完整克隆）', {
         body: cloneBody,
         notes: [elastic, 'clone_mode 可指定 linked（链式）或 full（完整），默认 linked。'],
         highRisk: '创建 VM 类高风险验证按现有策略触发',

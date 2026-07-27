@@ -35,6 +35,10 @@ func ImportDiskByPath(ctx context.Context, params *ImportDiskByPathParams, progr
 	} else if !slices.Contains(hostProfile.SupportedMachineTypes(), params.MachineType) {
 		params.MachineType = hostProfile.DefaultMachineType()
 	}
+	// 归一化机器类型名称（i440fx -> pc-i440fx）
+	if params.MachineType == "i440fx" {
+		params.MachineType = "pc-i440fx"
+	}
 	if params.BootType == "" {
 		params.BootType = hostProfile.DefaultBootType()
 	} else if !slices.Contains(hostProfile.SupportedBootTypes(), params.BootType) {

@@ -3,12 +3,14 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"kvm_console/model"
 	"kvm_console/service"
+	"kvm_console/service/arch"
 	clonepkg "kvm_console/service/clone"
 	libvirt_rpc "kvm_console/service/libvirt_rpc"
 	vm_memory "kvm_console/service/vm/memory"
@@ -37,6 +39,7 @@ type CloneVmRequest struct {
 	VCPU                 int                               `json:"vcpu" binding:"required"`
 	RAM                  int                               `json:"ram" binding:"required"`
 	DiskSize             int                               `json:"disk_size"`
+	MachineType          string                            `json:"machine_type"`
 	Hostname             string                            `json:"hostname"`
 	User                 string                            `json:"user"`
 	Password             string                            `json:"password"`
@@ -91,6 +94,7 @@ type BatchCloneRequest struct {
 	VCPU                int                             `json:"vcpu" binding:"required"`
 	RAM                 int                             `json:"ram" binding:"required"`
 	DiskSize            int                             `json:"disk_size"`
+	MachineType         string                          `json:"machine_type"`
 	Hostname            string                          `json:"hostname"` // 主机名（空则由系统自动生成）
 	User                string                          `json:"user"`     // 新用户名
 	Password            string                          `json:"password"`
@@ -239,6 +243,18 @@ func CloneVm(c *gin.Context) {
 		return
 	}
 
+	// 归一化机器类型
+	hostArch := arch.DetectHostArch()
+	hostProfile := arch.GetProfile(hostArch)
+	if req.MachineType == "" {
+		req.MachineType = hostProfile.DefaultMachineType()
+	} else if req.MachineType == "i440fx" {
+		req.MachineType = "pc-i440fx"
+	}
+	if !slices.Contains(hostProfile.SupportedMachineTypes(), req.MachineType) {
+		req.MachineType = hostProfile.DefaultMachineType()
+	}
+
 	params := &clonepkg.CloneParams{
 		Name:                 req.Name,
 		Remark:               req.Remark,
@@ -249,6 +265,7 @@ func CloneVm(c *gin.Context) {
 		VCPU:                 req.VCPU,
 		RAM:                  req.RAM,
 		DiskSize:             diskSize,
+		MachineType:          req.MachineType,
 		Hostname:             req.Hostname,
 		User:                 req.User,
 		Password:             req.Password,
@@ -406,6 +423,18 @@ func BatchCloneVm(c *gin.Context) {
 		return
 	}
 
+	// 归一化机器类型
+	batchHostArch := arch.DetectHostArch()
+	batchHostProfile := arch.GetProfile(batchHostArch)
+	if req.MachineType == "" {
+		req.MachineType = batchHostProfile.DefaultMachineType()
+	} else if req.MachineType == "i440fx" {
+		req.MachineType = "pc-i440fx"
+	}
+	if !slices.Contains(batchHostProfile.SupportedMachineTypes(), req.MachineType) {
+		req.MachineType = batchHostProfile.DefaultMachineType()
+	}
+
 	params := &clonepkg.BatchCloneParams{
 		Prefix:              req.Prefix,
 		StartNum:            req.StartNum,
@@ -417,6 +446,7 @@ func BatchCloneVm(c *gin.Context) {
 		VCPU:                req.VCPU,
 		RAM:                 req.RAM,
 		DiskSize:            diskSize,
+		MachineType:         req.MachineType,
 		Hostname:            req.Hostname,
 		User:                req.User,
 		Password:            req.Password,

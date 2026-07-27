@@ -5769,6 +5769,7 @@ const submitForm = async () => {
               max_vcpu: cpuHotplugMaxVCPU.value,
               ram: form.ram,
               disk_size: form.disk_size,
+              machine_type: form.machine_type,
               hostname: '', // 批量模式下每台虚拟机由后端自动生成独立主机名
               user: form.system_init_enabled ? (isWindowsTemplate.value ? windowsTemplateUsername : form.import_user.trim()) : '',
               password: form.system_init_enabled ? form.import_password : '',
@@ -5824,6 +5825,7 @@ const submitForm = async () => {
             max_vcpu: cpuHotplugMaxVCPU.value,
             ram: form.ram,
             disk_size: form.disk_size,
+            machine_type: form.machine_type,
             hostname: form.system_init_enabled ? form.hostname : '',
             user: form.system_init_enabled ? (isWindowsTemplate.value ? windowsTemplateUsername : form.import_user.trim()) : '',
             password: form.system_init_enabled ? form.import_password : '',

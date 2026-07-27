@@ -25,6 +25,7 @@ type CloneParams struct {
 	MaxVCPU               int                            `json:"max_vcpu,omitempty"`               // CPU 热添加上限，0 或 <= vcpu 表示不启用
 	RAM                   int                            `json:"ram"`                              // 内存（GB）
 	DiskSize              int                            `json:"disk_size,omitempty"`              // 磁盘大小（GB，可选）
+	MachineType           string                         `json:"machine_type,omitempty"`           // 机器类型: q35/pc-i440fx
 	Network               string                         `json:"network,omitempty"`                // 网络（默认 default）
 	Hostname              string                         `json:"hostname,omitempty"`               // 主机名
 	User                  string                         `json:"user,omitempty"`                   // 新用户名
@@ -87,6 +88,7 @@ type BatchCloneParams struct {
 	MaxVCPU             int                        `json:"max_vcpu,omitempty"` // CPU 热添加上限
 	RAM                 int                        `json:"ram"`
 	DiskSize            int                        `json:"disk_size,omitempty"`
+	MachineType         string                     `json:"machine_type,omitempty"`
 	Network             string                     `json:"network,omitempty"`
 	Hostname            string                     `json:"hostname,omitempty"` // 主机名（空则由系统自动生成）
 	User                string                     `json:"user,omitempty"`     // 新用户名

@@ -92,7 +92,7 @@
           <div class="form-tip">
             <el-icon><InfoFilled /></el-icon>
             <span v-if="form.init_mode === 'nocloud'">
-              模板内需预装 cloud-init，克隆时自动扩容磁盘、设置 hostname，无需 SSH 连接
+              模板内需预装 cloud-init，创建时自动扩容磁盘、设置 hostname，无需 SSH 连接
             </span>
             <span v-else-if="form.init_mode === 'configdrive'">
               克隆时通过 ConfigDrive 注入 cloudbase-init 配置，自动设置密码和网络
@@ -104,7 +104,7 @@
               克隆时通过 virt-customize 注入静态 IP、网关、DNS 和主机名等 OpenWrt UCI 配置
             </span>
             <span v-else>
-              克隆时将直接完整复制模板磁盘，不做任何初始化操作
+              创建时将直接完整复制模板磁盘，不做任何初始化操作
             </span>
           </div>
         </el-form-item>
@@ -113,7 +113,7 @@
           <el-input v-model="form.template_user" placeholder="模板中已有的普通用户名" />
           <div class="form-tip">
             <el-icon><InfoFilled /></el-icon>
-            克隆时若目标用户名与模板用户名不同，自动离线重命名
+            创建时若目标用户名与模板用户名不同，自动离线重命名
           </div>
         </el-form-item>
 
@@ -122,7 +122,7 @@
             v-model="form.post_boot_command"
             type="textarea"
             :rows="3"
-            placeholder="克隆后首次启动时执行的自定义 Shell 命令（可多行）"
+            placeholder="创建后首次启动时执行的自定义 Shell 命令（可多行）"
           />
           <div class="form-tip">
             <el-icon><InfoFilled /></el-icon>
@@ -250,7 +250,7 @@ const onInitModeChange = async (value) => {
   if (form.type === 'linux') {
     try {
       await ElMessageBox.confirm(
-        '选择「不初始化」意味着克隆此模板时不会进行任何系统初始化操作（不会设置 hostname、不会扩容磁盘、不会注入密码），克隆出的虚拟机将完全保留模板的原始状态。\n\n请确保：\n1. 模板内已自行完成通用化处理（如删除 SSH 主机密钥、清理 machine-id 等）\n2. 模板磁盘大小已满足最终需求，后续不会自动扩容\n3. 你清楚克隆后需自行登录虚拟机进行个性化配置',
+        '选择「不初始化」意味着使用此模板时不会进行任何系统初始化操作（不会设置 hostname、不会扩容磁盘、不会注入密码），克隆出的虚拟机将完全保留模板的原始状态。\n\n请确保：\n1. 模板内已自行完成通用化处理（如删除 SSH 主机密钥、清理 machine-id 等）\n2. 模板磁盘大小已满足最终需求，后续不会自动扩容\n3. 你清楚克隆后需自行登录虚拟机进行个性化配置',
         '⚠️ 风险确认：不初始化模板',
         { confirmButtonText: '我已知晓风险，继续', cancelButtonText: '取消', type: 'warning', dangerouslyUseHTMLString: true }
       )
@@ -260,7 +260,7 @@ const onInitModeChange = async (value) => {
   } else if (form.type === 'windows') {
     try {
       await ElMessageBox.confirm(
-        '选择「不初始化」意味着克隆此模板时不会进行任何系统初始化操作（不会注入 ConfigDrive、不会设置密码、不会执行 cloudbase-init）。克隆出的虚拟机将完全保留模板的原始状态。\n\n<strong>⚠ 请在制作模板前务必对源虚拟机执行 sysprep 通用化：</strong>\n1. 运行 sysprep.exe 并勾选「通用」选项（/generalize）\n2. 关机后制作模板，确保 SID 和其他唯一标识已被清除\n3. 克隆后的 Windows 将在首次启动时重新进入 OOBE 初始化流程\n\n未通用化的 Windows 模板将导致克隆虚拟机出现 SID 冲突、域加入失败等问题。',
+        '选择「不初始化」意味着使用此模板时不会进行任何系统初始化操作（不会注入 ConfigDrive、不会设置密码、不会执行 cloudbase-init）。克隆出的虚拟机将完全保留模板的原始状态。\n\n<strong>⚠ 请在制作模板前务必对源虚拟机执行 sysprep 通用化：</strong>\n1. 运行 sysprep.exe 并勾选「通用」选项（/generalize）\n2. 关机后制作模板，确保 SID 和其他唯一标识已被清除\n3. 克隆后的 Windows 将在首次启动时重新进入 OOBE 初始化流程\n\n未通用化的 Windows 模板将导致克隆虚拟机出现 SID 冲突、域加入失败等问题。',
         '⚠️ 风险确认：不初始化模板',
         { confirmButtonText: '已通用化，继续', cancelButtonText: '取消', type: 'warning', dangerouslyUseHTMLString: true }
       )
@@ -270,7 +270,7 @@ const onInitModeChange = async (value) => {
   } else if (form.type === 'other' && form.category === 'FnOS') {
     try {
       await ElMessageBox.confirm(
-        '选择「不初始化」意味着克隆此模板时不会进行任何系统初始化操作。克隆出的虚拟机将完全保留模板的原始状态。\n\n请确保模板已完成必要的通用化处理。',
+        '选择「不初始化」意味着使用此模板时不会进行任何系统初始化操作。克隆出的虚拟机将完全保留模板的原始状态。\n\n请确保模板已完成必要的通用化处理。',
         '⚠️ 风险确认：不初始化模板',
         { confirmButtonText: '我已知晓风险，继续', cancelButtonText: '取消', type: 'warning' }
       )
@@ -280,7 +280,7 @@ const onInitModeChange = async (value) => {
   } else if (form.type === 'other' && form.category === 'OpenWrt') {
     try {
       await ElMessageBox.confirm(
-        '选择「不初始化」意味着克隆此模板时不会注入任何网络配置。克隆出的 OpenWrt 将保留模板原始 IP 配置。\n\n请确保模板已完成必要的通用化处理。',
+        '选择「不初始化」意味着使用此模板时不会注入任何网络配置。克隆出的 OpenWrt 将保留模板原始 IP 配置。\n\n请确保模板已完成必要的通用化处理。',
         '⚠️ 风险确认：不初始化模板',
         { confirmButtonText: '我已知晓风险，继续', cancelButtonText: '取消', type: 'warning' }
       )

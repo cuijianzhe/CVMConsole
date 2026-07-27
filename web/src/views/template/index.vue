@@ -304,7 +304,7 @@
             v-model="publishForm.post_boot_command"
             type="textarea"
             :rows="3"
-            placeholder="克隆后首次启动时执行的自定义 Shell 命令（可多行）"
+            placeholder="创建后首次启动时执行的自定义 Shell 命令（可多行）"
           />
           <div class="form-tip"><el-icon><InfoFilled /></el-icon>命令将以 root 权限执行，仅首次启动时运行</div>
           <el-checkbox v-model="publishForm.post_boot_blocking" :disabled="!publishForm.post_boot_command" style="margin-top: 6px;">
@@ -503,7 +503,7 @@ const publishCategoryPlaceholder = computed(() => publishForm.value.type === 'wi
   ? '默认归入 WindowsServer2022，可选择 WindowsServer2025 / Windows11 / Windows10 / WindowsServer2012R2 / 其它'
   : '默认归入 Ubuntu，可选择 Debian、CentOS')
 const publishCategoryTip = computed(() => publishForm.value.type === 'windows'
-  ? 'Windows 模板按版本分类展示，2012 R2 会保留模板默认硬件配置用于克隆'
+  ? 'Windows 模板按版本分类展示，2012 R2 会保留模板默认硬件配置用于创建'
   : 'Linux 模板按发行版分类展示')
 
 const fetchData = async () => {

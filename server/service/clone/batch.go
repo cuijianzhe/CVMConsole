@@ -80,6 +80,7 @@ func BatchCloneVM(ctx context.Context, params *BatchCloneParams, progressFn func
 				MaxVCPU:             params.MaxVCPU,
 				RAM:                 params.RAM,
 				DiskSize:            params.DiskSize,
+				MachineType:         params.MachineType,
 				Network:             params.Network,
 				Hostname:            params.Hostname,
 				User:                params.User,
