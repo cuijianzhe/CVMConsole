@@ -178,7 +178,7 @@ const rules = {
       }
       const normalized = `${value || ''}`.trim()
       if (!normalized) {
-        callback(new Error('请输入登录用户名'))
+        callback()
         return
       }
       if (!usernamePattern.test(normalized)) {
@@ -197,7 +197,7 @@ const rules = {
       }
       const normalized = `${value || ''}`
       if (!normalized) {
-        callback(new Error('请输入登录密码'))
+        callback()
         return
       }
       passwordValidator(_rule, normalized, callback)
@@ -344,11 +344,6 @@ async function open(vm) {
   resetForm(currentVm.value)
   visible.value = true
   await fetchTemplates()
-  const currentTemplate = `${currentVm.value?.template || ''}`.trim()
-  if (currentTemplate && templates.value.some(item => item.name === currentTemplate)) {
-    form.template = currentTemplate
-  }
-  applyTemplateDefaults()
 }
 
 const emit = defineEmits(['success'])

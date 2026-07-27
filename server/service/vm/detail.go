@@ -33,7 +33,7 @@ func GetVM(name string) (*VmDetail, error) {
 
 	vm := &VmDetail{}
 	vm.Name = name
-	if remark, err := GetVMRemark(name); err == nil {
+	if remark, remarkErr := GetVMRemark(name); remarkErr == nil {
 		vm.Remark = remark
 	}
 
@@ -81,7 +81,7 @@ func GetVM(name string) (*VmDetail, error) {
 	// 如果仍然为空，尝试从 XML 文件中读取
 	if vm.Template == "" {
 		xmlPath := fmt.Sprintf("/etc/libvirt/qemu/%s.xml", name)
-		if content, err := os.ReadFile(xmlPath); err == nil {
+		if content, readErr := os.ReadFile(xmlPath); readErr == nil {
 			if match := templateSourceNamePattern.FindStringSubmatch(string(content)); len(match) >= 2 {
 				vm.Template = strings.TrimSpace(match[1])
 				logger.App.Info("GetVM - 从 XML 文件获取模板源成功", "vm", name, "template", vm.Template)
@@ -93,7 +93,7 @@ func GetVM(name string) (*VmDetail, error) {
 
 	// 检查系统盘完整性（仅检查第一块非 cdrom 磁盘）
 	if diskInfo.Path != "" {
-		if _, err := os.Stat(diskInfo.Path); err != nil {
+		if _, statErr := os.Stat(diskInfo.Path); statErr != nil {
 			unhealthy := false
 			vm.DiskHealthy = &unhealthy
 			logger.App.Warn("虚拟机磁盘文件缺失", "vm", name, "path", diskInfo.Path)
