@@ -31,6 +31,7 @@ type Deps struct {
 	DetectTemplateBootType    func(templatePath string) string
 	ResolveCloneDiskSizeGB    func(templateName string, requestedDiskSize int) (int, error)
 	WriteVMTemplateSource     func(vmName, template, cloneMode string) error
+	ReadVMTemplateSource      func(vmName string) string
 
 	// ---- VM validation / normalization ----
 	ValidateVMName                 func(name string) error

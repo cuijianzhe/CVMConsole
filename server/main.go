@@ -1067,6 +1067,7 @@ func initCloneDeps() {
 		DetectTemplateBootType:    service.DetectTemplateBootType,
 		ResolveCloneDiskSizeGB:    service.ResolveCloneDiskSizeGB,
 		WriteVMTemplateSource:     service.WriteVMTemplateSource,
+		ReadVMTemplateSource:      service.ReadVMTemplateSourceString,
 
 		// VM validation / normalization
 		ValidateVMName:                 service.ValidateVMName,

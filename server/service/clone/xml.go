@@ -253,8 +253,12 @@ func defineAndStartNonWindowsClone(params *CloneParams, cloneDisk string, ramMB 
 	if cloneMode == "" {
 		cloneMode = "linked"
 	}
-	if err := D.WriteVMTemplateSource(params.Name, params.Template, cloneMode); err != nil {
-		logger.App.Warn("写入VM模板源信息失败", "error", err)
+	if params.Template != "" {
+		if err := D.WriteVMTemplateSource(params.Name, params.Template, cloneMode); err != nil {
+			logger.App.Warn("写入VM模板源信息失败", "error", err)
+		}
+	} else {
+		logger.App.Warn("跳过写入VM模板源信息 - template为空", "vm", params.Name)
 	}
 	if err := D.SetVMRemark(params.Name, params.Remark); err != nil {
 		logger.App.Warn("设置VM备注失败", "error", err)

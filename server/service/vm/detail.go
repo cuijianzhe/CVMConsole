@@ -67,16 +67,29 @@ func GetVM(name string) (*VmDetail, error) {
 	vm.DiskPath = diskInfo.Path
 	vm.DiskSize = diskInfo.Size
 	vm.Template = diskInfo.Template
+	logger.App.Info("GetVM - 磁盘信息", "vm", name, "diskPath", diskInfo.Path, "diskTemplate", diskInfo.Template)
 
-	// 如果磁盘 backing file 没有模板信息，尝试从 XML 文件中读取 template-source 元数据
+	// 如果磁盘 backing file 没有模板信息，尝试从元数据中读取 template-source
+	if vm.Template == "" && D.ReadVMTemplateSource != nil {
+		logger.App.Info("GetVM - 尝试从 metadata 读取模板源", "vm", name)
+		if templateName := D.ReadVMTemplateSource(name); templateName != "" {
+			vm.Template = templateName
+			logger.App.Info("GetVM - 从 metadata 获取模板源成功", "vm", name, "template", templateName)
+		}
+	}
+
+	// 如果仍然为空，尝试从 XML 文件中读取
 	if vm.Template == "" {
 		xmlPath := fmt.Sprintf("/etc/libvirt/qemu/%s.xml", name)
 		if content, err := os.ReadFile(xmlPath); err == nil {
 			if match := templateSourceNamePattern.FindStringSubmatch(string(content)); len(match) >= 2 {
 				vm.Template = strings.TrimSpace(match[1])
+				logger.App.Info("GetVM - 从 XML 文件获取模板源成功", "vm", name, "template", vm.Template)
 			}
 		}
 	}
+
+	logger.App.Info("GetVM - 最终模板源", "vm", name, "template", vm.Template)
 
 	// 检查系统盘完整性（仅检查第一块非 cdrom 磁盘）
 	if diskInfo.Path != "" {

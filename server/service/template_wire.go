@@ -174,9 +174,10 @@ func WriteVMTemplateSource(vmName, templateName, cloneMode string) error {
 	return templatepkg.WriteVMTemplateSource(vmName, templateName, cloneMode)
 }
 
-// ReadVMTemplateSource is not delegated because vmTemplateSource is unexported in the template subpackage.
-// Callers that need this should import the template subpackage directly, but currently
-// no handler or external service file calls this function.
+// ReadVMTemplateSourceString reads template source and returns the template name as string
+func ReadVMTemplateSourceString(vmName string) string {
+	return templatepkg.ReadVMTemplateSourceExported(vmName)
+}
 
 // EnsureTemplatePath delegates to templatepkg.EnsureTemplatePath
 func EnsureTemplatePath(templateName string) (string, error) {

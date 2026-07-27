@@ -381,6 +381,13 @@ func defaultVMCacheBuildRecordFromHost(name string, syncedAt time.Time) (model.V
 	record.DiskSizeText = diskInfo.Size
 	record.Template = diskInfo.Template
 
+	// 如果磁盘 backing file 没有模板信息（完整克隆），尝试从 metadata 读取
+	if record.Template == "" && D.ReadVMTemplateSource != nil {
+		if templateName := D.ReadVMTemplateSource(name); templateName != "" {
+			record.Template = templateName
+		}
+	}
+
 	netInfo := GetVMNetworkInfo(name)
 	record.NicModel = netInfo.NicModel
 	record.MacAddress = netInfo.MAC

@@ -89,6 +89,7 @@ func init() {
 		// ---- Template ----
 		GetTemplateMeta:       getTemplateMetaForVM,
 		WriteVMTemplateSource: WriteVMTemplateSource,
+		ReadVMTemplateSource:  ReadVMTemplateSourceString,
 
 		// ---- Resource check ----
 		CheckDirWritable:  CheckDirWritable,

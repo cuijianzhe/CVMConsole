@@ -91,6 +91,7 @@ type Deps struct {
 	// ---- Template ----
 	GetTemplateMeta       func(templateName string) *TemplateMeta
 	WriteVMTemplateSource func(vmName, template, cloneMode string) error
+	ReadVMTemplateSource  func(vmName string) string
 
 	// ---- Resource check ----
 	CheckDirWritable  func(dir string) error
