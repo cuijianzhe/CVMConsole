@@ -214,7 +214,13 @@ func GetVMNetworkRuntimeStatus(vmName string) (*VMNetworkRuntimeStatus, error) {
 		runtimeByMAC[NormalizeMAC(item.MAC)] = item
 	}
 
-	for _, iface := range xmlIfaces {
+	// 获取 VM 的 MAC -> interface_order 映射
+	ifaceOrderMap := make(map[string]int)
+	if HookGetVMInterfaceOrderByMAC != nil {
+		ifaceOrderMap = HookGetVMInterfaceOrderByMAC(vmName)
+	}
+
+	for idx, iface := range xmlIfaces {
 		item := VMNetworkInterface{
 			InterfaceType:   iface.Type,
 			Target:          iface.Target.Dev,
@@ -223,6 +229,13 @@ func GetVMNetworkRuntimeStatus(vmName string) (*VMNetworkRuntimeStatus, error) {
 			Model:           iface.Model.Type,
 			MAC:             NormalizeMAC(iface.MAC.Address),
 			VirtualPortType: iface.VirtualPort.Type,
+		}
+		// 根据 MAC 获取 interface_order（优先从数据库绑定记录）
+		if order, ok := ifaceOrderMap[item.MAC]; ok {
+			item.InterfaceOrder = order
+		} else {
+			// 回退：使用 XML 中的索引作为 interface_order
+			item.InterfaceOrder = idx
 		}
 		if runtime, ok := runtimeByMAC[item.MAC]; ok {
 			if item.Target == "" || item.Target == "-" {

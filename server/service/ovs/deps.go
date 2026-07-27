@@ -12,4 +12,8 @@ var (
 
 	// HookBuildOVSInterfaceXMLForBridge builds a <interface> XML snippet for the given bridge.
 	HookBuildOVSInterfaceXMLForBridge func(mac, modelName, bridge string) string
+
+	// HookGetVMInterfaceOrderByMAC returns the interface_order mapping for a VM.
+	// Returns a map of MAC address to interface_order.
+	HookGetVMInterfaceOrderByMAC func(vmName string) map[string]int
 )

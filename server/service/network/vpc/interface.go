@@ -122,6 +122,12 @@ func AddVMInterface(vmName string, req AddVMInterfaceRequest) (*VMInterfaceInfo,
 		return nil, fmt.Errorf("创建网口绑定记录失败: %w", err)
 	}
 
+	// 获取并保存 MAC 地址到绑定记录
+	if mac := HookGetVMMACByOrder(vmName, nextOrder); mac != "" {
+		binding.MACAddress = mac
+		model.DB.Model(&binding).Update("mac_address", mac)
+	}
+
 	// 应用带宽设置到该网口
 	if req.BandwidthInboundAvg > 0 || req.BandwidthOutboundAvg > 0 {
 		if err := applyInterfaceBandwidth(vmName, nextOrder, req.BandwidthInboundAvg, req.BandwidthOutboundAvg); err != nil {
@@ -358,73 +364,84 @@ func AttachExtraNICs(vmName string, extraNics []AddVMInterfaceRequest) {
 	}
 }
 
-// applyNewInterfaceRuntime 为新添加的网口设置 OVS VLAN tag（不影响已有网口）
+// applyNewInterfaceRuntime 为新添加的网口设置 VLAN/DHCP 等运行时配置
+// 关机状态下仍需完成 DHCP 静态绑定（确保下次开机能获取 IP），
+// 运行时操作（OVS 端口、VLAN tag）仅在 VM 运行时执行
 func applyNewInterfaceRuntime(vmName string, sw model.VPCSwitch, interfaceOrder int) error {
 	state := strings.TrimSpace(utils.ExecCommand("virsh", "domstate", vmName).Stdout)
-	if state != "running" {
+	isRunning := state == "running"
+
+	// 运行时操作：仅在 VM 运行时执行
+	var vnetIF string
+	if isRunning {
+		vnetIF = getVMVnetIFByOrder(vmName, interfaceOrder)
+		if vnetIF == "" {
+			for i := 0; i < 10; i++ {
+				time.Sleep(500 * time.Millisecond)
+				vnetIF = getVMVnetIFByOrder(vmName, interfaceOrder)
+				if vnetIF != "" {
+					break
+				}
+			}
+		}
+		if vnetIF == "" {
+			return fmt.Errorf("无法找到新网口对应的 vnet 接口")
+		}
+
+		if !HookSwitchUsesDirectBridge(sw) && sw.VLANID > 0 {
+			if !ovsPortExists(vnetIF) {
+				logger.App.Warn("OVS 端口不存在，跳过新网口 VLAN tag 设置", "port", vnetIF)
+			} else {
+				targetTag := strconv.Itoa(sw.VLANID)
+				result := utils.ExecCommand("ovs-vsctl", "set", "Port", vnetIF, "tag="+targetTag)
+				if result.Error != nil {
+					return fmt.Errorf("设置新网口 OVS VLAN tag 失败: %s", result.Stderr)
+				}
+			}
+		}
+	}
+
+	// DHCP 静态绑定：无论 VM 运行/关机都需要执行
+	// 使用 HookGetVMMACByOrder，已支持关机状态通过 XML 获取 MAC
+	mac := HookGetVMMACByOrder(vmName, interfaceOrder)
+	if mac == "" {
+		logger.App.Warn("无法获取新网口 MAC 地址，跳过 DHCP 绑定", "vm", vmName, "order", interfaceOrder)
 		return nil
 	}
 
-	vnetIF := getVMVnetIFByOrder(vmName, interfaceOrder)
-	if vnetIF == "" {
-		for i := 0; i < 10; i++ {
-			time.Sleep(500 * time.Millisecond)
-			vnetIF = getVMVnetIFByOrder(vmName, interfaceOrder)
-			if vnetIF != "" {
-				break
-			}
-		}
-	}
-	if vnetIF == "" {
-		return fmt.Errorf("无法找到新网口对应的 vnet 接口")
-	}
-
-	if !HookSwitchUsesDirectBridge(sw) && sw.VLANID > 0 {
-		if !ovsPortExists(vnetIF) {
-			logger.App.Warn("OVS 端口不存在，跳过新网口 VLAN tag 设置", "port", vnetIF)
-		} else {
-			targetTag := strconv.Itoa(sw.VLANID)
-			result := utils.ExecCommand("ovs-vsctl", "set", "Port", vnetIF, "tag="+targetTag)
-			if result.Error != nil {
-				return fmt.Errorf("设置新网口 OVS VLAN tag 失败: %s", result.Stderr)
-			}
-		}
-	}
-
-	mac := HookGetVMMACByOrder(vmName, interfaceOrder)
-	if mac != "" {
+	if HookCleanOVSDHCPLease != nil {
 		HookCleanOVSDHCPLease(mac, "")
+	}
 
-		if HookSwitchUsesDirectBridge(sw) {
-			bridgeName := HookBridgeNameForSwitch(sw)
-			var ipAddr string
-			if sw.BridgeIPMode == "preset" && HookFindBridgeFreeIP != nil {
-				var err error
-				ipAddr, err = HookFindBridgeFreeIP(sw)
-				if err != nil {
-					logger.App.Warn("查找桥接模式可用 IP 失败", "vm", vmName, "error", err)
-				}
-			} else {
-				if HookListBridgeDHCPLeases != nil {
-					if leases, err := HookListBridgeDHCPLeases(bridgeName); err == nil {
-						for _, lease := range leases {
-							if strings.EqualFold(lease.MAC, mac) && strings.TrimSpace(lease.IP) != "" {
-								ipAddr = lease.IP
-								break
-							}
+	if HookSwitchUsesDirectBridge(sw) {
+		bridgeName := HookBridgeNameForSwitch(sw)
+		var ipAddr string
+		if sw.BridgeIPMode == "preset" && HookFindBridgeFreeIP != nil {
+			var err error
+			ipAddr, err = HookFindBridgeFreeIP(sw)
+			if err != nil {
+				logger.App.Warn("查找桥接模式可用 IP 失败", "vm", vmName, "error", err)
+			}
+		} else {
+			if HookListBridgeDHCPLeases != nil {
+				if leases, err := HookListBridgeDHCPLeases(bridgeName); err == nil {
+					for _, lease := range leases {
+						if strings.EqualFold(lease.MAC, mac) && strings.TrimSpace(lease.IP) != "" {
+							ipAddr = lease.IP
+							break
 						}
 					}
 				}
 			}
-			if HookUpsertBridgeStaticHost != nil {
-				if err := HookUpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr); err != nil {
-					logger.App.Warn("桥接模式注册 MAC 地址失败", "vm", vmName, "error", err)
-				}
+		}
+		if HookUpsertBridgeStaticHost != nil {
+			if err := HookUpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr); err != nil {
+				logger.App.Warn("桥接模式注册 MAC 地址失败", "vm", vmName, "error", err)
 			}
-			if HookReloadBridgeDNSMasq != nil {
-				if err := HookReloadBridgeDNSMasq(bridgeName); err != nil {
-					logger.App.Warn("重新加载桥接模式 DHCP 服务失败", "bridge", bridgeName, "error", err)
-				}
+		}
+		if HookReloadBridgeDNSMasq != nil {
+			if err := HookReloadBridgeDNSMasq(bridgeName); err != nil {
+				logger.App.Warn("重新加载桥接模式 DHCP 服务失败", "bridge", bridgeName, "error", err)
 			}
 		}
 	}

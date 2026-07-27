@@ -139,6 +139,7 @@ type VMNetworkRuntimeStatus struct {
 // VMNetworkInterface describes a VM's network interface runtime info.
 type VMNetworkInterface struct {
 	InterfaceType   string   `json:"interface_type"`
+	InterfaceOrder  int      `json:"interface_order"`
 	Target          string   `json:"target"`
 	SourceBridge    string   `json:"source_bridge"`
 	SourceNetwork   string   `json:"source_network"`

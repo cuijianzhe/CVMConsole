@@ -86,6 +86,7 @@ type VPCVMBinding struct {
 	SwitchID             uint      `json:"switch_id" gorm:"index;not null"`
 	SecurityGroupID      uint      `json:"security_group_id" gorm:"index;not null"`
 	InterfaceOrder       int       `json:"interface_order" gorm:"uniqueIndex:idx_vm_interface;not null;default:0"`
+	MACAddress           string    `json:"mac_address" gorm:"size:17"`
 	NicModel             string    `json:"nic_model" gorm:"size:32;default:virtio"`
 	BandwidthInboundAvg  int       `json:"bandwidth_inbound_avg" gorm:"default:0"`
 	BandwidthOutboundAvg int       `json:"bandwidth_outbound_avg" gorm:"default:0"`

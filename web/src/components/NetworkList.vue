@@ -1759,15 +1759,13 @@ const ipSourceText = (source) => {
   return map[source] || '-'
 }
 
-// 根据网口行获取运行时 IP（通过接口序号匹配 runtimeStatus）
+// 根据网口行获取运行时 IP（通过 InterfaceOrder 匹配 runtimeStatus 中的接口）
 const getInterfaceIP = (row) => {
   const order = row.binding?.interface_order
   if (order === undefined || order === null) return ''
   const ifaces = runtimeStatus.value?.interfaces || []
-  if (order < ifaces.length) {
-    return ifaces[order].ip || ''
-  }
-  return ''
+  const match = ifaces.find(iface => iface.interface_order === order)
+  return match?.ip || ''
 }
 
 const queueStatusText = (bandwidth) => {

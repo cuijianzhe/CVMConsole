@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"kvm_console/model"
 	ovspkg "kvm_console/service/ovs"
 )
 
@@ -37,6 +38,23 @@ func init() {
 	ovspkg.HookEnsureOVSBridgeExists = EnsureOVSBridgeExists
 	ovspkg.HookBuildOVSVirtInstallNetworkArgForBridge = BuildOVSVirtInstallNetworkArgForBridge
 	ovspkg.HookBuildOVSInterfaceXMLForBridge = BuildOVSInterfaceXMLForBridge
+	ovspkg.HookGetVMInterfaceOrderByMAC = GetVMInterfaceOrderByMAC
+}
+
+// GetVMInterfaceOrderByMAC returns the interface_order mapping for a VM.
+// Returns a map of MAC address to interface_order.
+func GetVMInterfaceOrderByMAC(vmName string) map[string]int {
+	result := make(map[string]int)
+	var bindings []model.VPCVMBinding
+	if err := model.DB.Where("vm_name = ?", vmName).Find(&bindings).Error; err != nil {
+		return result
+	}
+	for _, b := range bindings {
+		if b.MACAddress != "" {
+			result[b.MACAddress] = b.InterfaceOrder
+		}
+	}
+	return result
 }
 
 // ── Exported delegates (used by handler and other service files) ──

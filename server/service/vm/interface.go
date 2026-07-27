@@ -323,26 +323,88 @@ func CountVMInterfaces(vmName string) int {
 }
 
 // GetVMMACByOrder 获取虚拟机第 N 个网口的 MAC 地址
+// 优先使用 virsh domiflist，失败时回退到解析 XML（支持关机状态）
 func GetVMMACByOrder(vmName string, order int) string {
 	result := utils.ExecCommand("virsh", "domiflist", vmName)
+	if result.Error == nil {
+		lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+		idx := 0
+		for i, line := range lines {
+			if i < 2 || strings.TrimSpace(line) == "" {
+				continue
+			}
+			if idx == order {
+				fields := strings.Fields(line)
+				if len(fields) >= 5 {
+					return fields[4]
+				}
+			}
+			idx++
+		}
+	}
+
+	// 回退：从 XML 中解析 MAC 地址（支持关机状态）
+	return getMACFromXML(vmName, order)
+}
+
+// getMACFromXML 从虚拟机 XML 中提取指定序号的接口的 MAC 地址
+func getMACFromXML(vmName string, order int) string {
+	// 优先使用 inactive XML（关机状态下可用）
+	result := utils.ExecCommand("virsh", "dumpxml", vmName, "--inactive")
+	if result.Error != nil {
+		// 回退到当前状态 XML
+		result = utils.ExecCommand("virsh", "dumpxml", vmName)
+	}
 	if result.Error != nil {
 		return ""
 	}
-	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
-	idx := 0
-	for i, line := range lines {
-		if i < 2 || strings.TrimSpace(line) == "" {
-			continue
+
+	xmlText := result.Stdout
+	return extractMACByOrder(xmlText, order)
+}
+
+// extractMACByOrder 从 XML 文本中提取第 N 个 interface 的 MAC 地址
+func extractMACByOrder(xmlText string, order int) string {
+	searchFrom := 0
+	foundCount := 0
+	for {
+		startRel := strings.Index(xmlText[searchFrom:], "<interface ")
+		if startRel < 0 {
+			return ""
 		}
-		if idx == order {
-			fields := strings.Fields(line)
-			if len(fields) >= 5 {
-				return fields[4]
+		start := searchFrom + startRel
+		endRel := strings.Index(xmlText[start:], "</interface>")
+		if endRel < 0 {
+			return ""
+		}
+		end := start + endRel + len("</interface>")
+		block := xmlText[start:end]
+
+		if foundCount == order {
+			// 在 interface 块内查找 mac address='...'
+			macStartRel := strings.Index(strings.ToLower(block), "mac address='")
+			if macStartRel >= 0 {
+				macValStart := macStartRel + len("mac address='")
+				macValEnd := strings.Index(block[macValStart:], "'")
+				if macValEnd >= 0 {
+					return strings.ToLower(strings.TrimSpace(block[macValStart : macValStart+macValEnd]))
+				}
 			}
+			// 尝试双引号格式
+			macStartRel = strings.Index(strings.ToLower(block), `mac address="`)
+			if macStartRel >= 0 {
+				macValStart := macStartRel + len(`mac address="`)
+				macValEnd := strings.Index(block[macValStart:], `"`)
+				if macValEnd >= 0 {
+					return strings.ToLower(strings.TrimSpace(block[macValStart : macValStart+macValEnd]))
+				}
+			}
+			return ""
 		}
-		idx++
+
+		foundCount++
+		searchFrom = end
 	}
-	return ""
 }
 
 // UpsertVMBindingNicModel 更新绑定的网卡型号
