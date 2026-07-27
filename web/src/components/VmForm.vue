@@ -3079,6 +3079,7 @@ const isNoInitTemplate = computed(() => isTemplateSourceMode.value && selectedTe
 const templateMinDiskSize = computed(() => parseTemplateDiskSizeGB(selectedTemplate.value?.virtual_size))
 const windowsTemplateUsername = 'administrator'
 const isWindowsTemplate = computed(() => isTemplateSourceMode.value && form.template_type === 'windows')
+const isLinuxTemplate = computed(() => isTemplateSourceMode.value && form.template_type === 'linux')
 const bootTypePreviewLabel = computed(() => {
   switch (form.boot_type) {
     case 'bios':
@@ -3658,6 +3659,8 @@ const ensureTemplateDefaults = () => {
   }
   if (isTemplateSourceMode.value && isWindowsTemplate.value) {
     form.import_user = windowsTemplateUsername
+  } else if (isTemplateSourceMode.value && isLinuxTemplate.value) {
+    form.import_user = ''
   } else if (isTemplateSourceMode.value && selectedTemplate.value?.template_user && !form.import_user) {
     form.import_user = selectedTemplate.value.template_user
   } else {
@@ -4543,6 +4546,8 @@ const onTemplateChange = async (templateName) => {
     }
     if (tpl.type === 'windows') {
       form.import_user = windowsTemplateUsername
+    } else if (tpl.type === 'linux') {
+      form.import_user = ''
     } else if (tpl.template_user) {
       form.import_user = tpl.template_user
     }
