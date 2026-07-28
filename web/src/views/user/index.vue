@@ -2,7 +2,10 @@
   <div class="user-list-container">
     <h2>用户管理</h2>
     <el-card>
-      <el-button type="primary" icon="Plus" style="margin-bottom: 20px;" @click="handleCreate">新增用户</el-button>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <el-button type="primary" icon="Plus" @click="handleCreate">新增用户</el-button>
+        <el-button :icon="Refresh" @click="refreshUsers" :loading="loading">刷新</el-button>
+      </div>
 
       <div class="filter-bar">
         <el-input
@@ -748,7 +751,7 @@ import {
 import { getVmList } from '@/api/vm'
 import { getVPCSwitches } from '@/api/vpc'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Warning } from '@element-plus/icons-vue'
+import { Search, Warning, Refresh } from '@element-plus/icons-vue'
 import QuotaForm from '@/components/QuotaForm.vue'
 import VmForm from '@/components/VmForm.vue'
 import { useUserStore } from '@/store/user'
@@ -1084,6 +1087,11 @@ const fetchData = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const refreshUsers = async () => {
+  await fetchData()
+  ElMessage.success('用户列表已刷新')
 }
 
 watch([userSearchText, userEmailSearch, userRoleFilter, userStatusFilter, userCloudTypeFilter], () => {
