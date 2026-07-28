@@ -1082,6 +1082,13 @@ configure_database() {
         change_db=${change_db:-N}
         if [[ ! "$change_db" =~ ^[Yy]$ ]]; then
             info "保持原有数据库配置不变"
+            KVM_DB_TYPE="$existing_db_type"
+            KVM_DB_PATH="$(env_get "KVM_DB_PATH")"
+            KVM_DB_HOST="$(env_get "KVM_DB_HOST")"
+            KVM_DB_PORT="$(env_get "KVM_DB_PORT")"
+            KVM_DB_USERNAME="$(env_get "KVM_DB_USERNAME")"
+            KVM_DB_PASSWORD="$(env_get "KVM_DB_PASSWORD")"
+            KVM_DB_DATABASE="$(env_get "KVM_DB_DATABASE")"
             return
         fi
     fi
@@ -1167,7 +1174,8 @@ write_env() {
 
     # === 数据库配置 ===
     #数据库类型，支持 sqlite 和 mysql
-    if [ -n "$KVM_DB_TYPE" ]; then
+    # 使用 ${VAR:-} 防止 set -u 下未绑定变量报错（repair 模式等路径可能未调 configure_database）
+    if [ -n "${KVM_DB_TYPE:-}" ]; then
         env_set "KVM_DB_TYPE" "$KVM_DB_TYPE"
         env_set "KVM_DB_PATH" "${KVM_DB_PATH:-${INSTALL_DIR}/data/kvm_console.db}"
         env_set "KVM_DB_HOST" "${KVM_DB_HOST:-localhost}"
@@ -1823,7 +1831,8 @@ uninstall_app() {
 
 show_info() {
     local host_ip
-    host_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    # 过滤掉 link-local (169.254.x.x) 和回环地址，取第一个真实 IP
+    host_ip=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -Ev '^(169\.254\.|127\.)' | head -1)
     host_ip=${host_ip:-localhost}
 
     echo ""
@@ -1880,6 +1889,15 @@ repair_config() {
         warn "已取消修复"
         return
     fi
+
+    # 修复模式下保留现有数据库配置，避免误覆盖 MySQL 等配置
+    KVM_DB_TYPE="$(env_get "KVM_DB_TYPE")"
+    KVM_DB_PATH="$(env_get "KVM_DB_PATH")"
+    KVM_DB_HOST="$(env_get "KVM_DB_HOST")"
+    KVM_DB_PORT="$(env_get "KVM_DB_PORT")"
+    KVM_DB_USERNAME="$(env_get "KVM_DB_USERNAME")"
+    KVM_DB_PASSWORD="$(env_get "KVM_DB_PASSWORD")"
+    KVM_DB_DATABASE="$(env_get "KVM_DB_DATABASE")"
 
     write_env
     success "配置文件已重置为默认值"

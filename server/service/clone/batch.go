@@ -68,6 +68,12 @@ func BatchCloneVM(ctx context.Context, params *BatchCloneParams, progressFn func
 			// 密码：如果用户指定了密码则使用，否则保持为空（不修改模板原密码）
 			vmPassword := params.Password
 
+			// 批量模式下，用户指定主机名时追加编号后缀确保每台唯一（如 myserver-01, myserver-02）
+			vmHostname := params.Hostname
+			if vmHostname != "" {
+				vmHostname = fmt.Sprintf("%s-%s", vmHostname, padNum(params.StartNum+index))
+			}
+
 			cloneParams := &CloneParams{
 				Name:                vmName,
 				Template:            params.Template,
@@ -80,7 +86,7 @@ func BatchCloneVM(ctx context.Context, params *BatchCloneParams, progressFn func
 				DiskSize:            params.DiskSize,
 				MachineType:         params.MachineType,
 				Network:             params.Network,
-				Hostname:            params.Hostname,
+				Hostname:            vmHostname,
 				User:                params.User,
 				Password:            vmPassword,
 				Autostart:           params.Autostart,
