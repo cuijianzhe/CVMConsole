@@ -49,11 +49,7 @@
           <SidebarIcons icon="network" />
           <template #title>网络</template>
         </el-menu-item>
-        <el-menu-item index="/public-ip" v-if="isAdmin">
-          <SidebarIcons icon="globe" />
-          <template #title>公网 IP</template>
-        </el-menu-item>
-        <el-menu-item index="/network" v-else-if="!isLightweight">
+        <el-menu-item index="/network" v-if="!isLightweight && !isAdmin">
           <SidebarIcons icon="vpc" />
           <template #title>VPC 网络</template>
         </el-menu-item>
@@ -75,6 +71,9 @@
           </el-menu-item>
           <el-menu-item index="/cloud-disk-spec">
             <template #title>云盘规格</template>
+          </el-menu-item>
+          <el-menu-item index="/public-ip">
+            <template #title>公网 IP</template>
           </el-menu-item>
         </el-sub-menu>
         <el-menu-item index="/nodes" v-if="isAdmin">
