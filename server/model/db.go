@@ -314,6 +314,19 @@ func isAllowedIndexName(name string) bool {
 	return allowedIndexNames[name]
 }
 
+// indexExistsMySQL 检查 MySQL 数据库中指定表的索引是否存在，
+// 用于在执行 DROP/CREATE INDEX 前判断，避免 GORM 日志输出无效 DDL 错误。
+func indexExistsMySQL(tableName, indexName string) bool {
+	var count int64
+	if err := DB.Raw(
+		"SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?",
+		tableName, indexName,
+	).Scan(&count).Error; err != nil {
+		return false
+	}
+	return count > 0
+}
+
 func migrateVPCBindingUniqueIndex() {
 	if DB == nil {
 		return
@@ -323,24 +336,32 @@ func migrateVPCBindingUniqueIndex() {
 		"idx_vpc_vm_bindings_vm_name",
 		"uq_vpc_vm_bindings_vm_name",
 	}
+	// 删除历史遗留的旧单列唯一索引（仅当存在时才执行，避免无意义的 DDL 错误日志）
 	for _, name := range oldIndexNames {
 		if !isAllowedIndexName(name) {
 			logger.App.Warn("跳过非白名单索引删除", "index", name)
 			continue
 		}
 		if DBType == "mysql" {
-			err := DB.Exec("DROP INDEX " + name + " ON vpc_vm_bindings").Error
-			if err != nil && !strings.Contains(err.Error(), "Can't DROP") {
-				logger.App.Warn("删除索引失败", "index", name, "error", err)
+			if !indexExistsMySQL("vpc_vm_bindings", name) {
+				continue
+			}
+			if err := DB.Exec("DROP INDEX " + name + " ON vpc_vm_bindings").Error; err != nil {
+				logger.App.Warn("删除旧索引失败", "index", name, "error", err)
+			} else {
+				logger.App.Info("已删除旧索引", "index", name)
 			}
 		} else {
 			DB.Exec("DROP INDEX IF EXISTS " + name)
 		}
 	}
+	// 创建新的联合唯一索引（仅当不存在时创建）
 	if DBType == "mysql" {
-		err := DB.Exec("CREATE UNIQUE INDEX idx_vm_interface ON vpc_vm_bindings(vm_name, interface_order)").Error
-		if err != nil && !strings.Contains(err.Error(), "Duplicate key name") {
-			logger.App.Warn("创建VPC绑定联合唯一索引失败", "error", err)
+		if indexExistsMySQL("vpc_vm_bindings", "idx_vm_interface") {
+			return
+		}
+		if err := DB.Exec("CREATE UNIQUE INDEX idx_vm_interface ON vpc_vm_bindings(vm_name, interface_order)").Error; err != nil {
+			logger.App.Warn("创建VPC绑定联合唯一索引失败", "index", "idx_vm_interface", "error", err)
 		}
 	} else {
 		DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vm_interface ON vpc_vm_bindings(vm_name, interface_order)")
@@ -406,10 +427,12 @@ func preFixVPCSwitchCIDRIndex() {
 	if !DB.Migrator().HasTable(&VPCSwitch{}) {
 		return
 	}
+	// 仅当索引存在时才删除，避免无意义的 DDL 错误日志
 	if DBType == "mysql" {
-		err := DB.Exec("DROP INDEX idx_vpc_switches_cidr ON vpc_switches").Error
-		if err != nil && !strings.Contains(err.Error(), "Can't DROP") {
-			logger.App.Warn("删除索引失败", "index", "idx_vpc_switches_cidr", "error", err)
+		if indexExistsMySQL("vpc_switches", "idx_vpc_switches_cidr") {
+			if err := DB.Exec("DROP INDEX idx_vpc_switches_cidr ON vpc_switches").Error; err != nil {
+				logger.App.Warn("删除索引失败", "index", "idx_vpc_switches_cidr", "error", err)
+			}
 		}
 	} else {
 		DB.Exec("DROP INDEX IF EXISTS idx_vpc_switches_cidr")
@@ -437,17 +460,19 @@ func migrateVPCSwitchCIDRColumn(hadColumn bool) {
 			logger.App.Info("已从 c_id_r 迁移数据到 cidr 列")
 		}
 		if DBType == "mysql" {
-			err := DB.Exec("CREATE UNIQUE INDEX idx_vpc_switches_cidr ON vpc_switches(cidr)").Error
-			if err != nil && !strings.Contains(err.Error(), "Duplicate key name") {
-				logger.App.Warn("创建 vpc_switches.cidr 唯一索引失败", "error", err)
+			if !indexExistsMySQL("vpc_switches", "idx_vpc_switches_cidr") {
+				if err := DB.Exec("CREATE UNIQUE INDEX idx_vpc_switches_cidr ON vpc_switches(cidr)").Error; err != nil {
+					logger.App.Warn("创建 vpc_switches.cidr 唯一索引失败", "error", err)
+				}
 			}
 		} else {
 			DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vpc_switches_cidr ON vpc_switches(cidr) WHERE cidr IS NOT NULL AND cidr != ''")
 		}
 		if DBType == "mysql" {
-			err := DB.Exec("DROP INDEX idx_vpc_switches_c_id_r ON vpc_switches").Error
-			if err != nil && !strings.Contains(err.Error(), "Can't DROP") {
-				logger.App.Warn("删除索引失败", "index", "idx_vpc_switches_c_id_r", "error", err)
+			if indexExistsMySQL("vpc_switches", "idx_vpc_switches_c_id_r") {
+				if err := DB.Exec("DROP INDEX idx_vpc_switches_c_id_r ON vpc_switches").Error; err != nil {
+					logger.App.Warn("删除旧索引失败", "index", "idx_vpc_switches_c_id_r", "error", err)
+				}
 			}
 		} else {
 			DB.Exec("DROP INDEX IF EXISTS idx_vpc_switches_c_id_r")
@@ -510,9 +535,10 @@ func migrateVPCSwitchCIDRColumn(hadColumn bool) {
 
 	// 4. 创建部分唯一索引（排除空值，桥接/直通模式交换机无CIDR）
 	if DBType == "mysql" {
-		err := DB.Exec("CREATE UNIQUE INDEX idx_vpc_switches_cidr ON vpc_switches(cidr)").Error
-		if err != nil && !strings.Contains(err.Error(), "Duplicate key name") {
-			logger.App.Warn("创建 vpc_switches.cidr 唯一索引失败", "error", err)
+		if !indexExistsMySQL("vpc_switches", "idx_vpc_switches_cidr") {
+			if err := DB.Exec("CREATE UNIQUE INDEX idx_vpc_switches_cidr ON vpc_switches(cidr)").Error; err != nil {
+				logger.App.Warn("创建 vpc_switches.cidr 唯一索引失败", "error", err)
+			}
 		}
 	} else {
 		DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_vpc_switches_cidr ON vpc_switches(cidr) WHERE cidr IS NOT NULL AND cidr != ''")
