@@ -13,7 +13,13 @@ import (
 	"gorm.io/gorm"
 )
 
-const mdevSysfsPath = "/sys/bus/pci/devices"
+// mdevBasePaths vGPU mdev 设备扫描路径
+// /sys/bus/pci/devices：传统 Intel GVT-g 等
+// /sys/class/mdev_bus：NVIDIA vGPU 等（内核通过 class 接口暴露）
+var mdevBasePaths = []string{
+	"/sys/bus/pci/devices",
+	"/sys/class/mdev_bus",
+}
 
 type VGPUProfileInfo struct {
 	PCIDevice    string `json:"pci_device"`
@@ -26,54 +32,61 @@ type VGPUProfileInfo struct {
 func DiscoverVGPUProfiles() ([]VGPUProfileInfo, error) {
 	var profiles []VGPUProfileInfo
 
-	err := filepath.Walk(mdevSysfsPath, func(path string, info os.FileInfo, err error) error {
+	for _, basePath := range mdevBasePaths {
+		// 使用 Glob 扫描而非 filepath.Walk，因为 sysfs 下设备目录多为符号链接，
+		// filepath.Walk 不跟踪符号链接，会导致无法进入设备目录
+		pattern := filepath.Join(basePath, "*", "mdev_supported_types")
+		matches, err := filepath.Glob(pattern)
 		if err != nil {
-			return nil
+			continue
 		}
-		if !info.IsDir() {
-			return nil
-		}
-		mdevTypesPath := filepath.Join(path, "mdev_supported_types")
-		if _, err := os.Stat(mdevTypesPath); os.IsNotExist(err) {
-			return nil
-		}
-		pciDevice := filepath.Base(path)
-		if !strings.Contains(pciDevice, ":") {
-			return nil
-		}
-		types, err := os.ReadDir(mdevTypesPath)
-		if err != nil {
-			return nil
-		}
-		for _, t := range types {
-			if !t.IsDir() {
+		for _, mdevTypesPath := range matches {
+			// 从路径提取 PCI 设备地址，如 0000:01:00.0
+			pciDevice := filepath.Base(filepath.Dir(mdevTypesPath))
+			if !strings.Contains(pciDevice, ":") {
 				continue
 			}
-			profileName := t.Name()
-			profilePath := filepath.Join(mdevTypesPath, profileName)
-			descPath := filepath.Join(profilePath, "name")
-			maxPath := filepath.Join(profilePath, "available_instances")
-			description := readFileContent(descPath)
-			maxInstances := readIntFromFile(maxPath)
-			memSize := parseMemoryFromDescription(description)
-			if description != "" && maxInstances > 0 {
-				profiles = append(profiles, VGPUProfileInfo{
-					PCIDevice:    pciDevice,
-					ProfileName:  profileName,
-					Description:  description,
-					MaxInstances: maxInstances,
-					MemoryMB:     memSize,
-				})
+			types, err := os.ReadDir(mdevTypesPath)
+			if err != nil {
+				continue
+			}
+			for _, t := range types {
+				if !t.IsDir() {
+					continue
+				}
+				profileName := t.Name()
+				profilePath := filepath.Join(mdevTypesPath, profileName)
+				descPath := filepath.Join(profilePath, "name")
+				maxPath := filepath.Join(profilePath, "available_instances")
+				description := readFileContent(descPath)
+				maxInstances := readIntFromFile(maxPath)
+				memSize := parseMemoryFromDescription(description)
+				if description != "" && maxInstances > 0 {
+					profiles = append(profiles, VGPUProfileInfo{
+						PCIDevice:    pciDevice,
+						ProfileName:  profileName,
+						Description:  description,
+						MaxInstances: maxInstances,
+						MemoryMB:     memSize,
+					})
+				}
 			}
 		}
-		return nil
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("遍历 mdev 设备失败: %w", err)
 	}
 
 	return profiles, nil
+}
+
+// resolveMdevPath 根据 PCI 设备地址查找 mdev_supported_types 所在的基础路径
+func resolveMdevPath(pciDevice string) string {
+	for _, basePath := range mdevBasePaths {
+		mdevPath := filepath.Join(basePath, pciDevice, "mdev_supported_types")
+		if _, err := os.Stat(mdevPath); err == nil {
+			return mdevPath
+		}
+	}
+	// 回退到传统路径
+	return filepath.Join(mdevBasePaths[0], pciDevice, "mdev_supported_types")
 }
 
 func readFileContent(path string) string {
@@ -168,7 +181,7 @@ func CreateVGPUInstance(profileID uint) (*model.VGPUInstance, error) {
 		return nil, fmt.Errorf("该 vGPU profile 已达到最大实例数")
 	}
 	uuid := generateUUID()
-	createPath := filepath.Join(mdevSysfsPath, profile.PCIDevice, "mdev_supported_types", profile.ProfileName, "create")
+	createPath := filepath.Join(resolveMdevPath(profile.PCIDevice), profile.ProfileName, "create")
 	if err := os.WriteFile(createPath, []byte(uuid), 0644); err != nil {
 		return nil, fmt.Errorf("创建 mdev 设备失败: %w", err)
 	}
@@ -202,11 +215,14 @@ func DestroyVGPUInstanceByUUID(uuid string) error {
 	if instance.VMName != "" {
 		return fmt.Errorf("vGPU 实例正在被虚拟机使用")
 	}
-	removePath := filepath.Join(mdevSysfsPath, "*", "mdev_supported_types", "*", uuid)
-	matches, _ := filepath.Glob(removePath)
-	for _, path := range matches {
-		if err := os.Remove(path); err != nil {
-			logger.App.Warn("删除 mdev 设备失败", "path", path, "error", err)
+	// 扫描所有 mdev 基础路径查找需要删除的设备
+	for _, basePath := range mdevBasePaths {
+		removePattern := filepath.Join(basePath, "*", "mdev_supported_types", "*", uuid)
+		matches, _ := filepath.Glob(removePattern)
+		for _, path := range matches {
+			if err := os.Remove(path); err != nil {
+				logger.App.Warn("删除 mdev 设备失败", "path", path, "error", err)
+			}
 		}
 	}
 	model.DB.Model(&model.VGPUProfile{}).Where("id = ?", instance.ProfileID).UpdateColumn("used_instances", gorm.Expr("used_instances - 1"))
