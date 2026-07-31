@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -120,6 +121,7 @@ func vmInfoFromCacheRecord(record model.VMCache, options VMListOptions) VmInfo {
 		Name:          record.Name,
 		Remark:        record.Remark,
 		Group:         record.GroupName,
+		Tags:          decodeVMCacheTags(record.TagsJSON),
 		Status:        record.Status,
 		VCPU:          record.VCPU,
 		Memory:        record.MemoryMB,
@@ -187,6 +189,33 @@ func vmInfoFromCacheRecord(record model.VMCache, options VMListOptions) VmInfo {
 		D.HookApplyVMUnderMigrationStatus(&vm)
 	}
 	return vm
+}
+
+func decodeVMCacheTags(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var tags []string
+	if err := json.Unmarshal([]byte(raw), &tags); err != nil {
+		return nil
+	}
+	normalized, err := normalizeVMTags(tags)
+	if err != nil {
+		return nil
+	}
+	return normalized
+}
+
+func encodeVMCacheTags(tags []string) string {
+	normalized, err := normalizeVMTags(tags)
+	if err != nil || len(normalized) == 0 {
+		return ""
+	}
+	encoded, err := json.Marshal(normalized)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
 }
 
 // SyncVMCacheFromHost 从宿主机全量同步当前 VM 到数据库缓存。
@@ -376,9 +405,12 @@ func defaultVMCacheBuildRecordFromHost(name string, syncedAt time.Time) (model.V
 	if group, err := GetVMGroup(name); err == nil {
 		record.GroupName = group
 	}
+	if tags, err := GetVMTags(name); err == nil {
+		record.TagsJSON = encodeVMCacheTags(tags)
+	}
 
 	diskInfo := GetVMDiskInfo(name)
-	record.DiskSizeText = diskInfo.Size
+	record.DiskSizeText = diskInfo.TotalSizeText()
 	record.Template = diskInfo.Template
 
 	// 如果磁盘 backing file 没有模板信息（完整克隆），尝试从 metadata 读取

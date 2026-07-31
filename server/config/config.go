@@ -58,6 +58,8 @@ type Config struct {
 	TemplateImportDir string `json:"template_import_dir"`
 	// 模板导出目录
 	TemplateExportDir string `json:"template_export_dir"`
+	// OVF/OVA 导入导出临时目录
+	ApplianceTempDir string `json:"appliance_temp_dir"`
 	// 克隆磁盘目录
 	CloneDir string `json:"clone_dir"`
 	// 全局 ISO 目录
@@ -150,10 +152,6 @@ type Config struct {
 	NetworkCaptureMaxSeconds     int    `json:"network_capture_max_seconds"`
 	NetworkCaptureMaxMB          int    `json:"network_capture_max_mb"`
 	NetworkCaptureMaxPackets     int    `json:"network_capture_max_packets"`
-	// 端口转发 HTTP 探测
-	PortForwardHTTPProbeEnabled         bool `json:"port_forward_http_probe_enabled"`
-	PortForwardHTTPProbeIntervalMinutes int  `json:"port_forward_http_probe_interval_minutes"`
-	PortForwardHTTPProbeTimeoutSeconds  int  `json:"port_forward_http_probe_timeout_seconds"`
 	// 虚拟机磁盘 IOPS 默认限制（0 表示不限制）
 	DefaultDiskIOPSTotal int `json:"default_disk_iops_total"` // 默认总 IOPS 限制
 	DefaultDiskIOPSRead  int `json:"default_disk_iops_read"`  // 默认读 IOPS 限制
@@ -184,6 +182,8 @@ type Config struct {
 	SessionFingerprintEnabled bool `json:"session_fingerprint_enabled"`
 	// 泄露密码检测开关（默认开启，关闭后跳过所有密码校验）
 	PasswordBreachCheckEnabled bool `json:"password_breach_check_enabled"`
+	// 定时泄露密码检测开关（默认开启，每天本地时间 00:00 执行）
+	ScheduledPasswordBreachCheckEnabled bool `json:"scheduled_password_breach_check_enabled"`
 	// 硬件直通开关（默认关闭，开启后启用 IOMMU 和 vfio-pci 支持）
 	HardwarePassthroughEnabled bool `json:"hardware_passthrough_enabled"`
 	// 命令执行超时时间（秒），默认 30 秒
@@ -244,6 +244,7 @@ func Init() {
 		TemplateDir:                           templateDir,
 		TemplateImportDir:                     getEnv("KVM_TEMPLATE_IMPORT_DIR", filepath.Join(templateDir, "_imports")),
 		TemplateExportDir:                     getEnv("KVM_TEMPLATE_EXPORT_DIR", filepath.Join(templateDir, "_exports")),
+		ApplianceTempDir:                      getEnv("KVM_APPLIANCE_TEMP_DIR", filepath.Join(templateDir, "_appliance")),
 		CloneDir:                              getEnv("KVM_CLONE_DIR", "/var/lib/libvirt/images"),
 		ISODir:                                getEnv("KVM_ISO_DIR", DefaultISODir),
 		DefaultNetwork:                        getEnv("KVM_DEFAULT_NETWORK", "default"),
@@ -305,9 +306,6 @@ func Init() {
 		NetworkCaptureMaxSeconds:              getEnvInt("KVM_NETWORK_CAPTURE_MAX_SECONDS", 120),
 		NetworkCaptureMaxMB:                   getEnvInt("KVM_NETWORK_CAPTURE_MAX_MB", 64),
 		NetworkCaptureMaxPackets:              getEnvInt("KVM_NETWORK_CAPTURE_MAX_PACKETS", 5000),
-		PortForwardHTTPProbeEnabled:           getEnvBool("KVM_PORT_FORWARD_HTTP_PROBE_ENABLED", true),
-		PortForwardHTTPProbeIntervalMinutes:   getEnvInt("KVM_PORT_FORWARD_HTTP_PROBE_INTERVAL_MINUTES", 60),
-		PortForwardHTTPProbeTimeoutSeconds:    getEnvInt("KVM_PORT_FORWARD_HTTP_PROBE_TIMEOUT_SECONDS", 3),
 		BatchCloneMaxConcurrency:              getEnvInt("KVM_BATCH_CLONE_MAX_CONCURRENCY", 10),
 		RateLimitPublicPerMin:                 getEnvInt("KVM_RATE_LIMIT_PUBLIC", 20),
 		RateLimitAuthPerMin:                   getEnvInt("KVM_RATE_LIMIT_AUTH", 0),
@@ -327,6 +325,7 @@ func Init() {
 		ErrorDetailInResponse:                 getEnvBool("KVM_ERROR_DETAIL_IN_RESPONSE", false),
 		SessionFingerprintEnabled:             getEnvBool("KVM_SESSION_FINGERPRINT_ENABLED", true),
 		PasswordBreachCheckEnabled:            getEnvBool("KVM_PASSWORD_BREACH_CHECK_ENABLED", true),
+		ScheduledPasswordBreachCheckEnabled:   getEnvBool("KVM_SCHEDULED_PASSWORD_BREACH_CHECK_ENABLED", true),
 		HardwarePassthroughEnabled:            getEnvBool("KVM_HARDWARE_PASSTHROUGH_ENABLED", false),
 		ExecTimeoutSeconds:                    getEnvInt("KVM_EXEC_TIMEOUT_SECONDS", 30),
 		CORSAllowedOrigins:                    getEnv("KVM_CORS_ALLOWED_ORIGINS", ""),
@@ -495,6 +494,7 @@ var PersistableKeys = []string{
 	"template_dir",
 	"template_import_dir",
 	"template_export_dir",
+	"appliance_temp_dir",
 	"clone_dir",
 	"iso_dir",
 	"default_network",
@@ -567,6 +567,7 @@ var PersistableKeys = []string{
 	"session_fingerprint_enabled",
 	"request_filter_enabled",
 	"password_breach_check_enabled",
+	"scheduled_password_breach_check_enabled",
 	"igpu_passthrough_enabled",
 	"hardware_passthrough_enabled",
 	"exec_timeout_seconds",
@@ -577,6 +578,7 @@ var keyToEnvVar = map[string]string{
 	"template_dir":              "KVM_TEMPLATE_DIR",
 	"template_import_dir":       "KVM_TEMPLATE_IMPORT_DIR",
 	"template_export_dir":       "KVM_TEMPLATE_EXPORT_DIR",
+	"appliance_temp_dir":        "KVM_APPLIANCE_TEMP_DIR",
 	"clone_dir":                 "KVM_CLONE_DIR",
 	"iso_dir":                   "KVM_ISO_DIR",
 	"default_network":           "KVM_DEFAULT_NETWORK",
@@ -646,6 +648,7 @@ var keyToEnvVar = map[string]string{
 	"session_fingerprint_enabled":               "KVM_SESSION_FINGERPRINT_ENABLED",
 	"request_filter_enabled":                    "KVM_REQUEST_FILTER_ENABLED",
 	"password_breach_check_enabled":             "KVM_PASSWORD_BREACH_CHECK_ENABLED",
+	"scheduled_password_breach_check_enabled":   "KVM_SCHEDULED_PASSWORD_BREACH_CHECK_ENABLED",
 	"igpu_passthrough_enabled":                  "KVM_IGPU_PASSTHROUGH_ENABLED",
 	"hardware_passthrough_enabled":              "KVM_HARDWARE_PASSTHROUGH_ENABLED",
 	"exec_timeout_seconds":                      "KVM_EXEC_TIMEOUT_SECONDS",
@@ -672,6 +675,8 @@ func (c *Config) LoadFromDB(settings map[string]string) {
 			c.TemplateImportDir = value
 		case "template_export_dir":
 			c.TemplateExportDir = value
+		case "appliance_temp_dir":
+			c.ApplianceTempDir = value
 		case "clone_dir":
 			c.CloneDir = value
 		case "iso_dir":
@@ -802,18 +807,6 @@ func (c *Config) LoadFromDB(settings map[string]string) {
 			if v, err := strconv.Atoi(value); err == nil {
 				c.SchedulerEventRetentionHours = v
 			}
-		case "port_forward_http_probe_enabled":
-			if v, err := strconv.ParseBool(value); err == nil {
-				c.PortForwardHTTPProbeEnabled = v
-			}
-		case "port_forward_http_probe_interval_minutes":
-			if v, err := strconv.Atoi(value); err == nil {
-				c.PortForwardHTTPProbeIntervalMinutes = v
-			}
-		case "port_forward_http_probe_timeout_seconds":
-			if v, err := strconv.Atoi(value); err == nil {
-				c.PortForwardHTTPProbeTimeoutSeconds = v
-			}
 		case "vpc_subnet_prefix":
 			c.VPCSubnetPrefix = value
 		case "vpc_vlan_start":
@@ -890,6 +883,8 @@ func (c *Config) LoadFromDB(settings map[string]string) {
 			c.RequestFilterEnabled = value != "false"
 		case "password_breach_check_enabled":
 			c.PasswordBreachCheckEnabled = value != "false"
+		case "scheduled_password_breach_check_enabled":
+			c.ScheduledPasswordBreachCheckEnabled = value != "false"
 		case "hardware_passthrough_enabled":
 			c.HardwarePassthroughEnabled = value == "true"
 		case "api_max_body_size_mb":
@@ -912,6 +907,7 @@ func (c *Config) ToSettingsMap() map[string]string {
 		"template_dir":              c.TemplateDir,
 		"template_import_dir":       c.TemplateImportDir,
 		"template_export_dir":       c.TemplateExportDir,
+		"appliance_temp_dir":        c.ApplianceTempDir,
 		"clone_dir":                 c.CloneDir,
 		"iso_dir":                   c.ISODir,
 		"default_network":           c.DefaultNetwork,
@@ -958,9 +954,6 @@ func (c *Config) ToSettingsMap() map[string]string {
 		"dynamic_memory_cooldown_seconds":           strconv.Itoa(c.DynamicMemoryCooldownSeconds),
 		"dynamic_memory_observation_hours":          strconv.Itoa(c.DynamicMemoryObservationHours),
 		"scheduler_event_retention_hours":           strconv.Itoa(c.SchedulerEventRetentionHours),
-		"port_forward_http_probe_enabled":           strconv.FormatBool(c.PortForwardHTTPProbeEnabled),
-		"port_forward_http_probe_interval_minutes":  strconv.Itoa(c.PortForwardHTTPProbeIntervalMinutes),
-		"port_forward_http_probe_timeout_seconds":   strconv.Itoa(c.PortForwardHTTPProbeTimeoutSeconds),
 		"vpc_subnet_prefix":                         c.VPCSubnetPrefix,
 		"vpc_vlan_start":                            strconv.Itoa(c.VPCVLANStart),
 		"vpc_vlan_end":                              strconv.Itoa(c.VPCVLANEnd),
@@ -985,6 +978,7 @@ func (c *Config) ToSettingsMap() map[string]string {
 		"session_fingerprint_enabled":               strconv.FormatBool(c.SessionFingerprintEnabled),
 		"request_filter_enabled":                    strconv.FormatBool(c.RequestFilterEnabled),
 		"password_breach_check_enabled":             strconv.FormatBool(c.PasswordBreachCheckEnabled),
+		"scheduled_password_breach_check_enabled":   strconv.FormatBool(c.ScheduledPasswordBreachCheckEnabled),
 		"hardware_passthrough_enabled":              strconv.FormatBool(c.HardwarePassthroughEnabled),
 		"exec_timeout_seconds":                      strconv.Itoa(c.ExecTimeoutSeconds),
 	}

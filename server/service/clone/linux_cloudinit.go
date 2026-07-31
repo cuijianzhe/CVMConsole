@@ -122,6 +122,8 @@ func prepareLinuxNoCloudInit(params *CloneParams, cloneDisk string, progressFn f
 	} else {
 		args = append(args, "--run-command", buildLinuxNetplanDHCPHotplugCompatCommand())
 	}
+	// 为后续从面板热插的网口保留 DHCP 兜底规则，不覆盖主网口的 Netplan 配置。
+	args = append(args, "--run-command", buildLinuxNetworkdDHCPHotplugFallbackCommand())
 
 	if params.Password == "" {
 		args = append(args,

@@ -140,6 +140,9 @@ func ListVMs(options ...VMListOptions) ([]VmInfo, error) {
 		if remark, err := GetVMRemark(name); err == nil {
 			vm.Remark = remark
 		}
+		if tags, err := GetVMTags(name); err == nil {
+			vm.Tags = tags
+		}
 
 		// 默认获取网络信息（MAC 地址等，从 XML 解析，开销小）
 		netInfo := GetVMNetworkInfo(name)
@@ -172,9 +175,9 @@ func ListVMs(options ...VMListOptions) ([]VmInfo, error) {
 		}
 		vm.IPStatus = ip_resolver.GetVMIPStatus(name, vm.Status == "running")
 
-		// 获取磁盘信息和模板来源
+		// 获取磁盘信息和模板来源（DiskSize 为所有磁盘虚拟配置总大小，含额外磁盘）
 		diskInfo := GetVMDiskInfo(name)
-		vm.DiskSize = diskInfo.Size
+		vm.DiskSize = diskInfo.TotalSizeText()
 		vm.Template = diskInfo.Template
 		vm.IsLinkedClone = diskInfo.Template != ""
 

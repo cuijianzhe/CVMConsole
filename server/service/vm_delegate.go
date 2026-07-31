@@ -122,6 +122,14 @@ func SetVMGroup(name, group string) error {
 	return vmpkg.SetVMGroup(name, group)
 }
 
+func GetVMTags(name string) ([]string, error) {
+	return vmpkg.GetVMTags(name)
+}
+
+func SetVMTags(name string, tags []string) error {
+	return vmpkg.SetVMTags(name, tags)
+}
+
 // ── Freeze ──
 
 func GetVMFreeze(name string) (bool, error) {
@@ -176,12 +184,6 @@ func RefreshVMCacheByNameAsync(name string) {
 
 func MarkVMCacheMissingAsync(name string) {
 	vmpkg.MarkVMCacheMissingAsync(name)
-}
-
-// ── Network Info ──
-
-func CreateOrUpdateVMNetworkInfo(vmName string, interfaceOrder int, ip, mac, nicModel, networkType, switchName, bridgeName string) error {
-	return vmpkg.CreateOrUpdateVMNetworkInfo(vmName, interfaceOrder, ip, mac, nicModel, networkType, switchName, bridgeName)
 }
 
 func UpdateVMCacheOwner(name, owner string) {
@@ -242,8 +244,35 @@ func GetVMStats(name string) (*VmStats, error) {
 	return vmpkg.GetVMStats(name)
 }
 
-func GetHostStats() (*vmpkg.HostStats, error) {
-	return vmpkg.GetHostStats()
+func GetHostStats() (*HostStats, error) {
+	stats, err := vmpkg.GetHostStats()
+	if err != nil || stats == nil {
+		return stats, err
+	}
+
+	// 复用资源采集器缓存，避免在宿主机 SSE 推送中为每台虚拟机重复执行 libvirt 查询。
+	// 仅在全部运行中虚拟机均已有有效统计时标记为可用，前端据此计算系统内存基线。
+	if stats.VMRunning == 0 {
+		stats.VMMemoryKnown = true
+		return stats, nil
+	}
+
+	cachedStats := GetAllCachedStats()
+	if len(cachedStats) < stats.VMRunning {
+		return stats, nil
+	}
+
+	var vmMemoryActual int64
+	for _, vmStats := range cachedStats {
+		if vmStats == nil || vmStats.MemTotal <= 0 {
+			return stats, nil
+		}
+		vmMemoryActual += vmStats.MemTotal
+	}
+
+	stats.VMMemoryActual = vmMemoryActual
+	stats.VMMemoryKnown = true
+	return stats, nil
 }
 
 // ── Interface ──
@@ -640,16 +669,6 @@ func GetVMLockInfo(vmName string) *model.VMLock {
 	return vmpkg.GetVMLockInfo(vmName)
 }
 
-// ── Monitor ──
-
-func GetVMMonitorStatus(name string) (*VMMonitorStatus, error) {
-	return vmpkg.GetVMMonitorStatus(name)
-}
-
-func ExecuteVMMonitorCommand(name, command string) (*VMMonitorCommandResult, error) {
-	return vmpkg.ExecuteVMMonitorCommand(name, command)
-}
-
 // ── Schedule ──
 
 func ListVMSchedules(vmName string) ([]VMScheduleItem, error) {
@@ -684,6 +703,10 @@ func RunVMScheduledAction(ctx context.Context, task *model.Task, progress func(i
 
 func GetVMExportSize(vmName string) (int64, error) {
 	return vmpkg.GetVMExportSize(vmName)
+}
+
+func GetVMExportOptions(vmName string) (*VMExportOptions, error) {
+	return vmpkg.GetVMExportOptions(vmName)
 }
 
 func ExportVM(ctx context.Context, params *ExportVMParams, progressFn func(int, string)) (*ExportVMResult, error) {

@@ -15,6 +15,7 @@ type VmOperateRequest struct {
 type ResetLinuxPasswordRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
+	Mode     string `json:"mode"` // auto/online/offline，默认 auto
 }
 
 // VmEditRequest 虚拟机编辑请求
@@ -24,6 +25,7 @@ type VmEditRequest struct {
 	Memory          int                               `json:"memory"`             // GB
 	Remark          *string                           `json:"remark"`             // 备注
 	Group           *string                           `json:"group"`              // 分组
+	Tags            *[]string                         `json:"tags"`               // 标签
 	Autostart       *bool                             `json:"autostart"`          // 开机自启（指针区分是否传递）
 	Freeze          *bool                             `json:"freeze"`             // 启动时冻结 CPU
 	APIC            *bool                             `json:"apic"`               // APIC 开关

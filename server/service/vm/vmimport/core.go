@@ -64,8 +64,8 @@ func ImportVM(ctx context.Context, params *ImportVMParams, progressFn func(int, 
 		params.NicModel = "virtio"
 	}
 
-	// 检查虚拟机是否已存在
-	checkVM := utils.ExecCommand("virsh", "dominfo", params.Name)
+	// 检查虚拟机是否已存在（存在性探测：域不存在属预期情况，失败仅记 DEBUG）
+	checkVM := utils.ExecCommandQuiet("virsh", "dominfo", params.Name)
 	if checkVM.ExitCode == 0 {
 		return nil, fmt.Errorf("虚拟机 '%s' 已存在", params.Name)
 	}
@@ -73,6 +73,9 @@ func ImportVM(ctx context.Context, params *ImportVMParams, progressFn func(int, 
 	// 安全检查：文件名不能包含路径分隔符
 	if strings.Contains(params.DiskFile, "/") || strings.Contains(params.DiskFile, "..") {
 		return nil, fmt.Errorf("非法磁盘文件名: %s", params.DiskFile)
+	}
+	if ext := strings.ToLower(filepath.Ext(params.DiskFile)); ext == ".ova" || ext == ".ovf" || ext == ".mf" {
+		return nil, fmt.Errorf("普通磁盘导入不接受 %s，请使用导入虚拟机功能", ext)
 	}
 
 	// 源磁盘路径（用户 disk 目录中）
@@ -164,7 +167,7 @@ func ImportVM(ctx context.Context, params *ImportVMParams, progressFn func(int, 
 	isWindows := initType == "windows"
 
 	if isWindows {
-		if err, needEject := importVMWindowsDefine(params, destDiskPath, format, ramMB, memoryMeta, srcDiskPath); err != nil {
+		if err, needEject := importVMWindowsDefine(params, destDiskPath, format, ramMB, memoryMeta, srcDiskPath, needUEFI); err != nil {
 			return nil, err
 		} else if needEject && params.StartAfterImport {
 			service.ScheduleWindowsConfigDriveEject(params.Name, "virtio", "vda")
