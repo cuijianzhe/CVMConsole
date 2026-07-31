@@ -780,6 +780,11 @@ func GetVMNetworkInfo(name string) NetInfoResult {
 	return vmpkg.GetVMNetworkInfo(name)
 }
 
+// CreateOrUpdateVMNetworkInfo 创建或更新虚拟机网络信息（委托到 vm 包）
+func CreateOrUpdateVMNetworkInfo(vmName string, interfaceOrder int, ip, mac, nicModel, networkType, switchName, bridgeName string) error {
+	return vmpkg.CreateOrUpdateVMNetworkInfo(vmName, interfaceOrder, ip, mac, nicModel, networkType, switchName, bridgeName)
+}
+
 func WaitForVMShutOff(ctx context.Context, name string, timeout time.Duration) (bool, error) {
 	return vmpkg.WaitForVMShutOff(ctx, name, timeout)
 }

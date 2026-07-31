@@ -73,6 +73,9 @@ type CloneParams struct {
 	NestedVirt            *bool                          `json:"nested_virt,omitempty"`         // 嵌套虚拟化开关
 	KVMHidden             *bool                          `json:"kvm_hidden,omitempty"`          // 隐藏 KVM 标志
 	VendorID              string                         `json:"vendor_id,omitempty"`           // Hyper-V vendor_id 伪装
+	UserData              string                         `json:"user_data,omitempty"`           // cloud-init 自定义 user-data（#cloud-config 开头时替换默认配置）
+	VGPUProfileID         uint                           `json:"vgpu_profile_id,omitempty"`     // vGPU 配置文件 ID
+	VGPUUUID              string                         `json:"vgpu_uuid,omitempty"`           // vGPU 设备 UUID
 	PrimaryMAC            string                         `json:"-"`                             // 首网卡 MAC，在离线网络配置与域 XML 间保持一致
 }
 
@@ -143,6 +146,7 @@ type ReinstallParams struct {
 	PreserveFnOSDeviceID  bool   `json:"preserve_fnos_device_id,omitempty"` // 是否保留 FnOS 设备 ID
 	FnOSDeviceID          string `json:"fnos_device_id,omitempty"`          // 自定义 FnOS 设备 ID
 	Operator              string `json:"operator,omitempty"`                // 操作人
+	UserData              string `json:"user_data,omitempty"`               // cloud-init 自定义 user-data
 	LinuxIdentityPrepared bool   `json:"-"`                                 // Linux 身份是否已离线重置
 }
 
