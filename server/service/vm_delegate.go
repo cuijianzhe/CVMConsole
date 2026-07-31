@@ -38,6 +38,11 @@ func ResetVM(name string) error {
 	return vmpkg.ResetVM(name)
 }
 
+// HardRebootVM 硬重启（destroy + start），重建 QEMU 进程
+func HardRebootVM(name string) error {
+	return vmpkg.HardRebootVM(name)
+}
+
 func FixOnReboot(name string) {
 	vmpkg.FixOnReboot(name)
 }

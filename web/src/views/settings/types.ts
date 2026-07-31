@@ -17,6 +17,8 @@ export const VALID_SETTINGS_TABS = [
   'log',
   'diagnostics',
   'storage',
+  'vgpu',
+  'ui_custom',
 ] as const
 
 export type SettingsTabKey = (typeof VALID_SETTINGS_TABS)[number]
@@ -87,6 +89,23 @@ export interface SettingsForm {
   spice_enabled_by_default: boolean
   igpu_passthrough_enabled: boolean
   hardware_passthrough_enabled: boolean
+  // ==================== UI 自定义 ====================
+  /** 系统首页图标（base64） */
+  system_home_icon: string
+  /** 首页标题/侧边栏产品名 */
+  home_title: string
+  /** 登录页面图标（base64） */
+  login_page_icon: string
+  /** 产品名称（登录页显示） */
+  product_name: string
+  /** 浏览器 Favicon 图标（base64） */
+  browser_favicon: string
+  /** 浏览器标签页标题 */
+  browser_title: string
+  /** 页脚版权信息（留空则使用默认格式） */
+  footer_text: string
+  /** 页脚超链接（留空则纯文本展示） */
+  footer_link: string
 }
 
 /** 表单默认值（后端未返回字段时兜底） */
@@ -155,6 +174,15 @@ export const DEFAULT_SETTINGS_FORM: SettingsForm = {
   spice_enabled_by_default: false,
   igpu_passthrough_enabled: false,
   hardware_passthrough_enabled: false,
+  // ==================== UI 自定义 ====================
+  system_home_icon: '',
+  home_title: '',
+  login_page_icon: '',
+  product_name: '',
+  browser_favicon: '',
+  browser_title: '',
+  footer_text: '',
+  footer_link: '',
 }
 
 /** 保存前校验，返回第一条错误信息；通过时返回 null */
@@ -250,6 +278,15 @@ export function buildSettingsPayload(form: SettingsForm): Record<string, unknown
     spice_enabled_by_default: form.spice_enabled_by_default,
     igpu_passthrough_enabled: form.igpu_passthrough_enabled,
     hardware_passthrough_enabled: form.hardware_passthrough_enabled,
+    // ==================== UI 自定义 ====================
+    system_home_icon: form.system_home_icon,
+    home_title: form.home_title,
+    login_page_icon: form.login_page_icon,
+    product_name: form.product_name,
+    browser_favicon: form.browser_favicon,
+    browser_title: form.browser_title,
+    footer_text: form.footer_text,
+    footer_link: form.footer_link,
   }
 }
 

@@ -8,6 +8,7 @@ import { Button, Dropdown, Input, Select } from '@douyinfe/semi-ui'
 import {
   IconPlayCircle,
   IconRestart,
+  IconRefresh,
   IconDelete,
   IconPlus,
   IconChevronDown,
@@ -15,7 +16,7 @@ import {
 } from '@douyinfe/semi-icons'
 import { PowerIcon } from './VmIcons'
 
-export type BatchAction = 'start' | 'reboot' | 'shutdown' | 'destroy' | 'delete'
+export type BatchAction = 'start' | 'reboot' | 'reset' | 'hard_reboot' | 'shutdown' | 'destroy' | 'delete'
 
 interface VmToolbarProps {
   selectedCount: number
@@ -55,7 +56,8 @@ export default function VmToolbar({
           clickToHide
           menu={[
             { node: 'item', name: '开机', icon: <IconPlayCircle />, onClick: () => onBatch('start') },
-            { node: 'item', name: '重启', icon: <IconRestart />, onClick: () => onBatch('reboot') },
+            { node: 'item', name: '软重启', icon: <IconRestart />, onClick: () => onBatch('reset') },
+            { node: 'item', name: '硬重启', icon: <IconRefresh />, onClick: () => onBatch('hard_reboot') },
             {
               node: 'item',
               name: '关机',

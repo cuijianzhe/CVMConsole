@@ -8,13 +8,12 @@
  * 待后续迭代：邀请注册
  */
 import { useEffect, useState, type CSSProperties } from 'react'
-import { Button, Checkbox, Form, Banner, Modal, Toast } from '@douyinfe/semi-ui'
+import { Button, Form, Banner, Modal } from '@douyinfe/semi-ui'
 import {
   IconUser,
   IconLock,
   IconEyeOpened,
   IconEyeClosedSolid,
-  IconGithubLogo,
   IconBolt,
   IconGlobeStroke,
   IconUserGroup,
@@ -57,14 +56,10 @@ export default function LoginPage() {
   const setUserInfo = useUserStore((s) => s.setUserInfo)
   const logout = useUserStore((s) => s.logout)
   const siteTitle = useAppStore((s) => s.siteTitle)
+  const uiCustomization = useAppStore((s) => s.uiCustomization)
   const { isDark } = useTheme()
   const [loading, setLoading] = useState(false)
   const [stageTip, setStageTip] = useState('')
-  const [agreed, setAgreed] = useState(() => {
-    const stored = localStorage.getItem('qvm_agreed')
-    // 首次访问默认勾选，已有记录则取存储值
-    return stored === null ? true : stored === 'true'
-  })
   const [pwdVisible, setPwdVisible] = useState(false)
   const [forgotVisible, setForgotVisible] = useState(false)
   // 强制修改默认密码弹窗（暂存账号与登录密码，改密成功后自动重新登录）
@@ -102,12 +97,6 @@ export default function LoginPage() {
   }
 
   const handleSubmit = async (values: { username: string; password: string }) => {
-    if (!agreed) {
-      Toast.warning({ content: '请先阅读并同意用户协议与公测协议', duration: 3 })
-      return
-    }
-    // 用户已勾选同意，持久化记录
-    localStorage.setItem('qvm_agreed', 'true')
     setLoading(true)
     setStageTip('')
     try {
@@ -209,22 +198,30 @@ export default function LoginPage() {
       <section className="qvm-login-brand">
         <div className="qvm-brand-logo qvm-fade-up">
           <div className="qvm-logo-mark">
-            <img src="/favicon.png" alt="QVMConsole" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 13 }} />
+            <img
+              src={uiCustomization.loginPageIcon || '/favicon.png'}
+              alt="QVMConsole"
+              style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 13 }}
+              onError={(e) => {
+                ;(e.target as HTMLImageElement).src = '/favicon.png'
+              }}
+            />
           </div>
           <div>
-            <div className="qvm-brand-logo-name">{siteTitle}</div>
-            <div className="qvm-brand-logo-sub">OPENSOURCE KVM PANEL</div>
+            <div className="qvm-brand-logo-name">
+              {uiCustomization.productName?.trim() || siteTitle}
+            </div>
           </div>
         </div>
 
         <div className="qvm-brand-mid">
           <div className="qvm-brand-slogan qvm-fade-up" style={{ '--qvm-delay': '60ms' } as CSSProperties}>
-            自托管的
-            <br />
-            <em>KVM 虚拟化</em>管理平台
+            <em>现代化</em> KVM 虚拟化控制台
           </div>
           <div className="qvm-brand-desc qvm-fade-up" style={{ '--qvm-delay': '120ms' } as CSSProperties}>
-            开源自托管的虚拟机管理控制台，一台物理机即可构建属于自己的私有云。从模板秒级开出虚拟机，网络、存储、配额一站式管理。
+            集中管理虚拟机、网络、存储和资源配额，构建稳定、安全、易维护的虚拟化环境。
+            <br />
+            从实例创建到运行监控，一站式完成日常运维操作。
           </div>
           <div className="qvm-feature-list qvm-fade-up" style={{ '--qvm-delay': '180ms' } as CSSProperties}>
             {FEATURES.map((f) => (
@@ -290,10 +287,19 @@ export default function LoginPage() {
         <div className="qvm-login-card qvm-g-border qvm-fade-up" style={{ '--qvm-delay': '100ms' } as CSSProperties}>
           <div className="qvm-lc-head">
             <div className="qvm-lc-logo">
-              <img src="/favicon.png" alt="QVMConsole" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 15 }} />
+              <img
+                src={uiCustomization.loginPageIcon || '/favicon.png'}
+                alt="QVMConsole"
+                style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 15 }}
+                onError={(e) => {
+                  ;(e.target as HTMLImageElement).src = '/favicon.png'
+                }}
+              />
             </div>
             <div className="qvm-lc-title">欢迎回来</div>
-            <div className="qvm-lc-sub">登录 {siteTitle} 开源虚拟机管理控制台</div>
+            <div className="qvm-lc-sub">
+              登录 {uiCustomization.productName?.trim() || siteTitle} 虚拟机管理控制台
+            </div>
           </div>
 
           {stageTip && (
@@ -342,37 +348,10 @@ export default function LoginPage() {
               rules={[{ required: true, message: '请输入密码' }]}
             />
 
-            <div className="qvm-agreement">
-              <Checkbox
-                checked={agreed}
-                onChange={(e) => setAgreed(e.target.checked ?? false)}
-                aria-label="同意协议"
-              />
-              <span>
-                我已阅读并同意{' '}
-                <a
-                  href="https://qvmcdocs.xiaozhuhouses.asia/agreement?return=%2Fdocs%2Finstall%2F"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  《用户协议》
-                </a>{' '}
-                和{' '}
-                <a
-                  href="https://qvmcdocs.xiaozhuhouses.asia/agreement?return=%2Fdocs%2Finstall%2F"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  《公测协议》
-                </a>
-              </span>
-            </div>
-
             <Button
               htmlType="submit"
               block
               loading={loading}
-              disabled={!agreed}
               className="qvm-btn-grad qvm-btn-login"
             >
               登 录
@@ -380,7 +359,6 @@ export default function LoginPage() {
           </Form>
 
           <div className="qvm-login-helper">
-            <span className="reg-tip">邀请注册请联系管理员获取链接</span>
             <a onClick={() => setForgotVisible(true)}>忘记密码</a>
           </div>
         </div>
@@ -399,9 +377,13 @@ export default function LoginPage() {
         />
 
         <div className="qvm-login-foot">
-          <a href="https://github.com/QVMConsole/QVMConsole" target="_blank" rel="noopener noreferrer">
-            <IconGithubLogo />© {siteTitle} · Open source Apache 2.0
-          </a>
+          {uiCustomization.footerLink?.trim() ? (
+            <a href={uiCustomization.footerLink.trim()} target="_blank" rel="noopener noreferrer">
+              {uiCustomization.footerText?.trim() || `© ${siteTitle} · Open source Apache 2.0`}
+            </a>
+          ) : (
+            uiCustomization.footerText?.trim() || `© ${siteTitle} · Open source Apache 2.0`
+          )}
         </div>
       </section>
     </div>

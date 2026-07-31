@@ -609,6 +609,30 @@ body[theme-mode='dark'] .qvm-vf-appliance-meta strong {
   font-size: 13px;
   margin-bottom: 8px;
 }
+/* vGPU / 直通分区中的等宽文本（UUID / PCI 地址） */
+.qvm-vf-mono {
+  font-family: var(--qvm-num-font, monospace);
+  font-size: 12.5px;
+  word-break: break-all;
+}
+/* vGPU 实例行内移除图标（纯图标 + Tooltip，与 VmActionsCell 一致） */
+.qvm-act-ic.vgpu-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--qvm-text-2);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.16s;
+}
+.qvm-act-ic.vgpu-remove:hover {
+  color: var(--qvm-danger);
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+}
 .qvm-vf-ip-code {
   font-family: monospace;
   font-size: 12.5px;

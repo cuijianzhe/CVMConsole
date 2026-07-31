@@ -241,6 +241,21 @@ export default function ConfirmSection() {
             ]}
           />
         )}
+        {f.vgpu_instances.length > 0 && (
+          <SummaryGroup
+            title="vGPU 实例"
+            rows={[
+              {
+                label: 'vGPU 实例',
+                value: f.vgpu_instances.map((i) => (
+                  <Tag key={i.uuid} size="small" style={{ marginRight: 4 }}>
+                    {i.uuid.slice(0, 8)}
+                  </Tag>
+                )),
+              },
+            ]}
+          />
+        )}
         <div className="qvm-vf-confirm-total">
           <span>预估资源占用</span>
           <strong>

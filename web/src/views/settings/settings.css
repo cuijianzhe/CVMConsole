@@ -330,6 +330,110 @@
   line-height: 30px;
 }
 
+/* ==================== vGPU 管理 ==================== */
+.stg-vgpu-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.stg-vgpu-muted {
+  color: var(--qvm-text-2);
+  font-size: 12.5px;
+}
+/* 行内操作图标（纯图标 + Tooltip，与 VmActionsCell 一致） */
+.stg-vgpu-toolbar + .semi-table-wrapper .stg-act-ic,
+.stg-act-ic.destroy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--qvm-text-2);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.16s;
+}
+.stg-act-ic.destroy:hover {
+  color: var(--qvm-danger);
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+.stg-act-ic.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+/* 创建实例弹窗 */
+.stg-vgpu-create-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.stg-vgpu-create-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--qvm-text-1);
+}
+.stg-vgpu-create-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stg-vgpu-create-name {
+  font-weight: 500;
+  color: var(--qvm-text-0);
+}
+.stg-vgpu-create-meta {
+  font-size: 12px;
+  color: var(--qvm-text-2);
+}
+.stg-vgpu-create-tip {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--qvm-text-2);
+}
+
+/* ==================== UI 自定义：图标上传器 ==================== */
+.stg-icon-uploader {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.stg-icon-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  border: 1px dashed var(--qvm-stroke-strong);
+  background: var(--qvm-hover-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex: none;
+  transition: border-color 0.18s;
+}
+.stg-icon-preview:hover {
+  border-color: var(--qvm-acc-stroke);
+}
+.stg-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.stg-icon-placeholder {
+  color: var(--qvm-text-2);
+  opacity: 0.5;
+}
+.stg-icon-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* ==================== 底部操作区 ==================== */
 .stg-footer {
   display: flex;
@@ -355,7 +459,8 @@
 body[theme-mode='dark'] .stg-page-header h2,
 body[theme-mode='dark'] .stg-section-head,
 body[theme-mode='dark'] .stg-profile-item strong,
-body[theme-mode='dark'] .stg-diag-label {
+body[theme-mode='dark'] .stg-diag-label,
+body[theme-mode='dark'] .stg-vgpu-create-name {
   color: #b8c1cf;
 }
 

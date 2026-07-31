@@ -111,6 +111,8 @@ type Config struct {
 	ProductName    string `json:"product_name"`     // 产品名称（登录页面显示）
 	BrowserFavicon string `json:"browser_favicon"`  // 浏览器Favicon图标（base64）
 	BrowserTitle   string `json:"browser_title"`    // 浏览器标题
+	FooterText     string `json:"footer_text"`      // 页脚版权信息（留空则使用默认格式）
+	FooterLink     string `json:"footer_link"`      // 页脚超链接（留空则纯文本展示）
 	// 开发环境模式，启用后绕过安全验证
 	DevelopmentMode bool `json:"development_mode"`
 	// systemd 中当前面板服务的 unit 名称
@@ -274,6 +276,7 @@ func Init() {
 		ProductName:                           getEnv("KVM_PRODUCT_NAME", ""),
 		BrowserFavicon:                        getEnv("KVM_BROWSER_FAVICON", ""),
 		BrowserTitle:                          getEnv("KVM_BROWSER_TITLE", "CVMConsole"),
+		FooterText:                            getEnv("KVM_FOOTER_TEXT", ""),
 		DevelopmentMode:                       getEnvBool("KVM_DEVELOPMENT_MODE", false),
 		ServiceUnitName:                       getEnv("KVM_SERVICE_UNIT_NAME", "kvm-console.service"),
 		MaintenanceMode:                       getEnvBool("KVM_MAINTENANCE_MODE", false),
@@ -519,6 +522,8 @@ var PersistableKeys = []string{
 	"product_name",
 	"browser_favicon",
 	"browser_title",
+	"footer_text",
+	"footer_link",
 	"development_mode",
 	"maintenance_mode",
 	"maintenance_service_units",
@@ -600,6 +605,8 @@ var keyToEnvVar = map[string]string{
 	"home_title":                "KVM_HOME_TITLE",
 	"product_name":              "KVM_PRODUCT_NAME",
 	"browser_title":             "KVM_BROWSER_TITLE",
+	"footer_text":               "KVM_FOOTER_TEXT",
+	"footer_link":               "KVM_FOOTER_LINK",
 	"development_mode":          "KVM_DEVELOPMENT_MODE",
 	"maintenance_mode":          "KVM_MAINTENANCE_MODE",
 	"maintenance_service_units": "KVM_MAINTENANCE_SERVICE_UNITS",
@@ -737,6 +744,10 @@ func (c *Config) LoadFromDB(settings map[string]string) {
 			c.BrowserFavicon = value
 		case "browser_title":
 			c.BrowserTitle = value
+		case "footer_text":
+			c.FooterText = value
+		case "footer_link":
+			c.FooterLink = value
 		case "development_mode":
 			if v, err := strconv.ParseBool(value); err == nil {
 				c.DevelopmentMode = v
@@ -933,6 +944,8 @@ func (c *Config) ToSettingsMap() map[string]string {
 		"product_name":              c.ProductName,
 		"browser_favicon":           c.BrowserFavicon,
 		"browser_title":             c.BrowserTitle,
+		"footer_text":               c.FooterText,
+		"footer_link":               c.FooterLink,
 		"development_mode":          strconv.FormatBool(c.DevelopmentMode),
 		"maintenance_mode":          strconv.FormatBool(c.MaintenanceMode),
 		"maintenance_service_units": c.MaintenanceServiceUnits,

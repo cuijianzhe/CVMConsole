@@ -20,8 +20,9 @@ import {
   IconCheckList,
   IconSetting,
   IconSafeStroked,
-  IconCodeStroked,
   IconInfoCircle,
+  IconList,
+  IconDisc,
 } from '@douyinfe/semi-icons'
 
 export interface NavItem {
@@ -54,13 +55,14 @@ export const NAV_COLORS: Record<string, string> = {
   firewall: '#fb7185',
   'storage-pool': '#f59e0b',
   'my-storage': '#fbbf24',
+  'resource-spec': '#84cc16',
+  'cloud-disk-spec': '#e879f9',
   user: '#34d399',
   nodes: '#fb923c',
   scheduler: '#22d3ee',
   task: '#a78bfa',
   settings: '#818cf8',
   security: '#4ade80',
-  'api-docs': '#c084fc',
   about: '#94a3b8',
 }
 
@@ -81,7 +83,6 @@ export const ADMIN_NAV: NavGroup[] = [
     group: '网络',
     items: [
       { key: 'network', title: '网络中心', icon: <IconBranch />, path: '/network', color: NAV_COLORS.network },
-      { key: 'public-ip', title: '公网 IP', icon: <IconGlobeStroke />, path: '/public-ip', color: NAV_COLORS['public-ip'] },
       { key: 'firewall', title: '防火墙', icon: <IconShield />, path: '/firewall', color: NAV_COLORS.firewall },
     ],
   },
@@ -90,6 +91,15 @@ export const ADMIN_NAV: NavGroup[] = [
     items: [
       { key: 'storage-pool', title: '存储池', icon: <IconServer />, path: '/storage-pool', color: NAV_COLORS['storage-pool'] },
       { key: 'my-storage', title: '我的存储', icon: <IconFolder />, path: '/my-storage', color: NAV_COLORS['my-storage'] },
+    ],
+  },
+  {
+    // 资源管理：公网 IP 资源 + 资源/云盘规格模板（规格用于开通虚拟机时选择）
+    group: '资源管理',
+    items: [
+      { key: 'public-ip', title: '公网 IP', icon: <IconGlobeStroke />, path: '/public-ip', color: NAV_COLORS['public-ip'] },
+      { key: 'resource-spec', title: '资源规格', icon: <IconList />, path: '/resource-spec', color: NAV_COLORS['resource-spec'] },
+      { key: 'cloud-disk-spec', title: '云盘规格', icon: <IconDisc />, path: '/cloud-disk-spec', color: NAV_COLORS['cloud-disk-spec'] },
     ],
   },
   {
@@ -106,7 +116,6 @@ export const ADMIN_NAV: NavGroup[] = [
   {
     group: '支持',
     items: [
-      { key: 'api-docs', title: 'API 文档', icon: <IconCodeStroked />, path: '/api-docs', color: NAV_COLORS['api-docs'] },
       { key: 'about', title: '关于项目', icon: <IconInfoCircle />, path: '/about', color: NAV_COLORS.about },
     ],
   },
@@ -146,7 +155,6 @@ export const USER_NAV: NavGroup[] = [
   {
     group: '支持',
     items: [
-      { key: 'api-docs', title: 'API 文档', icon: <IconCodeStroked />, path: '/api-docs', color: NAV_COLORS['api-docs'] },
       { key: 'about', title: '关于项目', icon: <IconInfoCircle />, path: '/about', color: NAV_COLORS.about },
     ],
   },

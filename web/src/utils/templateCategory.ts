@@ -7,7 +7,7 @@ export const DEFAULT_LINUX_TEMPLATE_CATEGORY = 'Ubuntu'
 export const DEFAULT_WINDOWS_TEMPLATE_CATEGORY = 'WindowsServer2022'
 export const DEFAULT_OPENWRT_TEMPLATE_CATEGORY = 'OpenWrt'
 
-export const LINUX_TEMPLATE_CATEGORY_OPTIONS = ['Ubuntu', 'Debian', 'CentOS']
+export const LINUX_TEMPLATE_CATEGORY_OPTIONS = ['Ubuntu', 'Debian', 'CentOS', 'UOS', 'Kylin']
 
 export const WINDOWS_TEMPLATE_CATEGORY_OPTIONS = [
   'WindowsServer2025',

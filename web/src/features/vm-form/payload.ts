@@ -203,6 +203,7 @@ export const buildCreatePayload = (
     pcie_root_ports: form.machine_type === 'q35' ? form.pcie_root_ports : undefined,
     extra_disks: buildExtraDisksPayload(form),
     host_devices: form.host_devices,
+    vgpu_instances: form.vgpu_instances,
     extra_nics: nics.extraNics,
     firmware_compat: form.arch === 'aarch64' && form.firmware_compat ? true : undefined,
     direct_boot: form.direct_boot_enabled
@@ -291,6 +292,7 @@ export const buildClonePayload = (form: VmFormModel, ctx: CloneBuildContext): Cl
     fnos_device_id: ctx.customFnosDeviceId,
     extra_disks: buildExtraDisksPayload(form),
     host_devices: form.host_devices,
+    vgpu_instances: form.vgpu_instances,
     pcie_root_ports: form.pcie_root_ports,
   }
   // 单台克隆 user/template_user 同源
@@ -487,6 +489,8 @@ export const buildEditPayload = (form: VmFormModel, ctx: EditBuildContext): Upda
     : { enabled: false }
 
   if (ctx.isAdmin && form.host_devices_touched) payload.host_devices = form.host_devices
+  // vGPU 实例：仅管理员且用户修改过时提交
+  if (ctx.isAdmin && form.vgpu_instances_touched) payload.vgpu_instances = form.vgpu_instances
 
   // 磁盘 IOPS：仅发送发生变化的磁盘（仅管理员）
   if (ctx.isAdmin) {

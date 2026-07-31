@@ -26,6 +26,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
   const role = useUserStore((s) => s.role)
   const cloudType = useUserStore((s) => s.cloudType)
   const siteTitle = useAppStore((s) => s.siteTitle)
+  const uiCustomization = useAppStore((s) => s.uiCustomization)
   const collapsed = useAppStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const tasks = useTaskStore((s) => s.tasks)
@@ -86,9 +87,17 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
       </Tooltip>
 
       <div className="qvm-logo-zone">
-        <img className="qvm-logo-img" src="/favicon.png" alt="QVMC" />
+        <img
+          className="qvm-logo-img"
+          src={uiCustomization.systemHomeIcon || '/favicon.png'}
+          alt="QVMC"
+          onError={(e) => {
+            // 自定义图标加载失败时回退到默认图标
+            ;(e.target as HTMLImageElement).src = '/favicon.png'
+          }}
+        />
         <div className="qvm-logo-txt">
-          <div className="qvm-logo-name">{siteTitle}</div>
+          <div className="qvm-logo-name">{uiCustomization.homeTitle?.trim() || siteTitle}</div>
           <div className="qvm-logo-sub">KVM 虚拟化管理平台</div>
         </div>
       </div>

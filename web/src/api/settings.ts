@@ -334,3 +334,68 @@ export function getCPUAffinityPresets() {
     silent: true,
   })
 }
+
+// ==================== vGPU 管理 ====================
+
+/** vGPU 配置信息（对应后端 VGPUProfileInfo） */
+export interface VGPUProfileInfo {
+  /** PCI 设备地址（如 0000:01:00.0） */
+  pci_device: string
+  /** 配置名称（如 grid_a100-2-20c） */
+  profile_name: string
+  /** 配置描述 */
+  description?: string
+  /** 最大实例数 */
+  max_instances: number
+  /** 显存（MB） */
+  memory_mb?: number
+  /** 已使用实例数（后端按设备聚合返回，可选） */
+  used_instances?: number
+}
+
+/** vGPU 实例信息 */
+export interface VGPUInstance {
+  /** 实例 UUID */
+  uuid: string
+  /** 所属配置 ID（profile_name） */
+  profile_id: string
+  /** 所属配置名称（后端可联动返回，可选） */
+  profile_name?: string
+  /** PCI 设备地址（可选） */
+  pci_device?: string
+  /** 实例状态：available / bound / error 等 */
+  status?: string
+  /** 绑定的虚拟机名称（未绑定时为空） */
+  bound_vm?: string
+}
+
+/** 获取 vGPU 配置列表 */
+export function getVGPUProfiles() {
+  return service.get<unknown, ApiResponse<VGPUProfileInfo[]>>('/host/vgpu/profiles', {
+    silent: true,
+  })
+}
+
+/** 发现 vGPU 设备（扫描宿主机 PCI 设备并刷新配置列表） */
+export function discoverVGPUProfiles() {
+  return service.post<unknown, ApiResponse<VGPUProfileInfo[]>>('/host/vgpu/profiles/discover', {}, {
+    timeout: 60000,
+  })
+}
+
+/** 获取 vGPU 实例列表 */
+export function getVGPUInstances() {
+  return service.get<unknown, ApiResponse<VGPUInstance[]>>('/host/vgpu/instances', {
+    silent: true,
+  })
+}
+
+/** 创建 vGPU 实例 */
+export function createVGPUInstance(data: { profile_id: string }) {
+  return service.post<unknown, ApiResponse<VGPUInstance>>('/host/vgpu/instances', data)
+}
+
+/** 销毁 vGPU 实例 */
+export function destroyVGPUInstance(id: string) {
+  return service.delete<unknown, ApiResponse>(`/host/vgpu/instances/${encodeURIComponent(id)}`)
+}

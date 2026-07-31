@@ -276,7 +276,7 @@ export default function VmListPage() {
         return
       }
       const actionText = POWER_ACTION_TEXT[action]
-      if ((action === 'shutdown' || action === 'destroy') && vms.some((v) => v.locked)) {
+      if ((action === 'shutdown' || action === 'destroy' || action === 'hard_reboot') && vms.some((v) => v.locked)) {
         const lockedNames = vms.filter((v) => v.locked).map((v) => v.name).join(', ')
         const ok = await confirmModal({
           title: '虚拟机已锁定 - 批量操作二次确认',
@@ -320,6 +320,7 @@ export default function VmListPage() {
         case 'reboot':
         case 'destroy':
         case 'reset':
+        case 'hard_reboot':
           void handlePower(vm, cmd)
           return
         case 'remark':

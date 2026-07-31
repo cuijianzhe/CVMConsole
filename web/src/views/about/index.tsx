@@ -1,38 +1,18 @@
 /**
  * 关于项目页
- * 技术栈展示、项目信息、面板信息（/public/version）、系统运行环境信息（/system-info）。
+ * 面板信息（/public/version）、系统运行环境信息（/system-info）。
  */
 import { useEffect, useState } from 'react'
 import { Card, Collapse, Spin, Tag } from '@douyinfe/semi-ui'
-import { IconDesktop, IconLink, IconMonitorStroked, IconSetting } from '@douyinfe/semi-icons'
+import { IconMonitorStroked, IconSetting } from '@douyinfe/semi-icons'
 import {
   getPublicSystemInfo,
   getPublicVersion,
   type PublicSystemInfo,
   type PublicVersion,
 } from '@/api/settings'
+import { useAppStore } from '@/stores/app'
 import './about.css'
-
-/** 技术栈清单（新前端为 React + Semi Design 体系） */
-const techStack = [
-  { name: 'React 19', desc: '用于构建界面的 JavaScript 库', url: 'https://react.dev' },
-  { name: 'Semi Design', desc: '现代化企业级 UI 组件库', url: 'https://semi.design' },
-  { name: 'Vite', desc: '下一代前端构建工具', url: 'https://vitejs.dev' },
-  { name: 'Zustand', desc: 'React 轻量状态管理库', url: 'https://zustand-demo.pmnd.rs' },
-  { name: 'Go', desc: '高性能后端语言', url: 'https://go.dev' },
-  { name: 'Gin', desc: 'Go HTTP Web 框架', url: 'https://gin-gonic.com' },
-  { name: 'SQLite', desc: '轻量级嵌入式数据库', url: 'https://www.sqlite.org' },
-  { name: 'libvirt', desc: '虚拟化管理 API', url: 'https://libvirt.org' },
-  { name: 'QEMU/KVM', desc: '硬件虚拟化方案', url: 'https://www.qemu.org' },
-  { name: 'noVNC', desc: 'Web 远程桌面客户端', url: 'https://novnc.com' },
-]
-
-/** 项目信息条目 */
-const projectLinks = [
-  { label: '开源地址', text: 'https://github.com/QVMConsole/QVMConsole', url: 'https://github.com/QVMConsole/QVMConsole' },
-  { label: '项目官网', text: 'https://www.qvmconsole.cn/', url: 'https://www.qvmconsole.cn/' },
-  { label: '项目文档', text: 'https://qvmcdocs.xiaozhuhouses.asia', url: 'https://qvmcdocs.xiaozhuhouses.asia' },
-]
 
 /** 系统信息展示字段映射 */
 const sysInfoFields: { label: string; keys: string[] }[] = [
@@ -50,6 +30,9 @@ const sysInfoFields: { label: string; keys: string[] }[] = [
 export default function AboutPage() {
   const isDev = import.meta.env.DEV
   const currentYear = new Date().getFullYear()
+  const siteTitle = useAppStore((s) => s.siteTitle)
+  const footerText = useAppStore((s) => s.uiCustomization.footerText)
+  const footerLink = useAppStore((s) => s.uiCustomization.footerLink)
   const [versionInfo, setVersionInfo] = useState<PublicVersion>({})
   const [sysInfo, setSysInfo] = useState<PublicSystemInfo>({})
   const [sysLoading, setSysLoading] = useState(false)
@@ -84,56 +67,7 @@ export default function AboutPage() {
 
   return (
     <div className="about-page">
-      <Collapse defaultActiveKey={['tech', 'project', 'panel', 'system']} keepDOM>
-        <Collapse.Panel
-          itemKey="tech"
-          header={
-            <span className="about-section-header">
-              <IconDesktop className="about-section-icon" />
-              技术栈
-            </span>
-          }
-        >
-          <div className="about-tech-grid">
-            {techStack.map((tech) => (
-              <a key={tech.name} className="about-tech-item" href={tech.url} target="_blank" rel="noopener noreferrer">
-                <span className="about-tech-name">{tech.name}</span>
-                <span className="about-tech-desc">{tech.desc}</span>
-              </a>
-            ))}
-          </div>
-        </Collapse.Panel>
-
-        <Collapse.Panel
-          itemKey="project"
-          header={
-            <span className="about-section-header">
-              <IconLink className="about-section-icon" />
-              项目信息
-            </span>
-          }
-        >
-          <div className="about-info-grid">
-            {projectLinks.map((item) => (
-              <div key={item.label} className="about-info-item">
-                <span className="about-info-label">{item.label}</span>
-                <a className="about-info-link" href={item.url} target="_blank" rel="noopener noreferrer">
-                  {item.text}
-                </a>
-              </div>
-            ))}
-            <div className="about-info-item">
-              <span className="about-info-label">开发者</span>
-              <span className="about-info-value">
-                星辰项目组-又菜又爱玩的小朱
-                <a className="about-info-link" href="https://github.com/yxsj245" target="_blank" rel="noopener noreferrer">
-                  (@yxsj245)
-                </a>
-              </span>
-            </div>
-          </div>
-        </Collapse.Panel>
-
+      <Collapse defaultActiveKey={['panel', 'system']} keepDOM>
         <Collapse.Panel
           itemKey="panel"
           header={
@@ -188,7 +122,15 @@ export default function AboutPage() {
       </Collapse>
 
       <Card className="about-footer-card">
-        <p className="about-footer">© {currentYear} QVMConsole. 基于 React + Semi Design + Go 构建</p>
+        <p className="about-footer">
+          {footerLink?.trim() ? (
+            <a href={footerLink.trim()} target="_blank" rel="noopener noreferrer">
+              {footerText?.trim() || `© ${currentYear} ${siteTitle}. 保留所有权利`}
+            </a>
+          ) : (
+            footerText?.trim() || `© ${currentYear} ${siteTitle}. 保留所有权利`
+          )}
+        </p>
       </Card>
     </div>
   )

@@ -169,6 +169,8 @@ export function createDefaultVmForm(options: CreateDefaultFormOptions = {}): VmF
     pcie_root_ports: 4,
     host_devices: [],
     host_devices_touched: false,
+    vgpu_instances: [],
+    vgpu_instances_touched: false,
     traffic_down_gb: 0,
     traffic_up_gb: 0,
     bandwidth_down_mbps: 0,

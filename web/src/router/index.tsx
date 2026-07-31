@@ -11,7 +11,6 @@ import { RequireAuth } from './guards'
 import NotFound from '@/views/error/NotFound'
 import {
   LoginPage,
-  InviteRegisterPage,
   ResetPasswordPage,
   DashboardPage,
   VmListPage,
@@ -23,6 +22,8 @@ import {
   FirewallPage,
   StoragePoolPage,
   MyStoragePage,
+  ResourceSpecPage,
+  CloudDiskSpecPage,
   UserPage,
   NodePage,
   SchedulerPage,
@@ -101,6 +102,16 @@ const mainChildren = [
     handle: { title: '我的存储' },
   },
   {
+    path: 'resource-spec',
+    element: lazyPage(<ResourceSpecPage />),
+    handle: { title: '资源规格' },
+  },
+  {
+    path: 'cloud-disk-spec',
+    element: lazyPage(<CloudDiskSpecPage />),
+    handle: { title: '云盘规格' },
+  },
+  {
     path: 'user',
     element: lazyPage(<UserPage />),
     handle: { title: '用户管理' },
@@ -148,11 +159,6 @@ export const router = createBrowserRouter([
     path: '/login',
     element: lazyPage(<LoginPage />),
     handle: { title: '登录' },
-  },
-  {
-    path: '/invite',
-    element: lazyPage(<InviteRegisterPage />),
-    handle: { title: '邀请注册' },
   },
   {
     path: '/reset-password',

@@ -42,56 +42,6 @@ export interface LoginVerifyRequest {
   challenge_id?: number
 }
 
-/** 轻量云待确认开通服务器（邀请详情内嵌） */
-export interface InviteLightweightRegistration {
-  id: number
-  vm_name: string
-  template: string
-  vcpu: number
-  ram: number
-  disk_size: number
-  traffic_down_gb: number
-  traffic_up_gb: number
-  bandwidth_down_mbps: number
-  bandwidth_up_mbps: number
-  max_port_forwards: number
-  max_runtime_hours: number
-  status: string
-}
-
-/** 邀请注册详情（GET /auth/invite） */
-export interface InviteDetail {
-  username: string
-  email: string
-  role: string
-  cloud_type: string
-  dedicated_vpc_switch_id: number
-  status: string
-  expires_at: string
-  max_cpu: number
-  max_memory: number
-  max_disk: number
-  max_vm: number
-  max_storage: number
-  max_runtime_hours: number
-  enable_port_forward: boolean
-  max_port_forwards: number
-  max_snapshots: number
-  max_bandwidth_up: number
-  max_bandwidth_down: number
-  max_traffic_down: number
-  max_traffic_up: number
-  max_public_ips: number
-  lightweight_vm_registrations?: InviteLightweightRegistration[]
-}
-
-/** 完成邀请注册请求 */
-export interface InviteCompleteRequest {
-  token: string
-  password: string
-  confirm_password: string
-}
-
 /** 找回密码：可选择重置的候选账号 */
 export interface ForgotPasswordAccount {
   username: string
@@ -283,16 +233,6 @@ export function skipBootstrap(stageToken: string) {
     { confirm: true },
     withStageToken(stageToken),
   )
-}
-
-/** 读取邀请注册信息（公开接口，凭邀请令牌访问） */
-export function getInviteInfo(token: string) {
-  return service.get<unknown, ApiResponse<InviteDetail>>('/auth/invite', { params: { token } })
-}
-
-/** 完成邀请注册（成功后返回登录态） */
-export function completeInvite(data: InviteCompleteRequest) {
-  return service.post<unknown, ApiResponse<LoginStageResponse>>('/auth/invite/complete', data)
 }
 
 /** 找回密码：向绑定邮箱发送验证码 */

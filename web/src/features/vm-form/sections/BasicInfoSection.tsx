@@ -214,44 +214,42 @@ export default function BasicInfoSection() {
                 </Select>
               </FormField>
 
-              <div className="qvm-vf-grid-2">
-                <FormField label="主机名" error={errors.hostname}>
-                  <Input
-                    value={f.hostname}
-                    placeholder="自动使用虚拟机名称"
-                    onChange={(v) => {
-                      setField('hostname', v)
-                      if (errors.hostname) setError('hostname', validateHostname(v))
-                    }}
-                    onBlur={() => setError('hostname', validateHostname(f.hostname))}
-                    suffix={
-                      <Button
-                        size="small"
-                        theme="borderless"
-                        type="primary"
-                        onClick={() => {
-                          setField('hostname', generateRandomHostname())
-                          setError('hostname', '')
-                        }}
-                      >
-                        随机生成
-                      </Button>
-                    }
-                  />
-                </FormField>
-                <FormField label="用户名" error={errors.import_user}>
-                  <Input
-                    value={f.import_user}
-                    placeholder="请输入登录用户名"
-                    disabled={f.os_type === 'windows'}
-                    onChange={(v) => {
-                      setField('import_user', v)
-                      if (errors.import_user) setError('import_user', validateTemplateUsername(v, false))
-                    }}
-                    onBlur={() => setError('import_user', validateTemplateUsername(f.import_user, false))}
-                  />
-                </FormField>
-              </div>
+              <FormField label="主机名" error={errors.hostname}>
+                <Input
+                  value={f.hostname}
+                  placeholder="自动使用虚拟机名称"
+                  onChange={(v) => {
+                    setField('hostname', v)
+                    if (errors.hostname) setError('hostname', validateHostname(v))
+                  }}
+                  onBlur={() => setError('hostname', validateHostname(f.hostname))}
+                  suffix={
+                    <Button
+                      size="small"
+                      theme="borderless"
+                      type="primary"
+                      onClick={() => {
+                        setField('hostname', generateRandomHostname())
+                        setError('hostname', '')
+                      }}
+                    >
+                      随机生成
+                    </Button>
+                  }
+                />
+              </FormField>
+              <FormField label="用户名" error={errors.import_user}>
+                <Input
+                  value={f.import_user}
+                  placeholder="请输入登录用户名"
+                  disabled={f.os_type === 'windows'}
+                  onChange={(v) => {
+                    setField('import_user', v)
+                    if (errors.import_user) setError('import_user', validateTemplateUsername(v, false))
+                  }}
+                  onBlur={() => setError('import_user', validateTemplateUsername(f.import_user, false))}
+                />
+              </FormField>
               <FormField label="密码">
                 <Input
                   mode="password"

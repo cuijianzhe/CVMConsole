@@ -18,7 +18,9 @@ import {
   getHostCPUCores,
   getPublicSystemInfo,
   getSettings,
+  getVGPUInstances,
   type CpuAffinityPreset,
+  type VGPUInstance,
 } from '@/api/settings'
 import { getPublicSettings } from '@/api/settings'
 
@@ -38,6 +40,7 @@ export function useVmFormOptions({ isAdmin }: UseVmFormOptionsParams) {
   const [diskFiles, setDiskFiles] = useState<StorageFileItem[]>([])
   const [diskFilesLoading, setDiskFilesLoading] = useState(false)
   const [passthroughDevices, setPassthroughDevices] = useState<PassthroughDevice[]>([])
+  const [vgpuInstances, setVgpuInstances] = useState<VGPUInstance[]>([])
   const [cpuAffinityPresets, setCpuAffinityPresets] = useState<CpuAffinityPreset[]>([])
   const [hostCores, setHostCores] = useState(0)
   const [hostArch, setHostArch] = useState('x86_64')
@@ -208,6 +211,19 @@ export function useVmFormOptions({ isAdmin }: UseVmFormOptionsParams) {
     }
   }, [])
 
+  /** vGPU 实例列表（仅管理员，用于虚拟机表单中选择未绑定实例） */
+  const loadVGPUInstances = useCallback(async (): Promise<VGPUInstance[]> => {
+    try {
+      const res = await getVGPUInstances()
+      const list = res.data || []
+      setVgpuInstances(list)
+      return list
+    } catch {
+      setVgpuInstances([])
+      return []
+    }
+  }, [])
+
   return {
     isoList,
     isoLoading,
@@ -220,6 +236,7 @@ export function useVmFormOptions({ isAdmin }: UseVmFormOptionsParams) {
     diskFiles,
     diskFilesLoading,
     passthroughDevices,
+    vgpuInstances,
     cpuAffinityPresets,
     hostCores,
     hostArch,
@@ -233,6 +250,7 @@ export function useVmFormOptions({ isAdmin }: UseVmFormOptionsParams) {
     loadStorageTargets,
     loadDiskFiles,
     loadPassthroughDevices,
+    loadVGPUInstances,
   }
 }
 

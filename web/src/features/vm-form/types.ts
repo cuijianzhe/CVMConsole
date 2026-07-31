@@ -11,6 +11,7 @@ import type {
   GuestAgentPayload,
   HostDevicePayload,
   Smbios1Payload,
+  VgpuInstancePayload,
   VmBootDevice,
 } from '@/api/vm'
 
@@ -171,6 +172,10 @@ export interface VmFormModel {
   pcie_root_ports: number
   host_devices: HostDevicePayload[]
   host_devices_touched: boolean
+  /** 选中的 vGPU 实例 UUID 列表（仅管理员，创建 / 编辑共用） */
+  vgpu_instances: VgpuInstancePayload[]
+  /** vGPU 实例是否被用户修改过（编辑模式差异提交用） */
+  vgpu_instances_touched: boolean
 
   // ===== 轻量云配额（登记模式） =====
   traffic_down_gb: number

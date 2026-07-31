@@ -7,7 +7,6 @@
 import { lazy } from 'react'
 
 export const LoginPage = lazy(() => import('@/views/login'))
-export const InviteRegisterPage = lazy(() => import('@/views/invite'))
 export const ResetPasswordPage = lazy(() => import('@/views/reset-password'))
 export const DashboardPage = lazy(() => import('@/views/dashboard'))
 export const VmListPage = lazy(() => import('@/views/vm'))
@@ -19,6 +18,8 @@ export const PublicIpPage = lazy(() => import('@/views/public-ip'))
 export const FirewallPage = lazy(() => import('@/views/firewall'))
 export const StoragePoolPage = lazy(() => import('@/views/storage-pool'))
 export const MyStoragePage = lazy(() => import('@/views/my-storage'))
+export const ResourceSpecPage = lazy(() => import('@/views/resource-spec'))
+export const CloudDiskSpecPage = lazy(() => import('@/views/cloud-disk-spec'))
 export const UserPage = lazy(() => import('@/views/user'))
 export const NodePage = lazy(() => import('@/views/node'))
 export const SchedulerPage = lazy(() => import('@/views/scheduler'))

@@ -1,7 +1,7 @@
 /**
  * Hero 状态卡片（详情页左栏）
  * - 状态图标 + 状态文案 + 连续运行时长
- * - 电源操作（开机/继续启动/重启/关机/强制断电/重置）
+ * - 电源操作（开机/继续启动/软重启/硬重启/关机/强制断电/重置）
  * - 快捷操作（锁定/救援模式/重装系统/编辑备注）
  * - 迁移中状态展示提示条，禁用全部操作
  */
@@ -109,7 +109,7 @@ export default function HeroStatusCard({
                 </Popconfirm>
                 {paused && (
                   <Popconfirm
-                    title="确定要重置虚拟机吗？相当于硬重启，适用于无法继续启动的暂停状态。"
+                    title="确定要重置虚拟机吗？将直接重置当前暂停状态（QEMU 进程保持运行），适用于无法继续启动的暂停状态。"
                     onConfirm={() => onPower('reset')}
                   >
                     <Button type="danger" icon={<IconRefresh />} loading={operating} block>
@@ -120,9 +120,20 @@ export default function HeroStatusCard({
               </>
             ) : (
               <>
-                <Popconfirm title="确定要重启吗？" onConfirm={() => onPower('reboot')}>
+                <Popconfirm
+                  title="软重启：直接重置虚拟机（QEMU 进程保持运行，不等待系统优雅关机）。确定要继续吗？"
+                  onConfirm={() => onPower('reset')}
+                >
                   <Button type="warning" theme="solid" icon={<IconRefresh />} loading={operating}>
-                    重启
+                    软重启
+                  </Button>
+                </Popconfirm>
+                <Popconfirm
+                  title="硬重启：先强制断电再重新开机（完全重建 QEMU 进程，耗时较长）。确定要继续吗？"
+                  onConfirm={() => onPower('hard_reboot')}
+                >
+                  <Button type="warning" theme="light" icon={<IconRefresh />} loading={operating}>
+                    硬重启
                   </Button>
                 </Popconfirm>
                 <Popconfirm

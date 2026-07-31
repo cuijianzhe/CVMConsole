@@ -16,6 +16,7 @@ import {
   IconInfoCircle,
   IconPuzzle,
   IconSetting,
+  IconVideo,
 } from '@douyinfe/semi-icons'
 import { DiskIcon } from './icons'
 import { useUserStore } from '@/stores/user'
@@ -52,6 +53,7 @@ import BootOrderSection from './sections/BootOrderSection'
 import SystemBehaviorSection from './sections/SystemBehaviorSection'
 import AdvancedSection from './sections/AdvancedSection'
 import PassthroughSection from './sections/PassthroughSection'
+import VgpuSection from './sections/VgpuSection'
 import ConfirmSection from './sections/ConfirmSection'
 import './vm-form.css'
 
@@ -195,6 +197,7 @@ export default function CreateVmWizard({
       { name: 'security', title: '系统配置', icon: <IconSetting /> },
       { name: 'advanced', title: '高级选项', icon: <IconBolt /> },
       ...(isAdmin ? [{ name: 'passthrough', title: '硬件直通', icon: <IconPuzzle /> }] : []),
+      ...(isAdmin ? [{ name: 'vgpu', title: 'vGPU', icon: <IconVideo /> }] : []),
       { name: 'confirm', title: '确认信息', icon: <IconCheckList /> },
     ]
   }, [reg.enabled, isAdmin, form.form.create_mode, form.form.appliance_config_mode])
@@ -317,6 +320,11 @@ export default function CreateVmWizard({
           }
           if (f.host_devices.length > 0) {
             Toast.warning('批量克隆不能复用同一组物理直通设备，请改为单台克隆')
+            setSubmitting(false)
+            return
+          }
+          if (f.vgpu_instances.length > 0) {
+            Toast.warning('批量克隆不能复用同一组 vGPU 实例，请改为单台克隆')
             setSubmitting(false)
             return
           }
@@ -458,6 +466,8 @@ export default function CreateVmWizard({
         return <AdvancedSection />
       case 'passthrough':
         return <PassthroughSection />
+      case 'vgpu':
+        return <VgpuSection />
       case 'confirm':
         return <ConfirmSection />
       default:
@@ -491,6 +501,7 @@ export default function CreateVmWizard({
       security: { title: '系统配置', desc: '设置引导顺序、守护服务和开机自启' },
       advanced: { title: '高级选项', desc: '开发者选项和底层参数，一般保持默认即可' },
       passthrough: { title: '硬件直通', desc: '将宿主机 PCI 设备直接分配给虚拟机，获得接近原生的性能' },
+      vgpu: { title: 'vGPU 实例', desc: '选择未绑定的 vGPU 实例挂载到虚拟机（可选）' },
       confirm: { title: '确认信息', desc: '核对全部配置后提交创建任务' },
     }
     return meta[currentStepName] || { title: '', desc: '' }

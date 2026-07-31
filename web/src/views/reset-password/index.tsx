@@ -15,7 +15,7 @@ import { validatePassword, checkPasswordBreachAsync, STRONG_PASSWORD_MIN_LENGTH 
 import loginBgDark from '@/assets/img/login-bg.png'
 import loginBgLight from '@/assets/img/login-bg-light.png'
 import '../login/login.css'
-import '../invite/invite.css'
+import './reset-password.css'
 
 export default function ResetPasswordPage() {
   const navigate = useNavigate()
@@ -79,7 +79,7 @@ export default function ResetPasswordPage() {
 
   return (
     <div
-      className="qvm-login qvm-invite"
+      className="qvm-login qvm-reset"
       style={
         { '--qvm-login-bg-img': `url(${isDark ? loginBgDark : loginBgLight})` } as CSSProperties
       }
@@ -89,7 +89,7 @@ export default function ResetPasswordPage() {
       <div className="qvm-aurora" />
       <div className="qvm-grid-tex" />
 
-      <div className="qvm-invite-wrap">
+      <div className="qvm-reset-wrap">
         <div className="qvm-login-card qvm-g-border qvm-fade-up">
           <div className="qvm-lc-head">
             <div className="qvm-lc-logo">Q</div>
@@ -120,7 +120,7 @@ export default function ResetPasswordPage() {
             autoComplete="new-password"
             onEnterPress={handleSubmit}
           />
-          <div className="qvm-invite-pwd-tip">
+          <div className="qvm-reset-pwd-tip">
             密码至少 {STRONG_PASSWORD_MIN_LENGTH} 位，提交时将自动进行泄露密码检测。
           </div>
 
@@ -132,7 +132,7 @@ export default function ResetPasswordPage() {
           >
             重置密码
           </Button>
-          <div className="qvm-invite-back">
+          <div className="qvm-reset-back">
             想起密码了？<a onClick={() => navigate('/login')}>返回登录</a>
           </div>
         </div>

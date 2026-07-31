@@ -318,55 +318,53 @@ export default function TemplateSection() {
       {/* 登录凭据 */}
       {!registrationMode && !disableSystemInit && !isNoInitTemplate && !isOpenWrtTemplate && (
         <SectionCard icon={<IconUser />} title="登录凭据">
-          <div className="qvm-vf-grid-2">
-            <FormField label="主机名" error={errors.hostname}>
-              <Input
-                value={f.hostname}
-                placeholder="自动随机生成"
-                onChange={(v) => {
-                  setField('hostname', v)
-                  if (errors.hostname) setError('hostname', validateHostname(v))
-                }}
-                onBlur={() => setError('hostname', validateHostname(f.hostname))}
-                suffix={
-                  <Button
-                    size="small"
-                    theme="borderless"
-                    type="primary"
-                    onClick={() => {
-                      setField('hostname', generateRandomHostname())
-                      setError('hostname', '')
-                    }}
-                  >
-                    随机生成
-                  </Button>
-                }
-              />
-            </FormField>
-            <FormField
-              label={
-                <span className="qvm-vf-label-inline">
-                  用户名
-                  <Tooltip content={templateUserTip} position="top">
-                    <IconHelpCircle className="qvm-vf-label-help" size="small" />
-                  </Tooltip>
-                </span>
+          <FormField label="主机名" error={errors.hostname}>
+            <Input
+              value={f.hostname}
+              placeholder="自动随机生成"
+              onChange={(v) => {
+                setField('hostname', v)
+                if (errors.hostname) setError('hostname', validateHostname(v))
+              }}
+              onBlur={() => setError('hostname', validateHostname(f.hostname))}
+              suffix={
+                <Button
+                  size="small"
+                  theme="borderless"
+                  type="primary"
+                  onClick={() => {
+                    setField('hostname', generateRandomHostname())
+                    setError('hostname', '')
+                  }}
+                >
+                  随机生成
+                </Button>
               }
-              required
-              error={errors.import_user}
-            >
-              <Input
-                value={f.import_user}
-                placeholder={isWindowsTemplate ? 'administrator' : isFnOSTemplate ? '请输入 fnOS 首次管理员用户名' : '请输入克隆后的登录用户名'}
-                disabled={isWindowsTemplate}
-                onChange={(v) => {
-                  setField('import_user', v)
-                  if (errors.import_user) setError('import_user', validateTemplateUsername(v, isWindowsTemplate))
-                }}
-                onBlur={() => setError('import_user', validateTemplateUsername(f.import_user, isWindowsTemplate))}
-              />
-            </FormField>
-          </div>
+            />
+          </FormField>
+          <FormField
+            label={
+              <span className="qvm-vf-label-inline">
+                用户名
+                <Tooltip content={templateUserTip} position="top">
+                  <IconHelpCircle className="qvm-vf-label-help" size="small" />
+                </Tooltip>
+              </span>
+            }
+            required
+            error={errors.import_user}
+          >
+            <Input
+              value={f.import_user}
+              placeholder={isWindowsTemplate ? 'administrator' : isFnOSTemplate ? '请输入 fnOS 首次管理员用户名' : '请输入克隆后的登录用户名'}
+              disabled={isWindowsTemplate}
+              onChange={(v) => {
+                setField('import_user', v)
+                if (errors.import_user) setError('import_user', validateTemplateUsername(v, isWindowsTemplate))
+              }}
+              onBlur={() => setError('import_user', validateTemplateUsername(f.import_user, isWindowsTemplate))}
+            />
+          </FormField>
           <FormField
             label={
               <span className="qvm-vf-label-inline">

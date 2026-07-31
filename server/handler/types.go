@@ -8,7 +8,7 @@ import (
 
 // VmOperateRequest 虚拟机操作请求
 type VmOperateRequest struct {
-	Action string `json:"action" binding:"required"` // start, shutdown, destroy, reboot, reset
+	Action string `json:"action" binding:"required"` // start, shutdown, destroy, reboot, reset, hard_reboot
 }
 
 // ResetLinuxPasswordRequest 重置虚拟机密码请求

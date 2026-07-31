@@ -19,7 +19,7 @@
 | 资源进度条 | 配置列下方实时显示 CPU（青色渐变）/ MEM（紫色渐变）百分比；非运行状态显示灰色空条与状态标注 |
 | 状态/操作图标化 | 状态列与操作列均为纯图标，悬停 Tooltip 显示文案 |
 | IP 地址直显 | 列表随 SSE 直接下发 IP（`include_ip=1`），未分配时显示「未分配」 |
-| 批量电源 | 勾选后工具栏「批量电源」可用：开机 / 重启 / 关机 / 强制断电 / 删除（危险操作带二次确认，含锁定机批量提醒） |
+| 批量电源 | 勾选后工具栏「批量电源」可用：开机 / 软重启 / 硬重启 / 关机 / 强制断电 / 删除（危险操作带二次确认，含锁定机批量提醒） |
 | 新建虚拟机 | 全屏弹窗向导支持 ISO 安装 / 模板克隆（含批量）/ 导入已有磁盘 / 导入 OVF-OVA 虚拟机包四种方式，与详情页编辑表单共用 `features/vm-form` 同一套模型与规则 |
 | 单机操作 | 控制台（占位）、电源（按状态自动切换 开机/关机/继续启动）、更多菜单 |
 | 维护模式 | 系统维护模式下页面内容虚化并弹出维护提示 |
@@ -28,7 +28,7 @@
 
 按角色与云类型裁剪显示：
 
-- 重置（仅暂停态）/ 重启 / 强制断电（仅运行态）
+- 重置（仅暂停态）/ 软重启 / 硬重启 / 强制断电（仅运行态）
 - 编辑备注、编辑分组（轻量云隐藏）
 - 制作模板（仅管理员）
 - 导出虚拟机（轻量云隐藏）：可选兼容 QCOW2 系统盘或标准 OVA；OVA 要求关机，系统盘固定、数据盘可选，结果计入我的存储配额
@@ -83,7 +83,7 @@ web/src/views/vm/
 ## 涉及接口
 
 - `GET /vm/list`、`GET /self/vms`、`GET /vm/sse`、`GET /self/vms/sse`
-- `POST /vm/:name/operate`（start/shutdown/reboot/destroy/reset）
+- `POST /vm/:name/operate`（start/shutdown/reboot/destroy/reset/hard_reboot）
 - `PUT /vm/:name`（备注/分组/标签）、`GET /vm/:name/ip`、`GET /vm/:name/qcow2-disks`
 - `DELETE /vm/:name`、`DELETE /self/vm/:name`
 - `POST /vm/:name/lock|unlock|rescue|make-independent|reinstall`

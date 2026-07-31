@@ -30,6 +30,7 @@ export type VmMenuCommand =
   | 'reboot'
   | 'destroy'
   | 'reset'
+  | 'hard_reboot'
   | 'remark'
   | 'group'
   | 'template'
@@ -111,8 +112,13 @@ export default function VmActionsCell({
               </Dropdown.Item>
             )}
             {running && (
-              <Dropdown.Item icon={<IconRestart />} onClick={() => onMenu('reboot', vm)}>
-                重启
+              <Dropdown.Item icon={<IconRestart />} onClick={() => onMenu('reset', vm)}>
+                软重启
+              </Dropdown.Item>
+            )}
+            {running && (
+              <Dropdown.Item icon={<IconRefresh />} onClick={() => onMenu('hard_reboot', vm)}>
+                硬重启
               </Dropdown.Item>
             )}
             {(running || paused) && (

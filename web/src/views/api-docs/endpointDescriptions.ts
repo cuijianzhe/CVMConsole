@@ -48,11 +48,11 @@ export const fallbackGroupDescription = '未归入以上模块的通用接口。
 
 // 复用的请求体描述
 const vmCreateBody =
-  'JSON: name, remark, vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, watchdog, boot_order[], video_model(virtio/vga/vmvga/cirrus/ramfb/none，none=禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), cpu_limit_percent(仅管理员, 0-100), virt_type(kvm/qemu), arch(x86_64/aarch64/riscv64), memory_dynamic{dynamic_enabled,memory_backend,memory_initial,memory_min,memory_max,memory_auto_balloon,memory_current}, switch_id, security_group_id, storage_pool_id, extra_disks[{size,format,bus,storage_pool_id}], host_devices[{pci_address}](仅管理员)'
+  'JSON: name, remark, vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, watchdog, boot_order[], video_model(virtio/vga/vmvga/cirrus/ramfb/none，none=禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), cpu_limit_percent(仅管理员, 0-100), virt_type(kvm/qemu), arch(x86_64/aarch64/riscv64), memory_dynamic{dynamic_enabled,memory_backend,memory_initial,memory_min,memory_max,memory_auto_balloon,memory_current}, switch_id, security_group_id, storage_pool_id, extra_disks[{size,format,bus,storage_pool_id}], host_devices[{pci_address}](仅管理员), vgpu_instances[{uuid}](仅管理员,要挂载的vGPU实例UUID列表)'
 const selfVmCreateBody =
   'JSON: name, remark, vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, boot_order[], video_model(virtio/vga/vmvga/cirrus/ramfb/none，none=禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), memory_dynamic{dynamic_enabled,memory_backend,memory_initial,memory_min,memory_max,memory_auto_balloon,memory_current}, switch_id, security_group_id, storage_pool_id, extra_disks[{size,format,bus,storage_pool_id}]'
 const cloneBody =
-  'JSON: template/name, new_name/name, remark, vcpu, ram, disk_size, disk_bus, switch_id, security_group_id, storage_pool_id, extra_disks[{size,format,bus,storage_pool_id}], host_devices[{pci_address}](仅管理员), nic_model, video_model(支持none禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode, cpu_limit_percent(仅管理员, 0-100), first_boot_reboot_mode(normal/cold), preserve_fnos_device_id/fnos_device_id(FnOS 可选), autostart, freeze, apic, pae, rtc_offset, credentials, kvm_hidden(bool), vendor_id(str), nested_virt(bool,默认true) 等克隆表单字段'
+  'JSON: template/name, new_name/name, remark, vcpu, ram, disk_size, disk_bus, switch_id, security_group_id, storage_pool_id, extra_disks[{size,format,bus,storage_pool_id}], host_devices[{pci_address}](仅管理员), vgpu_instances[{uuid}](仅管理员,要挂载的vGPU实例UUID列表), nic_model, video_model(支持none禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode, cpu_limit_percent(仅管理员, 0-100), first_boot_reboot_mode(normal/cold), preserve_fnos_device_id/fnos_device_id(FnOS 可选), autostart, freeze, apic, pae, rtc_offset, credentials, kvm_hidden(bool), vendor_id(str), nested_virt(bool,默认true) 等克隆表单字段'
 const reinstallBody = 'JSON: template, disk_size, hostname, user, password, preserve_fnos_device_id, fnos_device_id'
 const scheduleBody = 'JSON: name, action(start/shutdown/destroy/reboot/delete), cron/execute_at, enabled, timezone, params'
 const portForwardBody =
@@ -305,14 +305,14 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
     response: 'data: total_ports, used_ports, free_ports。',
   },
   'POST /vm/:name/operate': {
-    summary: '执行开机/关机/重启等操作',
-    body: 'JSON: action(start/shutdown/destroy/reboot/reset)',
+    summary: '执行开机/关机/软重启/硬重启等操作',
+    body: 'JSON: action(start/shutdown/destroy/reboot/reset/hard_reboot)',
     requiredFields: ['action'],
   },
   'PUT /vm/:name': {
     summary: '编辑虚拟机配置',
-    body: 'JSON: vcpu, ram, remark, tags[], boot_type, boot_order, bandwidth, display, apic, pae, rtc, cpu_limit_percent(仅管理员, 0-100) 等可编辑字段',
-    notes: ['remark 支持单独提交，用于独立更新虚拟机备注。', 'tags[] 支持单独提交，最多 20 个标签，单个标签最多 32 个字符。', '修改 boot_type 需要虚拟机关机后执行。'],
+    body: 'JSON: vcpu, ram, remark, tags[], boot_type, boot_order, bandwidth, display, apic, pae, rtc, cpu_limit_percent(仅管理员, 0-100), host_devices[{pci_address}](仅管理员), vgpu_instances[{uuid}](仅管理员,要挂载的vGPU实例UUID列表) 等可编辑字段',
+    notes: ['remark 支持单独提交，用于独立更新虚拟机备注。', 'tags[] 支持单独提交，最多 20 个标签，单个标签最多 32 个字符。', '修改 boot_type 需要虚拟机关机后执行。', 'host_devices / vgpu_instances 仅管理员可改，且需要虚拟机关机后修改。'],
   },
   'PUT /vm/:name/xml': { summary: '保存虚拟机 XML', body: 'JSON: xml' },
   'GET /vm/:name/stats': { summary: '读取虚拟机实时资源统计', query: ['refresh'] },
@@ -858,6 +858,31 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   'GET /host/passthrough': { summary: '获取可直通 PCI 设备列表' },
   'POST /host/passthrough/bind': { summary: '绑定 PCI 设备到 vfio-pci', body: 'JSON: pci_address' },
   'POST /host/passthrough/unbind': { summary: '从 vfio-pci 解绑 PCI 设备', body: 'JSON: pci_address' },
+  'GET /host/vgpu/profiles': {
+    summary: '获取 vGPU 配置列表',
+    response: 'data: vGPU 配置数组，每项含 pci_device, profile_name, description, max_instances, memory_mb。',
+    notes: ['返回宿主机上已识别的 vGPU 配置（profile），用于创建实例时选择。'],
+  },
+  'POST /host/vgpu/discover': {
+    summary: '发现 vGPU 设备',
+    response: 'data: 扫描后刷新的 vGPU 配置列表。',
+    notes: ['扫描宿主机 PCI 设备并刷新 vGPU 配置列表，耗时较长（超时 60s）。'],
+  },
+  'GET /host/vgpu/instances': {
+    summary: '获取 vGPU 实例列表',
+    response: 'data: vGPU 实例数组，每项含 uuid, profile_id, profile_name, pci_device, status, bound_vm。',
+    notes: ['返回所有 vGPU 实例及其绑定状态，虚拟机表单据此筛选可挂载的未绑定实例。'],
+  },
+  'POST /host/vgpu/instances': {
+    summary: '创建 vGPU 实例',
+    body: 'JSON: profile_id（vGPU 配置名称）',
+    response: 'data: 新建的 vGPU 实例，含 uuid 和 profile_id。',
+    requiredFields: ['profile_id'],
+  },
+  'DELETE /host/vgpu/instances/:id': {
+    summary: '销毁 vGPU 实例',
+    notes: ['已绑定到虚拟机的实例销毁前请先解绑；操作不可恢复。'],
+  },
 
   // ==================== 任务与调度 ====================
   'GET /task/list': { summary: '获取任务列表', query: ['page', 'page_size', 'status', 'type'] },

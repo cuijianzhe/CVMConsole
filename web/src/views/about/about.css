@@ -31,42 +31,6 @@
   color: var(--semi-color-primary);
 }
 
-/* 技术栈 */
-.about-tech-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-.about-tech-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 14px 16px;
-  background: var(--semi-color-fill-0);
-  border-radius: 10px;
-  border: 1px solid transparent;
-  text-decoration: none;
-  transition: all 0.2s ease;
-}
-
-.about-tech-item:hover {
-  background: var(--semi-color-fill-1);
-  border-color: var(--semi-color-primary-light-active);
-  transform: translateY(-1px);
-}
-
-.about-tech-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--semi-color-text-0);
-}
-
-.about-tech-desc {
-  font-size: 12px;
-  color: var(--semi-color-text-2);
-}
-
 /* 信息网格 */
 .about-info-grid {
   display: grid;
@@ -125,14 +89,12 @@
 
 /* 深色模式：大面积文字降为柔和灰，避免高对比刺眼 */
 body[theme-mode='dark'] .about-section-header,
-body[theme-mode='dark'] .about-tech-name,
 body[theme-mode='dark'] .about-info-value {
   color: #b8c1cf;
 }
 
 /* 响应式 */
 @media (max-width: 768px) {
-  .about-tech-grid,
   .about-info-grid {
     grid-template-columns: 1fr;
   }

@@ -1,6 +1,6 @@
 /**
  * 系统设置页（仅管理员）
- * - 8 个 Tab：基础 / 存储与网络 / 宿主机 / 调度与高级 / 安全与维护 / 日志 / 诊断导出 / 存储管理
+ * - 9 个 Tab：基础 / 存储与网络 / 宿主机 / 调度与高级 / 安全与维护 / 日志 / 诊断导出 / 存储管理 / vGPU 管理
  * - 常规配置保存后立即生效并持久化到数据库；宿主机级选项写入系统配置文件
  * - 支持 ?tab=xxx 直接定位（如虚拟机表单空状态跳转到"存储与网络"）
  */
@@ -10,6 +10,7 @@ import { Button, Spin, Tabs, Toast } from '@douyinfe/semi-ui'
 import {
   IconArticle,
   IconClockStroked,
+  IconColorPalette,
   IconDesktop,
   IconLock,
   IconPulse,
@@ -19,10 +20,12 @@ import {
   IconShield,
   IconTick,
   IconFolder,
+  IconVideo,
 } from '@douyinfe/semi-icons'
 import { getSettings, updateSettings } from '@/api/settings'
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
+import { applyDocumentTitle, applyFavicon } from '@/config/site'
 import { ROLES } from '@/config/constants'
 import {
   DEFAULT_MAINTENANCE_SERVICE_UNITS,
@@ -41,6 +44,8 @@ import SecurityTab from './components/SecurityTab'
 import LogTab from './components/LogTab'
 import DiagnosticsTab from './components/DiagnosticsTab'
 import StorageMaintainTab from './components/StorageMaintainTab'
+import VgpuTab from './components/VgpuTab'
+import UiCustomTab from './components/UiCustomTab'
 import './settings.css'
 
 export default function SettingsPage() {
@@ -108,6 +113,20 @@ export default function SettingsPage() {
         password_breach_check_enabled: form.password_breach_check_enabled,
         spice_enabled_by_default: form.spice_enabled_by_default,
       })
+      // UI 自定义配置保存后立即应用到全局（favicon / 浏览器标题 / 图标）
+      useAppStore.getState().setUiCustomization({
+        systemHomeIcon: form.system_home_icon,
+        homeTitle: form.home_title,
+        loginPageIcon: form.login_page_icon,
+        productName: form.product_name,
+        browserFavicon: form.browser_favicon,
+        browserTitle: form.browser_title,
+        footerText: form.footer_text,
+        footerLink: form.footer_link,
+      })
+      // 立即应用 favicon 与浏览器标题
+      applyFavicon(form.browser_favicon)
+      applyDocumentTitle()
       Toast.success(res.message || '设置已保存')
       await fetchData()
     } catch {
@@ -206,10 +225,16 @@ export default function SettingsPage() {
             <Tabs.TabPane tab="存储管理" itemKey="storage" icon={<IconFolder />}>
               <StorageMaintainTab />
             </Tabs.TabPane>
+            <Tabs.TabPane tab="vGPU 管理" itemKey="vgpu" icon={<IconVideo />}>
+              <VgpuTab />
+            </Tabs.TabPane>
+            <Tabs.TabPane tab="UI 自定义" itemKey="ui_custom" icon={<IconColorPalette />}>
+              <UiCustomTab form={form} patch={patch} />
+            </Tabs.TabPane>
           </Tabs>
 
-          {/* 日志/诊断/存储管理 Tab 为独立操作区，无需整体保存 */}
-          {!['diagnostics', 'storage'].includes(activeTab) && (
+          {/* 日志/诊断/存储管理/vGPU 管理 Tab 为独立操作区，无需整体保存 */}
+          {!['diagnostics', 'storage', 'vgpu'].includes(activeTab) && (
             <div className="stg-footer">
               <Button
                 type="primary"

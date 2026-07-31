@@ -108,7 +108,8 @@ export default function VmDetailPage() {
           reboot: '重启',
           shutdown: '关机',
           destroy: '断电',
-          reset: '重置',
+          reset: '软重启',
+          hard_reboot: '硬重启',
         }
         const resStatus = (res as unknown as { status?: string }).status
         if (resStatus === 'no_change') {

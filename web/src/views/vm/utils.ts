@@ -155,5 +155,6 @@ export const POWER_ACTION_TEXT: Record<string, string> = {
   shutdown: '关机',
   reboot: '重启',
   destroy: '强制断电',
-  reset: '重置',
+  reset: '软重启',
+  hard_reboot: '硬重启',
 }

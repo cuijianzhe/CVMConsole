@@ -153,6 +153,19 @@ export function getUserList() {
   return service.get<unknown, ApiResponse<UserListItem[]>>('/user/list', { silent: true })
 }
 
+/** 轻量用户列表项（仅含 id 与 username，用于下拉选项等轻量场景） */
+export interface UserListSimpleItem {
+  id: number
+  username: string
+}
+
+/** 获取轻量用户列表（仅返回 id 和 username，用于下拉选项等场景） */
+export function getUserListSimple() {
+  return service.get<unknown, ApiResponse<UserListSimpleItem[]>>('/users/simple', {
+    silent: true,
+  })
+}
+
 /** 用户级配额字段（创建 / 编辑共用） */
 export interface UserQuotaPayload {
   max_cpu: number

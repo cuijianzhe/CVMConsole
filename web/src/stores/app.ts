@@ -6,6 +6,26 @@ import { STORAGE_KEYS, THEME_MODES, type ThemeMode } from '@/config/constants'
 
 export const DEFAULT_SITE_TITLE = 'QVMConsole'
 
+/** UI 自定义配置（来自公开设置，用于侧边栏/登录页/浏览器图标与标题） */
+export interface UiCustomization {
+  /** 系统首页图标（base64，空字符串表示未设置） */
+  systemHomeIcon: string
+  /** 首页标题（侧边栏产品名，留空回退站点标题） */
+  homeTitle: string
+  /** 登录页图标（base64） */
+  loginPageIcon: string
+  /** 产品名称（登录页展示，留空回退站点标题） */
+  productName: string
+  /** 浏览器 Favicon（base64） */
+  browserFavicon: string
+  /** 浏览器标签页标题（留空回退站点标题） */
+  browserTitle: string
+  /** 页脚版权信息（留空则使用默认格式） */
+  footerText: string
+  /** 页脚超链接（留空则纯文本展示） */
+  footerLink: string
+}
+
 interface AppState {
   /** 主题模式：浅色 / 深色 / 跟随系统 */
   themeMode: ThemeMode
@@ -17,6 +37,8 @@ interface AppState {
   passwordBreachCheckEnabled: boolean
   /** 创建虚拟机时 SPICE 默认开关初始值（公开设置同步，默认关闭） */
   spiceEnabledByDefault: boolean
+  /** UI 自定义配置（公开设置同步） */
+  uiCustomization: UiCustomization
   setThemeMode: (mode: ThemeMode) => void
   toggleSidebar: () => void
   setSidebarCollapsed: (collapsed: boolean) => void
@@ -25,6 +47,8 @@ interface AppState {
     password_breach_check_enabled?: boolean
     spice_enabled_by_default?: boolean
   }) => void
+  /** 更新 UI 自定义配置（传入部分字段，与现有值合并） */
+  setUiCustomization: (partial: Partial<UiCustomization>) => void
 }
 
 function normalizeTheme(value: string | null): ThemeMode {
@@ -64,6 +88,16 @@ export const useAppStore = create<AppState>()((set) => ({
   siteTitle: normalizeSiteTitle(localStorage.getItem(STORAGE_KEYS.siteTitle)),
   passwordBreachCheckEnabled: true,
   spiceEnabledByDefault: false,
+  uiCustomization: {
+    systemHomeIcon: '',
+    homeTitle: '',
+    loginPageIcon: '',
+    productName: '',
+    browserFavicon: '',
+    browserTitle: '',
+    footerText: '',
+    footerLink: '',
+  },
 
   setThemeMode: (mode) => {
     localStorage.setItem(STORAGE_KEYS.theme, mode)
@@ -99,6 +133,12 @@ export const useAppStore = create<AppState>()((set) => ({
         flags.spice_enabled_by_default !== undefined
           ? flags.spice_enabled_by_default === true
           : state.spiceEnabledByDefault,
+    }))
+  },
+
+  setUiCustomization: (partial) => {
+    set((state) => ({
+      uiCustomization: { ...state.uiCustomization, ...partial },
     }))
   },
 }))

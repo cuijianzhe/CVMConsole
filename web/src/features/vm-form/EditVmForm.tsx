@@ -11,6 +11,7 @@ import {
   IconPuzzle,
   IconServer,
   IconSetting,
+  IconVideo,
 } from '@douyinfe/semi-icons'
 import { DiskIcon } from './icons'
 import { useUserStore } from '@/stores/user'
@@ -48,6 +49,7 @@ import BootOrderSection from './sections/BootOrderSection'
 import SystemBehaviorSection from './sections/SystemBehaviorSection'
 import AdvancedSection from './sections/AdvancedSection'
 import PassthroughSection from './sections/PassthroughSection'
+import VgpuSection from './sections/VgpuSection'
 import VmXmlDialog from './dialogs/VmXmlDialog'
 import './vm-form.css'
 
@@ -118,6 +120,8 @@ export default function EditVmForm({ vmName, vmStatus, onSaved }: EditVmFormProp
       devices.setEditBootDevices(bootDevices)
       // 直通设备（仅管理员，异步加载不阻塞快照）
       let hostDevices: { pci_address: string }[] = []
+      // vGPU 实例（仅管理员，从全局实例列表中筛选绑定到当前 VM 的实例）
+      let vgpuInstances: { uuid: string }[] = []
       if (isAdmin) {
         try {
           const passRes = await getVmPassthroughDevices(vmName)
@@ -125,6 +129,15 @@ export default function EditVmForm({ vmName, vmStatus, onSaved }: EditVmFormProp
           void options.loadPassthroughDevices()
         } catch {
           hostDevices = []
+        }
+        // 加载全部 vGPU 实例：既用于填充当前 VM 已绑定实例，也供选择弹窗使用
+        try {
+          const vgpuList = await options.loadVGPUInstances()
+          vgpuInstances = vgpuList
+            .filter((i) => i.bound_vm === vmName)
+            .map((i) => ({ uuid: i.uuid }))
+        } catch {
+          vgpuInstances = []
         }
       }
       // SPICE 真实状态
@@ -139,6 +152,8 @@ export default function EditVmForm({ vmName, vmStatus, onSaved }: EditVmFormProp
       const nextForm = buildEditFormState(initialForm, detail)
       nextForm.host_devices = hostDevices
       nextForm.host_devices_touched = false
+      nextForm.vgpu_instances = vgpuInstances
+      nextForm.vgpu_instances_touched = false
       nextForm.spice_enabled = spiceEnabled
       form.replaceForm(nextForm)
       setOrigSpiceEnabled(spiceEnabled)
@@ -317,6 +332,20 @@ export default function EditVmForm({ vmName, vmStatus, onSaved }: EditVmFormProp
               itemKey="passthrough"
             >
               <PassthroughSection />
+            </TabPane>
+          )}
+
+          {isAdmin && (
+            <TabPane
+              tab={
+                <span>
+                  <IconVideo style={{ marginRight: 6 }} />
+                  vGPU
+                </span>
+              }
+              itemKey="vgpu"
+            >
+              <VgpuSection />
             </TabPane>
           )}
 

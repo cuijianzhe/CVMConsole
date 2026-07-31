@@ -231,7 +231,7 @@ func OperateVm(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
-			"message": "请指定操作类型（action: start/shutdown/destroy/reboot/reset）",
+			"message": "请指定操作类型（action: start/shutdown/destroy/reboot/reset/hard_reboot）",
 		})
 		return
 	}
@@ -246,14 +246,14 @@ func OperateVm(c *gin.Context) {
 		return
 	}
 
-	// 关机/强制断电时若虚拟机已锁定，在响应中附加提示信息
+	// 关机/强制断电/硬重启时若虚拟机已锁定，在响应中附加提示信息
 	var lockWarning string
-	if (req.Action == "shutdown" || req.Action == "destroy") && service.IsVMLocked(name) {
+	if (req.Action == "shutdown" || req.Action == "destroy" || req.Action == "hard_reboot") && service.IsVMLocked(name) {
 		lockWarning = "该虚拟机已锁定，关机操作将继续执行"
 	}
 
-	// 开机前检查配额（仅非管理员用户）
-	if req.Action == "start" {
+	// 开机前检查配额（仅非管理员用户）；硬重启内部会执行 start，同样需要检查
+	if req.Action == "start" || req.Action == "hard_reboot" {
 		role, _ := c.Get("role")
 		if role != "admin" {
 			username, _ := c.Get("username")
@@ -289,6 +289,9 @@ func OperateVm(c *gin.Context) {
 	case "reset":
 		err = service.ResetVM(name)
 		actionText = "重置"
+	case "hard_reboot":
+		err = service.HardRebootVM(name)
+		actionText = "硬重启"
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
@@ -319,8 +322,8 @@ func OperateVm(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 	service.RefreshVMCacheByNameAsync(name)
 
-	// 开机/关机/强制断电后异步触发全局带宽重新分配
-	if req.Action == "start" || req.Action == "shutdown" || req.Action == "destroy" {
+	// 开机/关机/强制断电/硬重启后异步触发全局带宽重新分配
+	if req.Action == "start" || req.Action == "shutdown" || req.Action == "destroy" || req.Action == "hard_reboot" {
 		cfg := config.GlobalConfig
 		if cfg.MaxBurstInbound > 0 || cfg.MaxBurstOutbound > 0 {
 			go func() {
@@ -336,8 +339,8 @@ func OperateVm(c *gin.Context) {
 		}
 	}
 
-	// 开机后应用带宽限速（确保运行中的 VM 应用最新限速规则）
-	if req.Action == "start" {
+	// 开机/硬重启后应用带宽限速（确保运行中的 VM 应用最新限速规则）
+	if req.Action == "start" || req.Action == "hard_reboot" {
 		role, _ := c.Get("role")
 		if role != "admin" {
 			username, _ := c.Get("username")

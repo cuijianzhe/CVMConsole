@@ -132,7 +132,7 @@ export interface VmIPInfo {
 }
 
 /** 电源操作类型 */
-export type VmPowerAction = 'start' | 'shutdown' | 'reboot' | 'destroy' | 'reset'
+export type VmPowerAction = 'start' | 'shutdown' | 'reboot' | 'destroy' | 'reset' | 'hard_reboot'
 
 /** 虚拟机列表查询参数 */
 export interface VmListQuery {
@@ -257,6 +257,11 @@ export interface HostDevicePayload {
   pci_address: string
 }
 
+/** vGPU 实例引用（创建/编辑虚拟机时指定要挂载的 vGPU 实例 UUID） */
+export interface VgpuInstancePayload {
+  uuid: string
+}
+
 /** 编辑虚拟机提交载荷（仅发送变化字段，后端逐项应用） */
 export interface UpdateVmPayload {
   remark?: string
@@ -282,6 +287,7 @@ export interface UpdateVmPayload {
   firmware_compat?: boolean
   direct_boot?: DirectBootPayload
   host_devices?: HostDevicePayload[]
+  vgpu_instances?: VgpuInstancePayload[]
   disk_iops?: Record<string, DiskIopsPayload>
   cpu_limit_percent?: number
   cpu_affinity?: string
@@ -949,6 +955,7 @@ export interface CreateVmPayload {
   pcie_root_ports?: number
   extra_disks?: ExtraDiskPayload[]
   host_devices?: HostDevicePayload[]
+  vgpu_instances?: VgpuInstancePayload[]
   extra_nics?: ExtraNicPayload[]
   firmware_compat?: boolean
   direct_boot?: DirectBootPayload
@@ -1004,6 +1011,7 @@ export interface CloneVmPayload {
   fnos_device_id?: string
   extra_disks?: ExtraDiskPayload[]
   host_devices?: HostDevicePayload[]
+  vgpu_instances?: VgpuInstancePayload[]
   pcie_root_ports?: number
   static_ip?: string
   gateway?: string

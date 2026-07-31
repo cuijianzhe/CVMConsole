@@ -159,6 +159,8 @@ func InitDB() {
 	migrateVPCBindingInterfaceOrder(hadVPCBindingInterfaceOrderColumn)
 	migrateVPCBindingInterfaceOrderNormalize()
 	migrateVPCSwitchCIDRColumn(hadVPCSwitchCIDRColumn)
+	// 修复 vgpu_profiles 表中 GORM 蛇形命名错误导致的列名 pc_idevice → pci_device
+	migrateVGPUProfilePCIDeviceColumn()
 
 	// 兼容旧用户：补齐默认状态，确保升级后能继续登录
 	if err := DB.Model(&User{}).Where("status = '' OR status IS NULL").Updates(map[string]interface{}{
@@ -271,6 +273,38 @@ func migratePublicIPCIDRColumn() {
 		logger.App.Warn("删除公网IP遗留列 c_id_r 失败", "error", err)
 	} else {
 		logger.App.Info("已删除公网IP遗留列 c_id_r")
+	}
+}
+
+// migrateVGPUProfilePCIDeviceColumn 修复 GORM 蛇形命名错误：
+// PCIDevice 被 GORM 默认转换为 pc_idevice，而代码和 JSON 标签使用 pci_device。
+// 如果旧列 pc_idevice 存在且新列 pci_device 不存在，则重命名；若两者都存在则合并数据后删除旧列。
+func migrateVGPUProfilePCIDeviceColumn() {
+	if DB == nil || !DB.Migrator().HasTable(&VGPUProfile{}) {
+		return
+	}
+	hasOld := DB.Migrator().HasColumn(&VGPUProfile{}, "pc_idevice")
+	hasNew := DB.Migrator().HasColumn(&VGPUProfile{}, "pci_device")
+	if !hasOld {
+		return // 没有旧列，无需迁移（AutoMigrate 已正确创建 pci_device）
+	}
+	if hasNew {
+		// 新旧列都存在：将旧列数据合并到新列（新列为空时回填），然后删除旧列
+		if err := DB.Exec("UPDATE vgpu_profiles SET pci_device = pc_idevice WHERE (pci_device IS NULL OR pci_device = '') AND pc_idevice IS NOT NULL AND pc_idevice <> ''").Error; err != nil {
+			logger.App.Warn("合并 vgpu_profiles.pci_device 数据失败", "error", err)
+		}
+		if err := DB.Exec("ALTER TABLE vgpu_profiles DROP COLUMN pc_idevice").Error; err != nil {
+			logger.App.Warn("删除 vgpu_profiles 遗留列 pc_idevice 失败", "error", err)
+		} else {
+			logger.App.Info("已删除 vgpu_profiles 遗留列 pc_idevice")
+		}
+	} else {
+		// 只有旧列：直接重命名为 pci_device
+		if err := DB.Exec("ALTER TABLE vgpu_profiles CHANGE COLUMN pc_idevice pci_device VARCHAR(64)").Error; err != nil {
+			logger.App.Warn("重命名 vgpu_profiles.pc_idevice → pci_device 失败", "error", err)
+		} else {
+			logger.App.Info("已重命名 vgpu_profiles.pc_idevice → pci_device")
+		}
 	}
 }
 
