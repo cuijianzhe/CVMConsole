@@ -69,19 +69,24 @@ CVMConsole 是一个面向小型企业和个人私有云服务场景的开源虚
 ## 技术栈
 
 ### 后端
-- **语言**: Go 1.25.4
+- **语言**: Go 1.26.0
 - **Web 框架**: Gin v1.12.0
 - **数据库**: SQLite + GORM v1.31.1
 - **虚拟化**: go-libvirt RPC
-- **认证**: JWT v5.3.1
+- **认证**: JWT v5.3.1 + TOTP v1.5.0 + crypto
+- **WebSocket**: gorilla/websocket v1.5.3
 - **日志**: lumberjack v2.2.1
 
 ### 前端
-- **框架**: Vue 3.5.30
-- **UI 库**: Element Plus v2.13.5
+- **UI 框架**: React v19.2.7 + TypeScript v6.0.2
+- **组件库**: Semi Design v2.101.1（@douyinfe/semi-ui）
+- **构建工具**: Vite v8.1.1
+- **路由**: react-router-dom v7.18.1
+- **状态管理**: Zustand v5.0.14
 - **HTTP 客户端**: Axios v1.18.1
-- **VNC 客户端**: @novnc/novnc v1.7.0
-- **构建工具**: Vite v8.0.0
+- **图表**: ECharts v6.1.0
+- **终端**: @xterm/xterm v6.0.0
+- **VNC**: @novnc/novnc v1.7.0
 
 ### 虚拟化基础设施
 - **虚拟化平台**: KVM/QEMU
