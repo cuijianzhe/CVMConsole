@@ -48,7 +48,7 @@ export function validateHostname(hostname: string): string {
   return ''
 }
 
-/** 登录用户名（模板初始化） */
+/** 登录用户名（模板初始化，留空则使用模板默认用户名） */
 export function validateTemplateUsername(user: string, isWindowsTemplate: boolean): string {
   const normalized = String(user || '').trim()
   if (isWindowsTemplate) {
@@ -57,19 +57,18 @@ export function validateTemplateUsername(user: string, isWindowsTemplate: boolea
     }
     return ''
   }
-  if (!normalized) return '请输入用户名'
+  // 留空不强制，使用模板默认用户名
+  if (!normalized) return ''
   if (!TEMPLATE_USERNAME_PATTERN.test(normalized)) {
     return '用户名只能以小写字母或下划线开头，且只能包含小写字母、数字、下划线和短横线'
   }
   return ''
 }
 
-/** 登录密码（模板初始化；批量创建可留空自动生成） */
+/** 登录密码（模板初始化；留空则由后端自动生成随机强密码） */
 export function validateTemplatePassword(password: string, batchCount: number): string {
-  if (!password) {
-    if (batchCount > 1) return ''
-    return '请输入密码'
-  }
+  // 留空不强制，单台和批量均由后端自动生成随机强密码
+  if (!password) return ''
   if (
     password.length < STRONG_PASSWORD_MIN_LENGTH ||
     !PASSWORD_ALLOWED_PATTERN.test(password)
@@ -217,10 +216,8 @@ export function collectMissingRequired(form: VmFormModel, ctx: ValidateContext):
     if (ctx.templateMinDiskSize > 0 && form.disk_size < ctx.templateMinDiskSize) {
       missing.push(`磁盘大小不能小于 ${ctx.templateMinDiskSize} GB`)
     }
-    if (!ctx.registrationMode && !ctx.disableSystemInit && !ctx.isNoInitTemplate && !ctx.isOpenWrtTemplate) {
-      if (!form.import_user) missing.push('用户名')
-      if (!form.import_password && form.batch_count <= 1) missing.push('密码')
-    }
+    // 登录凭据（用户名/密码/主机名）均不强制填写，留空由后端自动处理
+
     if (ctx.isOpenWrtTemplate && !ctx.disableSystemInit && !form.static_ip) {
       missing.push('静态 IP')
     }

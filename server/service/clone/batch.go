@@ -71,10 +71,8 @@ func BatchCloneVM(ctx context.Context, params *BatchCloneParams, progressFn func
 
 			vmName := fmt.Sprintf("%s-%s", params.Prefix, padNum(params.StartNum+index))
 
+			// 密码留空则保留模板原密码，不强制生成随机密码
 			vmPassword := params.Password
-			if vmPassword == "" {
-				vmPassword = GenerateRandomStrongPassword()
-			}
 
 			// 批量模式下，用户指定主机名时追加编号后缀确保每台唯一（如 myserver-01, myserver-02）
 			vmHostname := params.Hostname

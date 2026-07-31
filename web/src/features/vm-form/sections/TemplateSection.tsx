@@ -318,10 +318,12 @@ export default function TemplateSection() {
       {/* 登录凭据 */}
       {!registrationMode && !disableSystemInit && !isNoInitTemplate && !isOpenWrtTemplate && (
         <SectionCard icon={<IconUser />} title="登录凭据">
-          <FormField label="主机名" error={errors.hostname}>
+          <FormField label="主机名" error={errors.hostname}
+            tip={f.batch_count > 1 ? '批量创建时作为前缀，自动追加编号后缀（如 myserver-01、myserver-02）' : undefined}
+          >
             <Input
               value={f.hostname}
-              placeholder="自动随机生成"
+              placeholder={f.batch_count > 1 ? '如 myserver（自动追加 -01、-02…）' : '自动随机生成'}
               onChange={(v) => {
                 setField('hostname', v)
                 if (errors.hostname) setError('hostname', validateHostname(v))
@@ -351,12 +353,11 @@ export default function TemplateSection() {
                 </Tooltip>
               </span>
             }
-            required
             error={errors.import_user}
           >
             <Input
               value={f.import_user}
-              placeholder={isWindowsTemplate ? 'administrator' : isFnOSTemplate ? '请输入 fnOS 首次管理员用户名' : '请输入克隆后的登录用户名'}
+              placeholder={isWindowsTemplate ? 'administrator' : isFnOSTemplate ? '请输入 fnOS 首次管理员用户名' : '留空使用模板默认用户名'}
               disabled={isWindowsTemplate}
               onChange={(v) => {
                 setField('import_user', v)
@@ -374,14 +375,13 @@ export default function TemplateSection() {
                 </Tooltip>
               </span>
             }
-            required={f.batch_count <= 1}
             error={errors.import_password}
-            tip={f.batch_count > 1 ? '批量创建留空将为每台虚拟机自动生成独立随机强密码' : undefined}
+            tip={f.batch_count > 1 ? '留空将保留模板原密码，不强制修改' : '留空将保留模板原密码'}
           >
             <Input
               mode="password"
               value={f.import_password}
-              placeholder="请输入强密码"
+              placeholder="留空保留模板原密码"
               autoComplete="new-password"
               onChange={(v) => {
                 setField('import_password', v)

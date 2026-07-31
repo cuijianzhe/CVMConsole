@@ -316,7 +316,7 @@ export const buildBatchClonePayload = (
     prefix: form.name,
     start_num: 1,
     count: form.batch_count,
-    hostname: '', // 批量模式每台由后端自动生成独立主机名
+    hostname: form.hostname || '', // 用户自定义主机名作为前缀，后端追加编号后缀（如 myserver-01）；留空则自动随机生成
     template_user: initUser,
     extra_disks: buildExtraDisksPayload(form),
   }
