@@ -117,25 +117,29 @@ export default function VmReinstallDialog({ vm, onClose, onSuccess }: VmReinstal
       return false
     }
     if (showCredentialFields) {
-      if (!hostname.trim()) {
-        Toast.warning('请输入主机名')
+      // 主机名：留空自动生成，填写则校验格式
+      const trimmedHostname = hostname.trim()
+      const HOSTNAME_PATTERN = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/
+      if (trimmedHostname && !HOSTNAME_PATTERN.test(trimmedHostname)) {
+        Toast.warning('主机名只能包含字母、数字和短横线，且不能以短横线开头或结尾')
         return false
       }
-      if (!isWindows && !USERNAME_PATTERN.test(user.trim())) {
+      // 用户名：留空使用模板默认用户名，填写则校验格式（Windows 固定 administrator 无需校验）
+      const trimmedUser = user.trim()
+      if (trimmedUser && !isWindows && !USERNAME_PATTERN.test(trimmedUser)) {
         Toast.warning('用户名仅支持小写字母、数字、下划线和短横线，且需以字母或下划线开头')
         return false
       }
-      if (!password) {
-        Toast.warning('请输入登录密码')
-        return false
-      }
-      if (password.length < STRONG_PASSWORD_MIN_LENGTH || !PASSWORD_ALLOWED_PATTERN.test(password)) {
-        Toast.warning(`密码至少 ${STRONG_PASSWORD_MIN_LENGTH} 位，只支持字母、数字和 !@#$%^&*_-+=? 符号`)
-        return false
-      }
-      if (!validatePassword(password).valid) {
-        Toast.warning('该密码过于常见，请更换为更安全的密码')
-        return false
+      // 密码：留空保留模板原密码，不强制注入；填写则校验强度
+      if (password) {
+        if (password.length < STRONG_PASSWORD_MIN_LENGTH || !PASSWORD_ALLOWED_PATTERN.test(password)) {
+          Toast.warning(`密码至少 ${STRONG_PASSWORD_MIN_LENGTH} 位，只支持字母、数字和 !@#$%^&*_-+=? 符号`)
+          return false
+        }
+        if (!validatePassword(password).valid) {
+          Toast.warning('该密码过于常见，请更换为更安全的密码')
+          return false
+        }
       }
     }
     if (isFnos && fnosDeviceIdMode === 'custom') {
@@ -244,35 +248,36 @@ export default function VmReinstallDialog({ vm, onClose, onSuccess }: VmReinstal
       {showCredentialFields && (
         <>
           <div className="qvm-form-item">
-            <div className="qvm-form-label required">主机名</div>
-            <Input value={hostname} onChange={setHostname} placeholder="请输入重装后的主机名" />
+            <div className="qvm-form-label">主机名</div>
+            <Input value={hostname} onChange={setHostname} placeholder="留空自动生成" />
+            <div className="qvm-form-tip">留空则由系统自动生成随机主机名。</div>
           </div>
           <div className="qvm-form-item">
-            <div className="qvm-form-label required">登录用户名</div>
+            <div className="qvm-form-label">登录用户名</div>
             <Input
               value={user}
               onChange={setUser}
               disabled={isWindows}
-              placeholder={isWindows ? WINDOWS_USERNAME : '请输入登录用户名'}
+              placeholder={isWindows ? WINDOWS_USERNAME : '留空使用模板默认用户名'}
             />
             <div className="qvm-form-tip">
               {isWindows
                 ? 'Windows 模板固定使用 administrator。'
                 : isFnos
-                  ? 'FnOS 会把该账号写入为首次管理员账号。'
-                  : '仅支持小写字母、数字、下划线和短横线，且需以字母或下划线开头。'}
+                  ? 'FnOS 会把该账号写入为首次管理员账号；留空使用模板默认用户名。'
+                  : '留空使用模板默认用户名；填写时仅支持小写字母、数字、下划线和短横线，且需以字母或下划线开头。'}
             </div>
           </div>
           <div className="qvm-form-item">
-            <div className="qvm-form-label required">登录密码</div>
+            <div className="qvm-form-label">登录密码</div>
             <Input
               mode="password"
               value={password}
               onChange={setPassword}
-              placeholder="请输入强密码"
+              placeholder="留空保留模板原密码"
             />
             <div className="qvm-form-tip-row">
-              <span className="qvm-form-tip">至少 {STRONG_PASSWORD_MIN_LENGTH} 位（支持 !@#$%^&*_-+=?）</span>
+              <span className="qvm-form-tip">留空保留模板原密码；填写则至少 {STRONG_PASSWORD_MIN_LENGTH} 位（支持 !@#$%^&*_-+=?）</span>
               <Button
                 size="small"
                 theme="borderless"
