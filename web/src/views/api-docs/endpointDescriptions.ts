@@ -39,6 +39,7 @@ export const moduleGroups: { name: string; description: string; prefixes: string
   { name: '用户管理', description: '管理员管理用户、配额、轻量云登记和 SSH。', prefixes: ['/user'] },
   { name: '用户自助与我的存储', description: '普通用户查询配额、管理自己的 VM 和存储。', prefixes: ['/self'] },
   { name: '宿主机', description: '宿主机监控和宿主机级 KVM/KSM/zRAM/硬件直通参数。', prefixes: ['/host'] },
+  { name: '规格管理', description: '资源规格（CPU/内存）和云盘规格（容量/IOPS 限速），列表对所有用户开放，增删改仅管理员。', prefixes: ['/resource-specs', '/cloud-disk-specs'] },
   { name: '任务与调度', description: '任务队列、任务 SSE 和调度器事件。', prefixes: ['/task', '/scheduler'] },
 ]
 
@@ -899,5 +900,59 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   'GET /system-info': {
     summary: '获取系统运行环境信息',
     response: 'data: os, distro, kernel, arch, hostname, num_cpu, go_version, qemu, libvirt, uptime 等。',
+  },
+
+  // ==================== 规格管理 ====================
+  'GET /resource-specs': {
+    summary: '获取资源规格列表',
+    response: 'data: [{id, name, cpu_cores, memory_gb, created_at, updated_at}]。列表对所有已认证用户开放（创建虚拟机时选择规格）。',
+  },
+  'POST /resource-specs': {
+    summary: '创建资源规格',
+    body: 'JSON: name(规格名称，唯一), cpu_cores(CPU 核数), memory_gb(内存 GB)',
+    requiredFields: ['name', 'cpu_cores', 'memory_gb'],
+    response: 'data: {id, name, cpu_cores, memory_gb, created_at, updated_at}。',
+  },
+  'PUT /resource-specs/:id': {
+    summary: '更新资源规格',
+    body: 'JSON: name, cpu_cores, memory_gb',
+    requiredFields: ['name', 'cpu_cores', 'memory_gb'],
+    response: 'data: 更新后的规格对象。',
+  },
+  'DELETE /resource-specs/:id': {
+    summary: '删除资源规格',
+    response: '成功返回 200。',
+  },
+  'POST /resource-specs/batch-delete': {
+    summary: '批量删除资源规格',
+    body: 'JSON: {ids: [1, 2, 3]}',
+    requiredFields: ['ids'],
+    response: 'data: {deleted: 已删除数量}。',
+  },
+  'GET /cloud-disk-specs': {
+    summary: '获取云盘规格列表',
+    response: 'data: [{id, name, disk_type(SYSTEM/DATA), capacity_gb, storage_location, disk_format(QCOW2/RAW), iops_mode(TOTAL/READ_WRITE), total_iops, read_iops, write_iops, description, created_at, updated_at}]。列表对所有已认证用户开放。',
+  },
+  'POST /cloud-disk-specs': {
+    summary: '创建云盘规格',
+    body: 'JSON: name(唯一), disk_type(SYSTEM/DATA，默认 DATA), capacity_gb(容量 GB), storage_location(存储位置), disk_format(QCOW2/RAW，默认 QCOW2), iops_mode(TOTAL/READ_WRITE，默认 READ_WRITE), total_iops, read_iops, write_iops, description',
+    requiredFields: ['name', 'capacity_gb'],
+    response: 'data: 创建后的云盘规格对象。',
+  },
+  'PUT /cloud-disk-specs/:id': {
+    summary: '更新云盘规格',
+    body: 'JSON: name, disk_type, capacity_gb, storage_location, disk_format, iops_mode, total_iops, read_iops, write_iops, description',
+    requiredFields: ['name', 'capacity_gb'],
+    response: 'data: 更新后的云盘规格对象。',
+  },
+  'DELETE /cloud-disk-specs/:id': {
+    summary: '删除云盘规格',
+    response: '成功返回 200。',
+  },
+  'POST /cloud-disk-specs/batch-delete': {
+    summary: '批量删除云盘规格',
+    body: 'JSON: {ids: [1, 2, 3]}',
+    requiredFields: ['ids'],
+    response: 'data: {deleted: 已删除数量}。',
   },
 }

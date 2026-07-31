@@ -280,7 +280,7 @@ export default function VgpuTab() {
           <Empty description="暂无 vGPU 配置，请点击「发现设备」扫描" style={{ padding: '24px 0' }} />
         ) : (
           <Table<VGPUProfileInfo>
-            rowKey={(row) => `${row.pci_device}-${row.profile_name}`}
+            rowKey={(row) => (row ? `${row.pci_device}-${row.profile_name}` : '')}
             columns={profileColumns}
             dataSource={profiles}
             size="small"

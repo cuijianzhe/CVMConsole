@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-07-30T14:33:02.664Z",
-  "count": 314,
+  "generated_at": "2026-07-31T16:34:53.455Z",
+  "count": 331,
   "endpoints": [
     {
       "method": "POST",
@@ -135,28 +135,6 @@
       "comment": ""
     },
     {
-      "method": "GET",
-      "path": "/auth/invite",
-      "handler": "GetInviteInfo",
-      "auth": "public",
-      "admin": false,
-      "elasticOnly": false,
-      "vmAccess": false,
-      "highRisk": "",
-      "comment": ""
-    },
-    {
-      "method": "POST",
-      "path": "/auth/invite/complete",
-      "handler": "CompleteInvite",
-      "auth": "public",
-      "admin": false,
-      "elasticOnly": false,
-      "vmAccess": false,
-      "highRisk": "",
-      "comment": ""
-    },
-    {
       "method": "POST",
       "path": "/auth/login",
       "handler": "Login",
@@ -272,6 +250,61 @@
       "handler": "ChangeUsername",
       "auth": "jwt",
       "admin": false,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": ""
+    },
+    {
+      "method": "GET",
+      "path": "/cloud-disk-specs",
+      "handler": "ListCloudDiskSpecs",
+      "auth": "jwt",
+      "admin": false,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": ""
+    },
+    {
+      "method": "POST",
+      "path": "/cloud-disk-specs",
+      "handler": "CreateCloudDiskSpec",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": ""
+    },
+    {
+      "method": "DELETE",
+      "path": "/cloud-disk-specs/:id",
+      "handler": "DeleteCloudDiskSpec",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": ""
+    },
+    {
+      "method": "PUT",
+      "path": "/cloud-disk-specs/:id",
+      "handler": "UpdateCloudDiskSpec",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": ""
+    },
+    {
+      "method": "POST",
+      "path": "/cloud-disk-specs/batch-delete",
+      "handler": "BatchDeleteCloudDiskSpecs",
+      "auth": "jwt",
+      "admin": true,
       "elasticOnly": false,
       "vmAccess": false,
       "highRisk": "",
@@ -701,6 +734,83 @@
       "handler": "GetHostStatsSSE",
       "auth": "jwt",
       "admin": false,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": ""
+    },
+    {
+      "method": "GET",
+      "path": "/host/vgpu/instances",
+      "handler": "GetVGPUInstances",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": ""
+    },
+    {
+      "method": "POST",
+      "path": "/host/vgpu/instances",
+      "handler": "CreateVGPUInstance",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "create_vgpu_instance",
+      "comment": ""
+    },
+    {
+      "method": "PUT",
+      "path": "/host/vgpu/instances/:id/attach",
+      "handler": "AttachVGPUToVM",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "attach_vgpu_to_vm",
+      "comment": ""
+    },
+    {
+      "method": "PUT",
+      "path": "/host/vgpu/instances/:id/detach",
+      "handler": "DetachVGPUFromVM",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "detach_vgpu_from_vm",
+      "comment": ""
+    },
+    {
+      "method": "DELETE",
+      "path": "/host/vgpu/instances/:uuid",
+      "handler": "DestroyVGPUInstance",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "destroy_vgpu_instance",
+      "comment": ""
+    },
+    {
+      "method": "GET",
+      "path": "/host/vgpu/profiles",
+      "handler": "GetVGPUProfiles",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": ""
+    },
+    {
+      "method": "POST",
+      "path": "/host/vgpu/profiles/discover",
+      "handler": "DiscoverVGPUProfiles",
+      "auth": "jwt",
+      "admin": true,
       "elasticOnly": false,
       "vmAccess": false,
       "highRisk": "",
@@ -1229,6 +1339,61 @@
       "handler": "GetVersion",
       "auth": "public",
       "admin": false,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": ""
+    },
+    {
+      "method": "GET",
+      "path": "/resource-specs",
+      "handler": "ListResourceSpecs",
+      "auth": "jwt",
+      "admin": false,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": ""
+    },
+    {
+      "method": "POST",
+      "path": "/resource-specs",
+      "handler": "CreateResourceSpec",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": ""
+    },
+    {
+      "method": "DELETE",
+      "path": "/resource-specs/:id",
+      "handler": "DeleteResourceSpec",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": ""
+    },
+    {
+      "method": "PUT",
+      "path": "/resource-specs/:id",
+      "handler": "UpdateResourceSpec",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": ""
+    },
+    {
+      "method": "POST",
+      "path": "/resource-specs/batch-delete",
+      "handler": "BatchDeleteResourceSpecs",
+      "auth": "jwt",
+      "admin": true,
       "elasticOnly": false,
       "vmAccess": false,
       "highRisk": "",
@@ -2182,6 +2347,17 @@
     },
     {
       "method": "PUT",
+      "path": "/user/:username/lightweight-registrations/:id/confirm",
+      "handler": "ConfirmLightweightVMRegistration",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": ""
+    },
+    {
+      "method": "PUT",
       "path": "/user/:username/lightweight-vm-quota",
       "handler": "UpdateLightweightVMQuota",
       "auth": "jwt",
@@ -2217,17 +2393,6 @@
       "method": "PUT",
       "path": "/user/:username/quota",
       "handler": "UpdateUserQuota",
-      "auth": "jwt",
-      "admin": true,
-      "elasticOnly": false,
-      "vmAccess": false,
-      "highRisk": "",
-      "comment": ""
-    },
-    {
-      "method": "POST",
-      "path": "/user/:username/resend-invite",
-      "handler": "ResendInvite",
       "auth": "jwt",
       "admin": true,
       "elasticOnly": false,
@@ -2289,6 +2454,28 @@
       "vmAccess": false,
       "highRisk": "",
       "comment": ""
+    },
+    {
+      "method": "GET",
+      "path": "/user/list/simple",
+      "handler": "GetUserListSimple",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": "轻量级用户列表（仅基础信息 + VM 列表）"
+    },
+    {
+      "method": "POST",
+      "path": "/user/refresh-quota-snapshots",
+      "handler": "RefreshUserQuotaSnapshots",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": "手动刷新配额缓存"
     },
     {
       "method": "DELETE",

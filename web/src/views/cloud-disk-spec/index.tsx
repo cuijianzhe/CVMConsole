@@ -94,7 +94,7 @@ export default function CloudDiskSpecPage() {
       content: `确定要删除规格「${row.name}」吗？此操作不可撤销。`,
       okText: '删除',
       cancelText: '取消',
-      type: 'danger',
+      okButtonProps: { type: 'danger', theme: 'solid' },
       onOk: async () => {
         try {
           await deleteCloudDiskSpec(row.id)
