@@ -144,13 +144,17 @@ func resetUserPassword(user *model.User, newPassword string) error {
 	}
 
 	now := time.Now()
-	if err := model.DB.Model(user).Updates(map[string]interface{}{
+	updates := map[string]interface{}{
 		"password_hash":            string(hashedPassword),
 		"force_password_change":    false,
 		"login_verified_until":     nil,
 		"high_risk_verified_until": nil,
 		"security_updated_at":      &now,
-	}).Error; err != nil {
+	}
+	for key, value := range PasswordFingerprintUpdateFields(newPassword) {
+		updates[key] = value
+	}
+	if err := model.DB.Model(user).Updates(updates).Error; err != nil {
 		return fmt.Errorf("更新密码失败: %w", err)
 	}
 	if user.Role == "user" {
@@ -385,29 +389,32 @@ func CreateActiveUserDirectly(username, email, password, role, cloudType string,
 
 	now := time.Now()
 	loginVerifiedUntil := now.Add(LoginVerificationWindow)
+	fingerprint := BuildPasswordFingerprint(password)
 	user := &model.User{
-		Username:           username,
-		PasswordHash:       string(hashedPassword),
-		Email:              email,
-		Role:               role,
-		CloudType:          cloudType,
-		Status:             UserStatusActive,
-		EmailVerifiedAt:    &now,
-		LoginVerifiedUntil: &loginVerifiedUntil,
-		MaxCPU:             maxCPU,
-		MaxMemory:          maxMemory,
-		MaxDisk:            maxDisk,
-		MaxVM:              maxVM,
-		MaxStorage:         maxStorage,
-		MaxRuntimeHours:    maxRuntimeHours,
-		EnablePortForward:  enablePortForward,
-		MaxPortForwards:    maxPortForwards,
-		MaxSnapshots:       maxSnapshots,
-		MaxBandwidthUp:     maxBandwidthUp,
-		MaxBandwidthDown:   maxBandwidthDown,
-		MaxTrafficDown:     maxTrafficDown,
-		MaxTrafficUp:       maxTrafficUp,
-		MaxPublicIPs:       maxPublicIPs,
+		Username:             username,
+		PasswordHash:         string(hashedPassword),
+		PasswordBreachPrefix: fingerprint.Prefix,
+		PasswordBreachHMAC:   fingerprint.HMAC,
+		Email:                email,
+		Role:                 role,
+		CloudType:            cloudType,
+		Status:               UserStatusActive,
+		EmailVerifiedAt:      &now,
+		LoginVerifiedUntil:   &loginVerifiedUntil,
+		MaxCPU:               maxCPU,
+		MaxMemory:            maxMemory,
+		MaxDisk:              maxDisk,
+		MaxVM:                maxVM,
+		MaxStorage:           maxStorage,
+		MaxRuntimeHours:      maxRuntimeHours,
+		EnablePortForward:    enablePortForward,
+		MaxPortForwards:      maxPortForwards,
+		MaxSnapshots:         maxSnapshots,
+		MaxBandwidthUp:       maxBandwidthUp,
+		MaxBandwidthDown:     maxBandwidthDown,
+		MaxTrafficDown:       maxTrafficDown,
+		MaxTrafficUp:         maxTrafficUp,
+		MaxPublicIPs:         maxPublicIPs,
 	}
 
 	if err := model.DB.Create(user).Error; err != nil {
@@ -443,7 +450,11 @@ func NeedsLoginVerification(user *model.User) bool {
 		return false
 	}
 	if user.Role == "admin" {
-		// 管理员跳过了安全初始化，不需要2FA登录验证
+		// 已绑定 2FA 的管理员必须完成登录验证（即使曾跳过安全初始化）
+		if user.TOTPEnabled {
+			return true
+		}
+		// 未绑定 2FA 且跳过了安全初始化，无法进行登录验证
 		if user.BootstrapSkipped {
 			return false
 		}

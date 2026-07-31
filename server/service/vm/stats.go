@@ -250,12 +250,21 @@ func GetHostStats() (*HostStats, error) {
 		stats.DiskIOLatencyMs, _ = strconv.ParseFloat(strings.TrimSpace(ioLatencyResult.Stdout), 64)
 	}
 
-	// 磁盘信息（根分区）
-	if total, used, available, err := utils.GetDiskSpace("/"); err == nil {
+	// 磁盘信息（全部已挂载的本地文件系统，按源设备去重累加，涵盖存储池盘）
+	if total, used, available, err := utils.GetAllMountedDiskSpace(); err == nil {
+		stats.DiskTotal = total
+		stats.DiskUsed = used
+		stats.DiskFree = available
+	} else if total, used, available, err := utils.GetDiskSpace("/"); err == nil {
+		// 兜底：全量统计失败时退回根分区口径
 		stats.DiskTotal = total
 		stats.DiskUsed = used
 		stats.DiskFree = available
 	}
+
+	// 虚拟机实际磁盘占用（带缓存，异步刷新，避免阻塞 SSE 推送）
+	// 用于计算存储理论最大值时扣除系统占用部分
+	stats.VMDiskActual = GetTotalVMActualDiskUsage() / 1024 // 字节转 KB
 
 	// 宿主机网络 IO (累加常见物理网卡，排除 virbr, vnet, docker, lo)
 	netIOResult := utils.ExecShell(`awk 'NR>2 {if ($1 !~ /lo|virbr|vnet|docker/) {rx+=$2; tx+=$10}} END {print rx, tx}' /proc/net/dev`)

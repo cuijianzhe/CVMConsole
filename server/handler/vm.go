@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,9 +11,12 @@ import (
 
 	"kvm_console/config"
 	"kvm_console/logger"
+	"kvm_console/model"
 	"kvm_console/service"
 	bw "kvm_console/service/bandwidth"
+	guestautomation "kvm_console/service/guest_automation"
 	vm_memory "kvm_console/service/vm/memory"
+	"kvm_console/taskqueue"
 	"kvm_console/utils"
 )
 
@@ -72,10 +76,11 @@ func getVirtioMemSpecMemoryGB(vm *service.VmDetail) int {
 
 // VmAddDiskItem 编辑时新增磁盘的单项
 type VmAddDiskItem struct {
-	Size          int    `json:"size"`            // GB
-	Format        string `json:"format"`          // qcow2/raw
-	Bus           string `json:"bus"`             // 磁盘总线: virtio/scsi/sata/ide
-	StoragePoolID string `json:"storage_pool_id"` // 新增磁盘落盘存储位置
+	Size          int                              `json:"size"`            // GB
+	Format        string                           `json:"format"`          // qcow2/raw
+	Bus           string                           `json:"bus"`             // 磁盘总线: virtio/scsi/sata/ide
+	StoragePoolID string                           `json:"storage_pool_id"` // 新增磁盘落盘存储位置
+	GuestMount    guestautomation.GuestMountConfig `json:"guest_mount"`
 }
 
 // GetVmList 获取虚拟机列表
@@ -226,7 +231,7 @@ func OperateVm(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
-			"message": "请指定操作类型（action: start/shutdown/destroy/reboot/reset）",
+			"message": "请指定操作类型（action: start/shutdown/destroy/reboot/reset/hard_reboot）",
 		})
 		return
 	}
@@ -241,14 +246,14 @@ func OperateVm(c *gin.Context) {
 		return
 	}
 
-	// 关机/强制断电时若虚拟机已锁定，在响应中附加提示信息
+	// 关机/强制断电/硬重启时若虚拟机已锁定，在响应中附加提示信息
 	var lockWarning string
-	if (req.Action == "shutdown" || req.Action == "destroy") && service.IsVMLocked(name) {
+	if (req.Action == "shutdown" || req.Action == "destroy" || req.Action == "hard_reboot") && service.IsVMLocked(name) {
 		lockWarning = "该虚拟机已锁定，关机操作将继续执行"
 	}
 
-	// 开机前检查配额（仅非管理员用户）
-	if req.Action == "start" {
+	// 开机前检查配额（仅非管理员用户）；硬重启内部会执行 start，同样需要检查
+	if req.Action == "start" || req.Action == "hard_reboot" {
 		role, _ := c.Get("role")
 		if role != "admin" {
 			username, _ := c.Get("username")
@@ -284,6 +289,9 @@ func OperateVm(c *gin.Context) {
 	case "reset":
 		err = service.ResetVM(name)
 		actionText = "重置"
+	case "hard_reboot":
+		err = service.HardRebootVM(name)
+		actionText = "硬重启"
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
@@ -314,8 +322,8 @@ func OperateVm(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 	service.RefreshVMCacheByNameAsync(name)
 
-	// 开机/关机/强制断电后异步触发全局带宽重新分配
-	if req.Action == "start" || req.Action == "shutdown" || req.Action == "destroy" {
+	// 开机/关机/强制断电/硬重启后异步触发全局带宽重新分配
+	if req.Action == "start" || req.Action == "shutdown" || req.Action == "destroy" || req.Action == "hard_reboot" {
 		cfg := config.GlobalConfig
 		if cfg.MaxBurstInbound > 0 || cfg.MaxBurstOutbound > 0 {
 			go func() {
@@ -331,8 +339,8 @@ func OperateVm(c *gin.Context) {
 		}
 	}
 
-	// 开机后应用带宽限速（确保运行中的 VM 应用最新限速规则）
-	if req.Action == "start" {
+	// 开机/硬重启后应用带宽限速（确保运行中的 VM 应用最新限速规则）
+	if req.Action == "start" || req.Action == "hard_reboot" {
 		role, _ := c.Get("role")
 		if role != "admin" {
 			username, _ := c.Get("username")
@@ -624,6 +632,16 @@ func EditVm(c *gin.Context) {
 		}
 	}
 
+	if req.Tags != nil {
+		if err := service.SetVMTags(name, *req.Tags); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"code":    500,
+				"message": "设置标签失败: " + err.Error(),
+			})
+			return
+		}
+	}
+
 	if req.Autostart != nil {
 		if err := service.SetVMAutostart(name, *req.Autostart); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -774,6 +792,7 @@ func EditVm(c *gin.Context) {
 	}
 
 	// 新增磁盘
+	var diskTaskIDs []uint
 	for _, disk := range req.AddDisks {
 		if disk.Size <= 0 {
 			continue
@@ -794,6 +813,28 @@ func EditVm(c *gin.Context) {
 				"message": "解析新增磁盘存储位置失败: " + err.Error(),
 			})
 			return
+		}
+		if disk.GuestMount.Enabled {
+			vm, vmErr := service.GetVM(name)
+			if vmErr != nil {
+				c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": vmErr.Error()})
+				return
+			}
+			ctx, cancel := context.WithTimeout(c.Request.Context(), guestautomationTimeout())
+			preflightErr := guestautomation.Preflight(ctx, name, vm.OSType, &disk.GuestMount, false)
+			cancel()
+			if preflightErr != nil {
+				c.JSON(http.StatusConflict, gin.H{"code": 409, "message": preflightErr.Error()})
+				return
+			}
+			params := guestautomation.DiskOperationParams{Action: "add", VMName: name, SizeGB: disk.Size, Format: format, Bus: bus, StorageDir: diskDir, GuestType: vm.OSType, GuestMount: disk.GuestMount}
+			task, submitErr := taskqueue.SubmitWithStruct(model.TaskTypeVMDiskProvision, params, username.(string))
+			if submitErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "提交新增磁盘任务失败: " + submitErr.Error()})
+				return
+			}
+			diskTaskIDs = append(diskTaskIDs, task.ID)
+			continue
 		}
 		_, err = service.AddDiskWithBusInDir(name, disk.Size, format, bus, diskDir)
 		if err != nil {
@@ -972,6 +1013,7 @@ func EditVm(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "配置修改成功",
+		"data":    gin.H{"task_ids": diskTaskIDs},
 	})
 	service.RefreshVMCacheByNameAsync(name)
 }

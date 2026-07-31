@@ -259,6 +259,29 @@ func ResetVM(name string) error {
 	return nil
 }
 
+// HardRebootVM 硬重启虚拟机（destroy + start），完全销毁 QEMU 进程后重新启动。
+// 相比 ResetVM（进程内重置），硬重启会重建整个 QEMU 进程，适用于配置变更后需要完全重新加载的场景。
+func HardRebootVM(name string) error {
+	if err := D.HookEnsureVMNotMigrating(name, "硬重启"); err != nil {
+		return err
+	}
+	if err := D.EnsureMaintenanceModeDisabled("硬重启虚拟机"); err != nil {
+		return err
+	}
+	// 先修复 on_reboot 配置，避免 start 后因 destroy 策略导致重启变关机
+	FixOnReboot(name)
+	// 强制断电，完全销毁 QEMU 进程
+	if err := DestroyVM(name); err != nil {
+		return fmt.Errorf("硬重启-强制断电失败: %w", err)
+	}
+	// 重新启动虚拟机
+	if err := StartVM(name); err != nil {
+		return fmt.Errorf("硬重启-重新启动失败: %w", err)
+	}
+	ResetVMContinuousRuntime(name, time.Now())
+	return nil
+}
+
 // FixOnReboot 修复虚拟机的 on_reboot 配置（destroy → restart）
 func FixOnReboot(name string) {
 	xmlPath := fmt.Sprintf("/etc/libvirt/qemu/%s.xml", name)

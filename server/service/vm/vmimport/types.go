@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"kvm_console/service"
+	guestautomation "kvm_console/service/guest_automation"
 	vm_memory "kvm_console/service/vm/memory"
 	"kvm_console/service/vm_xml"
 )
@@ -69,6 +70,7 @@ type ImportDiskByPathParams struct {
 	DiskFile         string                            `json:"disk_file,omitempty"`        // 存储文件名（主磁盘 storage 模式）
 	DiskSourceType   string                            `json:"disk_source_type,omitempty"` // path/storage（主磁盘）
 	StoragePoolID    string                            `json:"storage_pool_id,omitempty"`
+	SystemDiskBus    string                            `json:"system_disk_bus,omitempty"`
 	VCPU             int                               `json:"vcpu"`
 	MaxVCPU          int                               `json:"max_vcpu,omitempty"` // CPU 热添加上限
 	RAM              int                               `json:"ram"`
@@ -107,6 +109,8 @@ type ImportDiskByPathParams struct {
 	KVMHidden        *bool                             `json:"kvm_hidden,omitempty"`         // 隐藏 KVM 标志
 	VendorID         string                            `json:"vendor_id,omitempty"`          // Hyper-V vendor_id 伪装
 	UserData         string                            `json:"user_data,omitempty"`          // cloud-init UserData 扩展
+	// trustedApplianceSource 仅在虚拟机包完成归档、路径和清单校验后由任务内部设置。
+	trustedApplianceSource bool
 }
 
 // ExtraImportDiskEntry 额外导入磁盘条目
@@ -124,14 +128,16 @@ type ExtraImportDiskEntry struct {
 
 // ImportDiskForExistingVMParams 为已有虚拟机导入磁盘参数
 type ImportDiskForExistingVMParams struct {
-	VMName         string `json:"vm_name"`
-	DiskPath       string `json:"disk_path,omitempty"`
-	DiskFile       string `json:"disk_file,omitempty"`
-	DiskSourceType string `json:"disk_source_type,omitempty"`
-	StoragePoolID  string `json:"storage_pool_id,omitempty"`
-	CopyDisk       bool   `json:"copy_disk,omitempty"`
-	Bus            string `json:"bus,omitempty"`
-	Username       string `json:"username,omitempty"`
+	VMName         string                           `json:"vm_name"`
+	DiskPath       string                           `json:"disk_path,omitempty"`
+	DiskFile       string                           `json:"disk_file,omitempty"`
+	DiskSourceType string                           `json:"disk_source_type,omitempty"`
+	StoragePoolID  string                           `json:"storage_pool_id,omitempty"`
+	CopyDisk       bool                             `json:"copy_disk,omitempty"`
+	Bus            string                           `json:"bus,omitempty"`
+	Username       string                           `json:"username,omitempty"`
+	GuestType      string                           `json:"guest_type,omitempty"`
+	GuestMount     guestautomation.GuestMountConfig `json:"guest_mount,omitempty"`
 }
 
 // ---------- parse helpers ----------

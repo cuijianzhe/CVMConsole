@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"kvm_console/logger"
 )
 
 // AtomicWriteFile 原子写文件：先写入临时文件，再通过 os.Rename 替换目标文件
@@ -91,19 +89,51 @@ func FileReadable(path string) bool {
 	return true
 }
 
-// ChownLibvirtQEMU 尝试将文件 chown 为 libvirt-qemu:kvm
-// 仅在完全找不到 libvirt-qemu 用户时才返回错误
-// 如果用户存在但 chown 失败（如模板文件权限限制），仅记录警告
-func ChownLibvirtQEMU(path string) error {
-	uid, gid, err := GetUserIDs("libvirt-qemu", "kvm")
-	if err != nil {
-		return fmt.Errorf("chown %s 失败: 无法查找 libvirt-qemu/kvm 用户: %w", path, err)
+var libvirtQEMUOwnershipCandidates = [][2]string{
+	{"libvirt-qemu", "kvm"},
+	{"libvirt-qemu", ""},             // 使用 libvirt-qemu 的主组
+	{"libvirt-qemu", "libvirt-qemu"}, // Debian/Ubuntu 系列显式指定
+	{"qemu", "qemu"},
+}
+
+// ResolveLibvirtQEMUUser 返回当前系统实际使用的 QEMU/libvirt 服务账号。
+func ResolveLibvirtQEMUUser() (string, error) {
+	var lastErr error
+	for _, candidate := range libvirtQEMUOwnershipCandidates {
+		if _, _, err := GetUserIDs(candidate[0], candidate[1]); err == nil {
+			return candidate[0], nil
+		} else {
+			lastErr = err
+		}
 	}
-	if err := os.Chown(path, uid, gid); err != nil {
-		logger.App.Warn("chown 失败（非致命，AppArmor 规则已确保访问）", "path", path, "error", err)
+	return "", fmt.Errorf("查找 QEMU/libvirt 服务账号失败: %w", lastErr)
+}
+
+// ChownLibvirtQEMU 尝试按优先级将文件 chown 为 QEMU/libvirt 进程用户/组
+// 兼容不同发行版的用户/组命名差异：
+//  1. libvirt-qemu:kvm       — RH/Fedora 系列
+//  2. libvirt-qemu:<主组>     — libvirt-qemu 用户的主组（Debian/Ubuntu 通常为 libvirt-qemu）
+//  3. libvirt-qemu:libvirt-qemu — 显式指定（兼容 ARM/Debian 系列）
+//  4. qemu:qemu              — 通用回退
+//
+// 返回错误仅当所有尝试都失败时
+func ChownLibvirtQEMU(path string) error {
+
+	var lastErr error
+	for _, c := range libvirtQEMUOwnershipCandidates {
+		uid, gid, err := GetUserIDs(c[0], c[1])
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if err := os.Chown(path, uid, gid); err != nil {
+			lastErr = err
+			continue
+		}
 		return nil
 	}
-	return nil
+
+	return fmt.Errorf("chown %s 失败: 无法查找 libvirt-qemu/kvm、libvirt-qemu/libvirt-qemu 或 qemu/qemu: %w", path, lastErr)
 }
 
 // SetFileImmutable 对文件设置 Linux 不可变属性 (chattr +i)

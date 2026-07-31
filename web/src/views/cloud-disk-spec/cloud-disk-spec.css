@@ -1,0 +1,160 @@
+/**
+ * 云盘规格页样式（深空极光，浅色优先 + 深色适配）
+ * 使用 --qvm- 设计令牌，遵循深色模式文字降对比规范
+ */
+
+.cds-page {
+  padding: 4px 2px 24px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ==================== 页头 ==================== */
+.cds-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.cds-page-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--qvm-text-0);
+}
+.cds-page-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--qvm-text-2);
+}
+.cds-header-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ==================== 表格卡片 ==================== */
+.cds-table-card {
+  border-radius: 14px;
+  background: var(--qvm-card-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: var(--qvm-card-shadow);
+  border: 1px solid var(--qvm-stroke);
+  padding: 12px;
+  overflow-x: auto;
+}
+
+/* 容量数值文本（等宽数字字体） */
+.cds-num {
+  font-family: var(--qvm-num-font);
+  font-weight: 600;
+  color: var(--qvm-acc-ink);
+}
+
+/* 磁盘格式等宽文本 */
+.cds-mono {
+  font-family: var(--qvm-num-font);
+  font-size: 12.5px;
+  color: var(--qvm-text-1);
+}
+
+/* IOPS 摘要文本 */
+.cds-iops {
+  font-family: var(--qvm-num-font);
+  font-size: 12.5px;
+  color: var(--qvm-text-1);
+}
+
+/* 描述文本（截断） */
+.cds-desc {
+  display: inline-block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--qvm-text-2);
+}
+
+/* 日期文本（柔和灰） */
+.cds-date {
+  font-size: 12.5px;
+  color: var(--qvm-text-2);
+  font-family: var(--qvm-num-font);
+}
+
+/* ==================== 表单通用样式（弹窗内使用） ==================== */
+.qvm-form-item { margin-bottom: 14px; }
+.qvm-form-label {
+  font-size: 12.5px; font-weight: 600;
+  color: var(--qvm-text-1); margin-bottom: 6px;
+}
+.qvm-form-label.required::before {
+  content: '*'; color: var(--qvm-danger); margin-right: 4px;
+}
+.qvm-form-tip {
+  font-size: 12px; color: var(--qvm-text-2);
+  line-height: 1.5; margin-top: 5px;
+}
+
+/* ==================== 行内操作（纯图标 + Tooltip） ==================== */
+.cds-act-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cds-act-ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--qvm-text-2);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.16s;
+}
+.cds-act-ic.edit:hover {
+  color: var(--qvm-acc-ink);
+  background: var(--qvm-acc-bg);
+  border-color: var(--qvm-acc-stroke);
+}
+.cds-act-ic.del:hover {
+  color: var(--qvm-danger);
+  background: rgba(251, 113, 133, 0.12);
+  border-color: rgba(251, 113, 133, 0.3);
+}
+
+/* ==================== 无权限提示 ==================== */
+.cds-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--qvm-text-2);
+  font-size: 14px;
+}
+.cds-empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+/* ==================== 深色模式：大面积标题降对比为柔和灰 ==================== */
+body[theme-mode='dark'] .cds-page-header h2 {
+  color: #b8c1cf;
+}
+
+/* ==================== 响应式 ==================== */
+@media (max-width: 720px) {
+  .cds-page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .cds-header-actions {
+    width: 100%;
+  }
+}
