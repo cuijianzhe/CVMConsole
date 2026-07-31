@@ -4,28 +4,42 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "gen:api": "node scripts/generate-api-endpoints.mjs",
+    "predev": "npm run gen:api",
     "dev": "vite",
-    "build": "vite build",
+    "prebuild": "npm run gen:api",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@element-plus/icons-vue": "^2.3.2",
+    "@douyinfe/semi-icons": "^2.101.1",
+    "@douyinfe/semi-illustrations": "^2.101.1",
+    "@douyinfe/semi-ui": "^2.101.1",
     "@novnc/novnc": "^1.7.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "axios": "^1.18.1",
     "echarts": "^6.1.0",
-    "element-plus": "^2.13.5",
-    "form-data": "^4.0.6",
     "nprogress": "^0.2.0",
-    "pinia": "^3.0.4",
     "qrcode": "^1.5.4",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router": "8.3.0",
     "spark-md5": "^3.0.2",
-    "vue": "^3.5.30",
-    "vue-router": "^5.0.3",
-    "xterm": "^5.3.0",
-    "xterm-addon-fit": "^0.8.0"
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^6.0.5",
-    "vite": "^8.0.16"
+    "@types/node": "^24.13.2",
+    "@types/nprogress": "^0.2.3",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@types/spark-md5": "^3.0.5",
+    "@vitejs/plugin-react": "^6.0.3",
+    "oxlint": "^1.71.0",
+    "sass-embedded": "^1.100.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1"
   }
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"kvm_console/logger"
+	"kvm_console/service/guest_agent"
 	"kvm_console/service/libvirt_rpc"
 	"kvm_console/utils"
 
@@ -21,14 +22,18 @@ import (
 
 // DiskInfo holds information about a virtual machine disk.
 type DiskInfo struct {
-	Device     string `json:"device"`      // device name (e.g. vda, vdb)
-	Path       string `json:"path"`        // disk file path
-	CapacityGB string `json:"capacity_gb"` // capacity (GB)
-	UsedGB     string `json:"used_gb"`     // used (GB)
-	Bus        string `json:"bus"`         // bus type
-	Format     string `json:"format"`      // disk format qcow2/raw
-	DeviceType string `json:"device_type"` // disk/cdrom
-	HotSupport bool   `json:"hot_support"` // supports hot operations
+	Device             string `json:"device"`                 // device name (e.g. vda, vdb)
+	Path               string `json:"path"`                   // disk file path
+	CapacityGB         string `json:"capacity_gb"`            // capacity (GB)
+	UsedGB             string `json:"used_gb"`                // used (GB)
+	Bus                string `json:"bus"`                    // bus type
+	Format             string `json:"format"`                 // disk format qcow2/raw
+	DeviceType         string `json:"device_type"`            // disk/cdrom
+	HotSupport         bool   `json:"hot_support"`            // supports hot operations
+	IsSystem           bool   `json:"is_system"`              // 是否为系统盘
+	Serial             string `json:"serial"`                 // 稳定磁盘序列号
+	GuestDevice        string `json:"guest_device,omitempty"` // 来宾中的设备路径
+	GuestMappingStatus string `json:"guest_mapping_status"`   // mapped/unavailable/unmapped
 	// IOPS limits (0 = unlimited)
 	IOPSTotal IOPSField `json:"iops_total"` // total IOPS limit
 	IOPSRead  IOPSField `json:"iops_read"`  // read IOPS limit
@@ -53,9 +58,14 @@ type DiskSimpleInfo struct {
 
 // diskXMLInfo holds extra disk information extracted from XML.
 type diskXMLInfo struct {
-	Format     string
-	DeviceType string
-	Bus        string
+	Format        string
+	DeviceType    string
+	Bus           string
+	Serial        string
+	PCIBus        int
+	PCISlot       int
+	PCIFunction   int
+	HasPCIAddress bool
 }
 
 // ErrNoPCIESlots is returned when PCIe slots are exhausted, triggering SCSI fallback.
@@ -78,6 +88,7 @@ func ListDisks(vmName string) ([]DiskInfo, error) {
 	diskIOPSMap := ParseAllDiskIOPSTune(vmName)
 
 	var disks []DiskInfo
+	systemDiskDev := ""
 
 	for _, blk := range blkList {
 		device := blk.Target
@@ -98,6 +109,7 @@ func ListDisks(vmName string) ([]DiskInfo, error) {
 			disk.Format = xmlInfo.Format
 			disk.DeviceType = xmlInfo.DeviceType
 			disk.Bus = xmlInfo.Bus
+			disk.Serial = xmlInfo.Serial
 		}
 
 		// skip disks with empty or "-" source (but keep empty CDROMs)
@@ -110,6 +122,11 @@ func ListDisks(vmName string) ([]DiskInfo, error) {
 		}
 
 		disk.HotSupport = disk.Bus == "virtio" || disk.Bus == "scsi"
+		if disk.DeviceType == "disk" && systemDiskDev == "" {
+			systemDiskDev = disk.Device
+		}
+		disk.IsSystem = disk.Device == systemDiskDev
+		disk.GuestMappingStatus = "unavailable"
 
 		// capacity and usage
 		if state == "running" && disk.Path != "" {
@@ -139,6 +156,35 @@ func ListDisks(vmName string) ([]DiskInfo, error) {
 		}
 
 		disks = append(disks, disk)
+	}
+
+	if state == "running" {
+		ctx, cancel := context.WithTimeout(context.Background(), guest_agent.ConnectTimeout)
+		guestDisks, guestErr := guest_agent.NewClient(vmName).Disks(ctx)
+		cancel()
+		if guestErr == nil {
+			for i := range disks {
+				if disks[i].DeviceType != "disk" {
+					continue
+				}
+				disks[i].GuestMappingStatus = "unmapped"
+				xmlInfo := diskXMLMap[disks[i].Device]
+				for _, guestDisk := range guestDisks {
+					if guestDisk.Partition || guestDisk.Address == nil {
+						continue
+					}
+					serialMatch := xmlInfo.Serial != "" && strings.EqualFold(xmlInfo.Serial, guestDisk.Address.Serial)
+					pciMatch := xmlInfo.HasPCIAddress && guestDisk.Address.PCIDevice != nil &&
+						xmlInfo.PCIBus == guestDisk.Address.PCIDevice.Bus && xmlInfo.PCISlot == guestDisk.Address.PCIDevice.Slot &&
+						xmlInfo.PCIFunction == guestDisk.Address.PCIDevice.Function
+					if serialMatch || pciMatch {
+						disks[i].GuestDevice = guestDisk.Name
+						disks[i].GuestMappingStatus = "mapped"
+						break
+					}
+				}
+			}
+		}
 	}
 
 	return disks, nil
@@ -173,6 +219,9 @@ func parseDiskXMLInfo(vmName string) map[string]diskXMLInfo {
 		}
 
 		if inDisk {
+			if strings.HasPrefix(trimmed, "<serial>") && strings.Contains(trimmed, "</serial>") {
+				currentInfo.Serial = strings.TrimSuffix(strings.TrimPrefix(trimmed, "<serial>"), "</serial>")
+			}
 			// <driver ... type='qcow2'/>
 			if strings.Contains(trimmed, "<driver") && strings.Contains(trimmed, "type='") {
 				parts := strings.Split(trimmed, "type='")
@@ -195,6 +244,14 @@ func parseDiskXMLInfo(vmName string) map[string]diskXMLInfo {
 					}
 				}
 			}
+			if strings.Contains(trimmed, "<address") && strings.Contains(trimmed, "type='pci'") {
+				if bus, ok := parseXMLHexAttribute(trimmed, "bus"); ok {
+					currentInfo.PCIBus = bus
+					currentInfo.HasPCIAddress = true
+				}
+				currentInfo.PCISlot, _ = parseXMLHexAttribute(trimmed, "slot")
+				currentInfo.PCIFunction, _ = parseXMLHexAttribute(trimmed, "function")
+			}
 			if strings.Contains(trimmed, "</disk>") {
 				if currentDev != "" {
 					result[currentDev] = currentInfo
@@ -206,6 +263,17 @@ func parseDiskXMLInfo(vmName string) map[string]diskXMLInfo {
 	}
 
 	return result
+}
+
+func parseXMLHexAttribute(line, name string) (int, bool) {
+	needle := name + "='"
+	parts := strings.SplitN(line, needle, 2)
+	if len(parts) != 2 {
+		return 0, false
+	}
+	value := strings.SplitN(parts[1], "'", 2)[0]
+	parsed, err := strconv.ParseInt(strings.TrimPrefix(value, "0x"), 16, 32)
+	return int(parsed), err == nil
 }
 
 // ParseQemuInfoStr parses a string value from qemu-img info JSON (top-level field only).
@@ -369,7 +437,7 @@ func ResizeDisk(vmName, device string, newSizeGB int) error {
 		}
 	}
 
-	if vmState == "running" {
+	if vmState == "running" || vmState == "blocked" || vmState == "paused" || vmState == "pmsuspended" {
 		// 在线扩容：仅扩容磁盘文件，需要用户在虚拟机内部手动扩展分区和文件系统
 		newSizeBytes := uint64(newSizeGB) * 1024 * 1024 * 1024
 		if err := libvirt_rpc.BlockResizeRPC(vmName, device, newSizeBytes, libvirt.DomainBlockResizeBytes); err != nil {

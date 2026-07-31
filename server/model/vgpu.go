@@ -6,7 +6,7 @@ import (
 
 type VGPUProfile struct {
 	ID            uint      `gorm:"primaryKey" json:"id"`
-	PCIDevice     string    `gorm:"index;size:64" json:"pci_device"`
+	PCIDevice     string    `gorm:"column:pci_device;index;size:64" json:"pci_device"`
 	ProfileName   string    `gorm:"size:128" json:"profile_name"`
 	Description   string    `gorm:"size:512" json:"description"`
 	MaxInstances  int       `json:"max_instances"`

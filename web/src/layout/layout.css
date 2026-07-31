@@ -1,0 +1,924 @@
+/**
+ * 主布局样式（深空极光 · 浅色优先）
+ * 贴边布局：侧边栏满高贴左 + 顶部导航栏贴顶，两者无缝衔接
+ * 组件使用 Semi Design
+ */
+
+.qvm-layout {
+  --qvm-sidebar-w: 248px;
+  --qvm-topbar-h: 54px;
+  min-height: 100vh;
+  display: flex;
+  position: relative;
+  background: var(--qvm-bg);
+  /* 裁剪横向溢出，避免宽表格撑出页面 */
+  overflow-x: clip;
+}
+/* 手动折叠：仅图标模式 */
+.qvm-layout.side-fold {
+  --qvm-sidebar-w: 74px;
+}
+
+/* ============ 贴边侧边栏 ============ */
+.qvm-sidebar {
+  width: var(--qvm-sidebar-w);
+  height: 100vh;
+  flex: none;
+  z-index: 20;
+  background: var(--qvm-sidebar-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  left: 0;
+  top: 0;
+  border-right: 1px solid var(--qvm-stroke);
+  box-shadow: var(--qvm-panel-shadow);
+  transition:
+    width 0.22s ease,
+    transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 折叠开关：悬浮于侧边栏右缘，与顶栏高度居中对齐 */
+.qvm-side-fold {
+  position: absolute;
+  right: -12px;
+  top: calc(var(--qvm-topbar-h) / 2 - 12px);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  padding: 0;
+  background: var(--qvm-card-bg);
+  border: 1px solid var(--qvm-stroke-strong);
+  color: var(--qvm-text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 21;
+  transition: all 0.18s;
+}
+.qvm-side-fold:hover {
+  color: var(--qvm-acc-ink);
+  border-color: var(--qvm-acc-stroke);
+}
+.qvm-side-fold .semi-icon {
+  transition: transform 0.25s;
+}
+.qvm-layout.side-fold .qvm-side-fold .semi-icon {
+  transform: rotate(180deg);
+}
+
+.qvm-logo-zone {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 14px 18px 12px;
+  min-height: var(--qvm-topbar-h);
+  position: relative;
+}
+.qvm-logo-zone::after {
+  content: '';
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.5), rgba(139, 92, 246, 0.25), transparent);
+}
+.qvm-logo-img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  flex: none;
+  filter: drop-shadow(0 4px 10px rgba(134, 59, 255, 0.28));
+}
+.qvm-logo-txt {
+  min-width: 0;
+}
+.qvm-logo-name {
+  font-family: var(--qvm-num-font);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--qvm-text-0);
+  white-space: nowrap;
+}
+.qvm-logo-sub {
+  font-size: 10px;
+  color: var(--qvm-text-2);
+  margin-top: 1px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+/* 导航 */
+.qvm-nav {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 12px 8px;
+  scrollbar-width: none;
+}
+.qvm-nav::-webkit-scrollbar {
+  display: none;
+}
+.qvm-nav-group {
+  font-size: 10.5px;
+  color: var(--qvm-text-2);
+  letter-spacing: 2px;
+  padding: 14px 10px 7px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.qvm-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  border-radius: 11px;
+  font-size: 13px;
+  color: var(--qvm-text-1);
+  margin-bottom: 2px;
+  position: relative;
+  transition: all 0.18s;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.qvm-nav-item .semi-icon {
+  flex: none;
+  opacity: 0.85;
+}
+.qvm-nav-item:hover {
+  color: var(--qvm-text-0);
+  background: var(--qvm-hover-bg);
+}
+/* 悬停时图标点亮为各自主题彩色（--nav-ic 由导航配置注入） */
+.qvm-nav-item:hover .semi-icon {
+  color: var(--nav-ic, var(--qvm-acc-ink));
+  opacity: 1;
+  filter: drop-shadow(0 0 6px var(--nav-ic, transparent));
+}
+.qvm-nav-item.on {
+  color: var(--qvm-text-0);
+  background: var(--qvm-active-bg);
+  font-weight: 600;
+}
+.qvm-nav-item.on::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 20%;
+  bottom: 20%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--qvm-grad);
+  box-shadow: 0 0 12px rgba(45, 212, 191, 0.8);
+}
+.qvm-nav-item.on .semi-icon {
+  color: var(--qvm-acc-ink);
+  opacity: 1;
+  filter: drop-shadow(0 0 6px rgba(45, 212, 191, 0.6));
+}
+.qvm-nav-txt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qvm-nav-bdg {
+  margin-left: auto;
+  font-family: var(--qvm-num-font);
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: var(--qvm-acc-bg);
+  color: var(--qvm-acc-ink);
+  border: 1px solid var(--qvm-acc-stroke);
+}
+.qvm-nav-bdg.purple {
+  background: rgba(139, 92, 246, 0.12);
+  color: var(--qvm-acc2-ink);
+  border-color: rgba(139, 92, 246, 0.24);
+}
+
+/* 虚拟机快速切换子列表 */
+.qvm-nav-sub {
+  margin: 2px 0 6px 17px;
+  padding-left: 14px;
+  border-left: 1px solid var(--qvm-stroke);
+}
+.qvm-nav-sub-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--qvm-text-2);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qvm-nav-sub-item:hover {
+  color: var(--qvm-acc-ink);
+  background: var(--qvm-acc-bg);
+}
+.qvm-nav-sub-item.on {
+  color: var(--qvm-acc-ink);
+  background: var(--qvm-active-bg);
+  font-weight: 600;
+}
+.qvm-nav-sub-empty {
+  padding: 6px 9px;
+  font-size: 11px;
+  color: var(--qvm-text-2);
+}
+
+/* ============ 主区域 ============ */
+.qvm-main {
+  flex: 1;
+  margin-left: var(--qvm-sidebar-w);
+  min-width: 0;
+  padding: calc(var(--qvm-topbar-h) + 20px) 26px 90px;
+  position: relative;
+  z-index: 1;
+  transition: margin-left 0.22s ease;
+}
+
+/* ============ 顶部导航栏（固定贴顶，与侧边栏无缝衔接） ============ */
+.qvm-topbar {
+  position: fixed;
+  top: 0;
+  left: var(--qvm-sidebar-w);
+  right: 0;
+  height: var(--qvm-topbar-h);
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  background: var(--qvm-taskbar-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--qvm-stroke);
+  transition: left 0.22s ease;
+}
+/* 右侧扩展区（主题切换等，预留：搜索、通知） */
+.qvm-topbar-extra {
+  margin-left: auto;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* 顶栏内工具按钮统一缩小以适配 54px 高度 */
+.qvm-topbar .qvm-tool-ic {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+/* 顶栏用户入口：展示账号摘要，更多操作在下拉菜单中提供 */
+.qvm-top-user-wrap {
+  display: flex;
+}
+.qvm-top-user {
+  min-width: 0;
+  height: 38px;
+  padding: 3px 8px 3px 4px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.qvm-top-user:hover,
+.qvm-top-user:focus-visible {
+  background: var(--qvm-hover-bg);
+  border-color: var(--qvm-stroke);
+  outline: none;
+}
+.qvm-top-user-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  flex: none;
+  background: var(--qvm-grad2);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+.qvm-top-user-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+}
+.qvm-top-user-name {
+  max-width: 116px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--qvm-text-1);
+  font-size: 12px;
+  font-weight: 600;
+}
+.qvm-top-user-role {
+  max-width: 116px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+  color: var(--qvm-acc3-ink);
+  font-size: 10px;
+}
+
+/* 顶部问候行 */
+.qvm-topline {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.qvm-hello {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--qvm-text-0);
+}
+.qvm-hello em {
+  font-style: normal;
+  background: var(--qvm-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.qvm-cloud-tag {
+  font-size: 10.5px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  color: var(--qvm-acc3-ink);
+  font-weight: 600;
+  margin-left: 10px;
+  vertical-align: 3px;
+}
+.qvm-hello-sub {
+  font-size: 12.5px;
+  color: var(--qvm-text-1);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.qvm-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--qvm-acc);
+  box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.5);
+  animation: qvm-pulse 2s infinite;
+  flex: none;
+}
+.qvm-tool-ic {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--qvm-card-bg);
+  border: 1px solid var(--qvm-stroke);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--qvm-text-1);
+  position: relative;
+  transition: all 0.18s;
+  cursor: pointer;
+}
+.qvm-tool-ic:hover {
+  color: var(--qvm-acc-ink);
+  border-color: var(--qvm-acc-stroke);
+}
+.qvm-tool-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--qvm-acc2);
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.9);
+}
+
+/* 渐变主按钮（全站通用：工作台顶部、虚拟机列表等） */
+.qvm-btn-grad.semi-button {
+  background: var(--qvm-grad);
+  color: var(--qvm-on-grad-text);
+  border: none;
+  font-weight: 700;
+  font-family: var(--qvm-num-font);
+  box-shadow: 0 8px 26px rgba(45, 212, 191, 0.32);
+  transition:
+    transform 0.18s,
+    box-shadow 0.18s,
+    opacity 0.18s;
+}
+.qvm-btn-grad.semi-button:hover:not(:disabled) {
+  background: var(--qvm-grad);
+  color: var(--qvm-on-grad-text);
+  box-shadow: 0 10px 32px rgba(45, 212, 191, 0.45);
+  transform: translateY(-1px);
+}
+.qvm-btn-grad.semi-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+.qvm-btn-grad.semi-button:disabled {
+  opacity: 0.45;
+  color: var(--qvm-on-grad-text);
+  box-shadow: none;
+}
+
+/* ============ 页面标签页栏（位于顶部导航栏内） ============ */
+.qvm-tabs-bar {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.qvm-tabs-bar::-webkit-scrollbar {
+  display: none;
+}
+.qvm-pg-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 13px;
+  border-radius: 10px;
+  flex: none;
+  background: var(--qvm-card-bg);
+  border: 1px solid var(--qvm-stroke);
+  font-size: 12.5px;
+  color: var(--qvm-text-1);
+  cursor: pointer;
+  transition: all 0.16s;
+  user-select: none;
+}
+.qvm-pg-tab:hover {
+  color: var(--qvm-text-0);
+  border-color: var(--qvm-stroke-strong);
+}
+.qvm-pg-tab.on {
+  background: var(--qvm-active-bg);
+  color: var(--qvm-text-0);
+  font-weight: 600;
+  border-color: var(--qvm-acc-stroke);
+  box-shadow: 0 0 16px rgba(45, 212, 191, 0.14);
+}
+.qvm-pg-tab.pin {
+  color: var(--qvm-acc-ink);
+  border-color: var(--qvm-acc-stroke);
+  background: var(--qvm-acc-bg);
+}
+.qvm-tab-x {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--qvm-text-2);
+  flex: none;
+  transition: all 0.15s;
+}
+.qvm-tab-x:hover {
+  color: var(--qvm-danger);
+  background: rgba(251, 113, 133, 0.12);
+}
+
+/* ============ 底部常驻任务栏 ============ */
+.qvm-taskbar {
+  position: fixed;
+  left: calc(var(--qvm-sidebar-w) + 26px);
+  right: 26px;
+  bottom: 14px;
+  z-index: 30;
+  height: 46px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--qvm-taskbar-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--qvm-stroke);
+  box-shadow: var(--qvm-panel-shadow);
+  transition:
+    height 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    left 0.22s ease;
+}
+.qvm-taskbar.open {
+  height: 320px;
+}
+.qvm-taskbar.dragging {
+  transition: none;
+}
+.qvm-tb-resize {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: row-resize;
+  z-index: 2;
+}
+.qvm-tb-head {
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  cursor: pointer;
+  user-select: none;
+}
+.qvm-tb-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--qvm-text-0);
+  flex: none;
+}
+.qvm-tb-title .semi-icon {
+  color: var(--qvm-acc-ink);
+}
+.qvm-tb-badge {
+  font-size: 10.5px;
+  padding: 2px 9px;
+  border-radius: 12px;
+  background: var(--qvm-acc-bg);
+  color: var(--qvm-acc-ink);
+  border: 1px solid var(--qvm-acc-stroke);
+  font-weight: 600;
+  font-family: var(--qvm-num-font);
+}
+.qvm-tb-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--qvm-stroke);
+  flex: none;
+}
+.qvm-tb-current {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--qvm-text-1);
+  min-width: 0;
+  flex: 1;
+}
+.qvm-tb-current .name {
+  color: var(--qvm-text-0);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.qvm-tb-current .msg {
+  color: var(--qvm-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qvm-tb-current .idle {
+  color: var(--qvm-text-2);
+}
+.qvm-tb-prog {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.qvm-tb-prog-track {
+  width: 90px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--qvm-track-bg);
+  overflow: hidden;
+}
+.qvm-tb-prog-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--qvm-grad);
+  box-shadow: 0 0 8px rgba(45, 212, 191, 0.5);
+  transition: width 0.4s ease;
+}
+.qvm-tb-prog-num {
+  font-family: var(--qvm-num-font);
+  font-size: 11px;
+  color: var(--qvm-acc-ink);
+}
+.qvm-sse-st {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--qvm-text-2);
+  flex: none;
+  white-space: nowrap;
+}
+.qvm-sse-st .semi-icon {
+  font-size: 8px;
+}
+.qvm-sse-st.ok {
+  color: var(--qvm-acc-ink);
+}
+.qvm-tb-full {
+  flex: none;
+  font-size: 12px;
+  color: var(--qvm-acc3-ink);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.qvm-tb-toggle {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--qvm-text-2);
+  transition: transform 0.28s;
+}
+.qvm-taskbar.open .qvm-tb-toggle {
+  transform: rotate(180deg);
+}
+.qvm-tb-body {
+  height: calc(100% - 46px);
+  overflow-y: auto;
+  padding: 2px 14px 14px;
+}
+.qvm-tb-empty {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--qvm-text-2);
+  font-size: 12.5px;
+}
+
+/* 任务表格（自定义表格样式，对齐设计稿） */
+.qvm-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.qvm-table th {
+  font-size: 10.5px;
+  color: var(--qvm-text-2);
+  text-align: left;
+  font-weight: 600;
+  letter-spacing: 1px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--qvm-stroke);
+  position: sticky;
+  top: 0;
+  background: var(--qvm-taskbar-bg);
+  z-index: 1;
+}
+.qvm-table td {
+  font-size: 12px;
+  color: var(--qvm-text-0);
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--qvm-stroke);
+  vertical-align: middle;
+}
+.qvm-table tr:last-child td {
+  border-bottom: none;
+}
+.qvm-table tr:hover td {
+  background: var(--qvm-hover-bg);
+}
+.qvm-type-tag {
+  font-size: 10.5px;
+  padding: 2px 9px;
+  border-radius: 7px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.qvm-st-tag {
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.qvm-st-tag i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+.qvm-st-tag.running {
+  color: var(--qvm-acc3-ink);
+}
+.qvm-st-tag.running i {
+  background: #38bdf8;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.9);
+  animation: qvm-blink 1.2s infinite;
+}
+.qvm-st-tag.pending {
+  color: var(--qvm-text-1);
+}
+.qvm-st-tag.pending i {
+  background: #fbbf24;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.8);
+}
+.qvm-st-tag.success {
+  color: var(--qvm-acc-ink);
+}
+.qvm-st-tag.success i {
+  background: #2dd4bf;
+}
+.qvm-st-tag.failed {
+  color: var(--qvm-danger);
+}
+.qvm-st-tag.failed i {
+  background: #fb7185;
+}
+.qvm-st-tag.canceled {
+  color: var(--qvm-warn);
+}
+.qvm-st-tag.canceled i {
+  background: #f59e0b;
+}
+.qvm-cell-prog {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.qvm-cell-prog-track {
+  width: 74px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--qvm-track-bg);
+  overflow: hidden;
+}
+.qvm-cell-prog-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.qvm-cell-prog-num {
+  font-family: var(--qvm-num-font);
+  font-size: 11px;
+  color: var(--qvm-text-1);
+}
+.qvm-cell-msg {
+  color: var(--qvm-text-2);
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qvm-mono {
+  font-family: var(--qvm-num-font);
+  font-size: 12px;
+  color: var(--qvm-text-1);
+}
+.qvm-act-btn {
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-right: 12px;
+  white-space: nowrap;
+  color: var(--qvm-acc3-ink);
+}
+.qvm-act-btn.cancel {
+  color: var(--qvm-warn);
+}
+.qvm-act-btn.cancel:hover {
+  color: var(--qvm-danger);
+}
+.qvm-act-btn:last-child {
+  margin-right: 0;
+}
+
+/* ============ 手动折叠（仅图标模式） ============ */
+.qvm-layout.side-fold .qvm-logo-txt,
+.qvm-layout.side-fold .qvm-nav-group,
+.qvm-layout.side-fold .qvm-nav-item .qvm-nav-txt,
+.qvm-layout.side-fold .qvm-nav-bdg,
+.qvm-layout.side-fold .qvm-nav-sub {
+  display: none;
+}
+.qvm-layout.side-fold .qvm-nav-item {
+  justify-content: center;
+  padding: 11px;
+}
+.qvm-layout.side-fold .qvm-nav-item.on::before {
+  display: none;
+}
+.qvm-layout.side-fold .qvm-logo-zone {
+  justify-content: center;
+  padding: 14px 10px 12px;
+}
+/* ============ 小屏：侧边栏抽屉 ============ */
+.qvm-side-toggle {
+  display: none;
+}
+.qvm-sidebar-mask {
+  display: none;
+}
+
+/* ============ 响应式 ============ */
+@media (max-width: 820px) {
+  /* 小屏：侧边栏转抽屉，主区域与顶栏铺满 */
+  .qvm-layout,
+  .qvm-layout.side-fold {
+    --qvm-sidebar-w: 0px;
+  }
+  .qvm-sidebar {
+    width: 248px;
+    margin: 0;
+    border-radius: 0 20px 20px 0;
+    transform: translateX(-110%);
+  }
+  .qvm-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+  /* 抽屉模式下恢复完整菜单（含折叠状态） */
+  .qvm-layout .qvm-logo-txt,
+  .qvm-layout.side-fold .qvm-logo-txt,
+  .qvm-layout.side-fold .qvm-nav-group,
+  .qvm-layout.side-fold .qvm-nav-item .qvm-nav-txt,
+  .qvm-layout.side-fold .qvm-nav-bdg,
+  .qvm-layout.side-fold .qvm-nav-sub {
+    display: initial;
+  }
+  .qvm-layout .qvm-nav-item,
+  .qvm-layout.side-fold .qvm-nav-item {
+    justify-content: flex-start;
+    padding: 9px 11px;
+  }
+  .qvm-layout .qvm-logo-zone,
+  .qvm-layout.side-fold .qvm-logo-zone {
+    justify-content: flex-start;
+    padding: 14px 18px 12px;
+  }
+  /* 抽屉模式无需折叠开关 */
+  .qvm-side-fold {
+    display: none;
+  }
+  .qvm-sidebar-mask {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 19;
+  }
+  .qvm-topbar {
+    left: 0;
+    padding: 0 12px;
+  }
+  .qvm-main {
+    margin-left: 0;
+    padding: calc(var(--qvm-topbar-h) + 14px) 14px 90px;
+  }
+  .qvm-side-toggle {
+    display: flex;
+    flex: none;
+  }
+  .qvm-taskbar {
+    left: 12px;
+    right: 12px;
+  }
+  .qvm-tb-current .msg,
+  .qvm-sse-st,
+  .qvm-tb-full {
+    display: none;
+  }
+  /* 小屏隐藏开源版文字，仅保留图标 */
+  .qvm-oss-link span {
+    display: none;
+  }
+  .qvm-top-user-info {
+    display: none;
+  }
+  .qvm-top-user {
+    width: 34px;
+    padding: 2px;
+    justify-content: center;
+  }
+}

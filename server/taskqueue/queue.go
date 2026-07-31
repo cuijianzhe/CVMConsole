@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"encoding/json"
+	"strings"
 
 	"kvm_console/logger"
 
@@ -164,6 +165,23 @@ func HasActiveTask(taskType string, match func(params string) bool) bool {
 		}
 	}
 	return false
+}
+
+// GetActiveTask 返回指定类型最新的等待中或运行中任务副本。
+func GetActiveTask(taskType string) (*model.Task, bool) {
+	taskStoreMu.RLock()
+	defer taskStoreMu.RUnlock()
+	var found *model.Task
+	for _, task := range taskStore {
+		if task.Type != taskType || (task.Status != model.TaskStatusPending && task.Status != model.TaskStatusRunning) {
+			continue
+		}
+		if found == nil || task.ID > found.ID {
+			copyValue := *task
+			found = &copyValue
+		}
+	}
+	return found, found != nil
 }
 
 // storeCancelFn 存储取消函数
@@ -460,7 +478,9 @@ func GetTaskForUser(taskID uint, username, role string) (*model.Task, error) {
 	if !canAccessTask(task, username, role) {
 		return nil, ErrTaskAccessDenied
 	}
-	return task, nil
+	copyValue := *task
+	copyValue.Params = redactTaskParams(copyValue.Params)
+	return &copyValue, nil
 }
 
 // GetTaskListFilteredForUser 获取指定用户可访问的任务列表（支持状态和类型筛选）。
@@ -499,10 +519,45 @@ func GetTaskListFilteredForUser(page, pageSize int, status, taskType, username, 
 
 	result := make([]model.Task, 0, end-offset)
 	for _, t := range filtered[offset:end] {
-		result = append(result, *t)
+		copyValue := *t
+		copyValue.Params = redactTaskParams(copyValue.Params)
+		result = append(result, copyValue)
 	}
 
 	return result, total, nil
+}
+
+func redactTaskParams(raw string) string {
+	var value any
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		return raw
+	}
+	redactTaskValue(value)
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return "{}"
+	}
+	return string(encoded)
+}
+
+func redactTaskValue(value any) {
+	switch current := value.(type) {
+	case map[string]any:
+		for key, child := range current {
+			normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "-", "_"), ".", "_"))
+			if strings.Contains(normalized, "password") || strings.Contains(normalized, "passwd") ||
+				strings.Contains(normalized, "token") || strings.Contains(normalized, "secret") ||
+				strings.Contains(normalized, "private_key") || strings.Contains(normalized, "credential") {
+				current[key] = "******"
+				continue
+			}
+			redactTaskValue(child)
+		}
+	case []any:
+		for _, child := range current {
+			redactTaskValue(child)
+		}
+	}
 }
 
 // ===================== 操作接口 =====================

@@ -54,6 +54,8 @@ type SettingsResponse struct {
 	ProductName                           string `json:"product_name"`
 	BrowserFavicon                        string `json:"browser_favicon"`
 	BrowserTitle                          string `json:"browser_title"`
+	FooterText                            string `json:"footer_text"`
+	FooterLink                            string `json:"footer_link"`
 	DevelopmentMode                       bool   `json:"development_mode"`
 	MaintenanceMode                       bool   `json:"maintenance_mode"`
 	MaintenanceServiceUnits               string `json:"maintenance_service_units"`
@@ -76,9 +78,6 @@ type SettingsResponse struct {
 	DynamicMemoryCooldownSeconds          int    `json:"dynamic_memory_cooldown_seconds"`
 	DynamicMemoryObservationHours         int    `json:"dynamic_memory_observation_hours"`
 	SchedulerEventRetentionHours          int    `json:"scheduler_event_retention_hours"`
-	PortForwardHTTPProbeEnabled           bool   `json:"port_forward_http_probe_enabled"`
-	PortForwardHTTPProbeIntervalMinutes   int    `json:"port_forward_http_probe_interval_minutes"`
-	PortForwardHTTPProbeTimeoutSeconds    int    `json:"port_forward_http_probe_timeout_seconds"`
 	// 虚拟机磁盘 IOPS 默认限制
 	DefaultDiskIOPSTotal int `json:"default_disk_iops_total"` // 默认总 IOPS 限制（0 表示不限制）
 	DefaultDiskIOPSRead  int `json:"default_disk_iops_read"`  // 默认读 IOPS 限制（0 表示不限制）
@@ -94,9 +93,10 @@ type SettingsResponse struct {
 	NetworkWaitOnlineDisabled bool   `json:"network_wait_online_disabled"`
 	NetworkWaitOnlineSummary  string `json:"network_wait_online_summary"`
 	// 安全防护
-	SessionFingerprintEnabled  bool `json:"session_fingerprint_enabled"`
-	RequestFilterEnabled       bool `json:"request_filter_enabled"`
-	PasswordBreachCheckEnabled bool `json:"password_breach_check_enabled"`
+	SessionFingerprintEnabled           bool `json:"session_fingerprint_enabled"`
+	RequestFilterEnabled                bool `json:"request_filter_enabled"`
+	PasswordBreachCheckEnabled          bool `json:"password_breach_check_enabled"`
+	ScheduledPasswordBreachCheckEnabled bool `json:"scheduled_password_breach_check_enabled"`
 	// 硬件直通
 	HardwarePassthroughEnabled bool `json:"hardware_passthrough_enabled"`
 }
@@ -131,6 +131,8 @@ type UpdateSettingsRequest struct {
 	ProductName                           *string `json:"product_name"`
 	BrowserFavicon                        *string `json:"browser_favicon"`
 	BrowserTitle                          *string `json:"browser_title"`
+	FooterText                            *string `json:"footer_text"`
+	FooterLink                            *string `json:"footer_link"`
 	DevelopmentMode                       *bool   `json:"development_mode"`
 	MaintenanceMode                       *bool   `json:"maintenance_mode"`
 	MaintenanceServiceUnits               *string `json:"maintenance_service_units"`
@@ -152,9 +154,6 @@ type UpdateSettingsRequest struct {
 	DynamicMemoryCooldownSeconds          *int    `json:"dynamic_memory_cooldown_seconds"`
 	DynamicMemoryObservationHours         *int    `json:"dynamic_memory_observation_hours"`
 	SchedulerEventRetentionHours          *int    `json:"scheduler_event_retention_hours"`
-	PortForwardHTTPProbeEnabled           *bool   `json:"port_forward_http_probe_enabled"`
-	PortForwardHTTPProbeIntervalMinutes   *int    `json:"port_forward_http_probe_interval_minutes"`
-	PortForwardHTTPProbeTimeoutSeconds    *int    `json:"port_forward_http_probe_timeout_seconds"`
 	// 虚拟机磁盘 IOPS 默认限制
 	DefaultDiskIOPSTotal *int `json:"default_disk_iops_total"` // 默认总 IOPS 限制（0 表示不限制）
 	DefaultDiskIOPSRead  *int `json:"default_disk_iops_read"`  // 默认读 IOPS 限制（0 表示不限制）
@@ -168,9 +167,10 @@ type UpdateSettingsRequest struct {
 	// 网络等待就绪检测
 	NetworkWaitOnlineDisabled *bool `json:"network_wait_online_disabled"`
 	// 安全防护
-	SessionFingerprintEnabled  *bool `json:"session_fingerprint_enabled"`
-	RequestFilterEnabled       *bool `json:"request_filter_enabled"`
-	PasswordBreachCheckEnabled *bool `json:"password_breach_check_enabled"`
+	SessionFingerprintEnabled           *bool `json:"session_fingerprint_enabled"`
+	RequestFilterEnabled                *bool `json:"request_filter_enabled"`
+	PasswordBreachCheckEnabled          *bool `json:"password_breach_check_enabled"`
+	ScheduledPasswordBreachCheckEnabled *bool `json:"scheduled_password_breach_check_enabled"`
 	// 硬件直通
 	HardwarePassthroughEnabled *bool `json:"hardware_passthrough_enabled"`
 }
@@ -195,6 +195,8 @@ type PublicSettingsResponse struct {
 	ProductName                string `json:"product_name"`
 	BrowserFavicon             string `json:"browser_favicon"`
 	BrowserTitle               string `json:"browser_title"`
+	FooterText                 string `json:"footer_text"`
+	FooterLink                 string `json:"footer_link"`
 	PasswordBreachCheckEnabled bool   `json:"password_breach_check_enabled"`
 	SpiceEnabledByDefault      bool   `json:"spice_enabled_by_default"` // 创建虚拟机 SPICE 开关的默认初始值
 }
@@ -216,6 +218,8 @@ func GetPublicSettings(c *gin.Context) {
 			ProductName:                config.GlobalConfig.ProductName,
 			BrowserFavicon:             config.GlobalConfig.BrowserFavicon,
 			BrowserTitle:               config.GlobalConfig.BrowserTitle,
+			FooterText:                 config.GlobalConfig.FooterText,
+			FooterLink:                 config.GlobalConfig.FooterLink,
 			PasswordBreachCheckEnabled: config.GlobalConfig.PasswordBreachCheckEnabled,
 			SpiceEnabledByDefault:      config.GlobalConfig.SpiceEnabledByDefault,
 		},
@@ -269,6 +273,8 @@ func GetSettings(c *gin.Context) {
 			ProductName:                           cfg.ProductName,
 			BrowserFavicon:                        cfg.BrowserFavicon,
 			BrowserTitle:                          cfg.BrowserTitle,
+			FooterText:                            cfg.FooterText,
+			FooterLink:                            cfg.FooterLink,
 			DevelopmentMode:                       cfg.DevelopmentMode,
 			MaintenanceMode:                       cfg.MaintenanceMode,
 			MaintenanceServiceUnits:               maintenanceServiceUnits,
@@ -291,9 +297,6 @@ func GetSettings(c *gin.Context) {
 			DynamicMemoryCooldownSeconds:          cfg.DynamicMemoryCooldownSeconds,
 			DynamicMemoryObservationHours:         cfg.DynamicMemoryObservationHours,
 			SchedulerEventRetentionHours:          cfg.SchedulerEventRetentionHours,
-			PortForwardHTTPProbeEnabled:           cfg.PortForwardHTTPProbeEnabled,
-			PortForwardHTTPProbeIntervalMinutes:   cfg.PortForwardHTTPProbeIntervalMinutes,
-			PortForwardHTTPProbeTimeoutSeconds:    cfg.PortForwardHTTPProbeTimeoutSeconds,
 			DefaultDiskIOPSTotal:                  cfg.DefaultDiskIOPSTotal,
 			DefaultDiskIOPSRead:                   cfg.DefaultDiskIOPSRead,
 			DefaultDiskIOPSWrite:                  cfg.DefaultDiskIOPSWrite,
@@ -306,6 +309,7 @@ func GetSettings(c *gin.Context) {
 			SessionFingerprintEnabled:             cfg.SessionFingerprintEnabled,
 			RequestFilterEnabled:                  cfg.RequestFilterEnabled,
 			PasswordBreachCheckEnabled:            cfg.PasswordBreachCheckEnabled,
+			ScheduledPasswordBreachCheckEnabled:   cfg.ScheduledPasswordBreachCheckEnabled,
 			HardwarePassthroughEnabled:            cfg.HardwarePassthroughEnabled,
 		},
 	})
@@ -453,6 +457,12 @@ func UpdateSettings(c *gin.Context) {
 			cfg.BrowserTitle = "QVMConsole"
 		}
 	}
+	if req.FooterText != nil {
+		cfg.FooterText = *req.FooterText
+	}
+	if req.FooterLink != nil {
+		cfg.FooterLink = strings.TrimSpace(*req.FooterLink)
+	}
 	if req.DevelopmentMode != nil {
 		cfg.DevelopmentMode = *req.DevelopmentMode
 	}
@@ -566,23 +576,6 @@ func UpdateSettings(c *gin.Context) {
 		}
 		cfg.SchedulerEventRetentionHours = *req.SchedulerEventRetentionHours
 	}
-	if req.PortForwardHTTPProbeEnabled != nil {
-		cfg.PortForwardHTTPProbeEnabled = *req.PortForwardHTTPProbeEnabled
-	}
-	if req.PortForwardHTTPProbeIntervalMinutes != nil {
-		if *req.PortForwardHTTPProbeIntervalMinutes < 5 || *req.PortForwardHTTPProbeIntervalMinutes > 1440 {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "端口转发 HTTP 探测间隔需在 5 - 1440 分钟之间"})
-			return
-		}
-		cfg.PortForwardHTTPProbeIntervalMinutes = *req.PortForwardHTTPProbeIntervalMinutes
-	}
-	if req.PortForwardHTTPProbeTimeoutSeconds != nil {
-		if *req.PortForwardHTTPProbeTimeoutSeconds < 1 || *req.PortForwardHTTPProbeTimeoutSeconds > 30 {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "端口转发 HTTP 探测超时需在 1 - 30 秒之间"})
-			return
-		}
-		cfg.PortForwardHTTPProbeTimeoutSeconds = *req.PortForwardHTTPProbeTimeoutSeconds
-	}
 	if req.DefaultDiskIOPSTotal != nil {
 		if *req.DefaultDiskIOPSTotal < 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "默认总 IOPS 限制不能为负数"})
@@ -638,6 +631,9 @@ func UpdateSettings(c *gin.Context) {
 	}
 	if req.PasswordBreachCheckEnabled != nil {
 		cfg.PasswordBreachCheckEnabled = *req.PasswordBreachCheckEnabled
+	}
+	if req.ScheduledPasswordBreachCheckEnabled != nil {
+		cfg.ScheduledPasswordBreachCheckEnabled = *req.ScheduledPasswordBreachCheckEnabled
 	}
 	if req.HardwarePassthroughEnabled != nil {
 		cfg.HardwarePassthroughEnabled = *req.HardwarePassthroughEnabled

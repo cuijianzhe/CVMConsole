@@ -33,9 +33,13 @@ const (
 	TaskTypeLightweightRuntimeQuotaShutdown = "lightweight_runtime_quota_shutdown" // 轻量云单 VM 运行时长配额耗尽后自动关机
 	TaskTypeExport                          = "export"                             // 导出虚拟机
 	TaskTypeImport                          = "import"                             // 导入虚拟机
+	TaskTypeImportAppliance                 = "import_appliance"                   // 导入 OVF/OVA 虚拟机包
 	TaskTypeDiskTransfer                    = "disk_transfer"                      // 磁盘转移到用户存储
 	TaskTypeRescue                          = "rescue"                             // 救援系统
 	TaskTypeResetVMPassword                 = "reset_vm_password"                  // 重置来宾虚拟机密码
+	TaskTypeVMDiskResize                    = "vm_disk_resize"                     // 虚拟机磁盘扩容与来宾文件系统扩容
+	TaskTypeVMDiskProvision                 = "vm_disk_provision"                  // 创建或关联磁盘并配置来宾挂载
+	TaskTypeVMDiskGuestMount                = "vm_disk_guest_mount"                // 重试来宾磁盘挂载或扩容
 	TaskTypeApplyFirewall                   = "apply_firewall"                     // 应用 KVM 网络防火墙
 	TaskTypeDisableFirewall                 = "disable_firewall"                   // 禁用 KVM 网络防火墙
 	TaskTypeRollbackFirewall                = "rollback_firewall"                  // 回滚 KVM 网络防火墙
@@ -52,7 +56,6 @@ const (
 	TaskTypeStorageCreateLVMVolume          = "storage_create_lvm_volume"          // 创建 LVM 存储卷
 	TaskTypeStorageDeleteLVMVolume          = "storage_delete_lvm_volume"          // 删除 LVM 存储卷
 	TaskTypeNetworkCapture                  = "network_capture"                    // VM 网络抓包诊断
-	TaskTypePortForwardHTTPProbe            = "port_forward_http_probe_manual"     // 手动执行端口转发 HTTP 探测
 	TaskTypeVMScheduleAction                = "vm_schedule_action"                 // 虚拟机定时任务动作执行
 	TaskTypeLightweightVMProvision          = "lightweight_vm_provision"           // 轻量云注册 VM 开通
 	TaskTypeVMMigrate                       = "vm_migrate"                         // 跨节点迁移虚拟机
@@ -60,6 +63,8 @@ const (
 	TaskTypeImportDisk                      = "import_disk"                        // 管理员通过绝对路径导入磁盘创建虚拟机
 	TaskTypeImportDiskAttach                = "import_disk_attach"                 // 管理员通过绝对路径导入磁盘挂载到已有虚拟机
 	TaskTypeMakeVMIndependent               = "make_vm_independent"                // 链式克隆虚拟机转为独立虚拟机
+	TaskTypePasswordBreachScan              = "password_breach_scan"               // 泄露密码扫描
+	TaskTypePasswordBreachNotify            = "password_breach_notify"             // 泄露密码通知
 )
 
 // Task 异步任务模型

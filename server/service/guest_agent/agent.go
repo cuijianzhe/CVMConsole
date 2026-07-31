@@ -1,7 +1,7 @@
 package guest_agent
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -59,6 +59,26 @@ type guestNetworkResponse struct {
 	Return []guestNetworkInterface `json:"return"`
 }
 
+type guestExecStartResponse struct {
+	Return struct {
+		PID int `json:"pid"`
+	} `json:"return"`
+}
+
+type guestExecStatusResponse struct {
+	Return struct {
+		Exited   bool   `json:"exited"`
+		ExitCode int    `json:"exitcode"`
+		ErrData  string `json:"err-data"`
+	} `json:"return"`
+}
+
+type guestOSInfoResponse struct {
+	Return struct {
+		ID string `json:"id"`
+	} `json:"return"`
+}
+
 // CheckVMGuestAgentStatus 检查虚拟机 Guest Agent 状态
 // 返回的状态中 Configured 表示 XML 里有 GA 通道，Connected 表示 agent 正在响应
 func CheckVMGuestAgentStatus(vmName string) *GuestAgentStatus {
@@ -83,22 +103,17 @@ func CheckVMGuestAgentStatus(vmName string) *GuestAgentStatus {
 		return status
 	}
 
-	// 检查 agent 是否连通
-	pingResult := utils.ExecCommandQuiet("virsh", "qemu-agent-command", vmName,
-		`{"execute":"guest-ping"}`)
-	if pingResult.Error == nil && strings.Contains(pingResult.Stdout, "return") {
+	client := NewClient(vmName)
+	ctx, cancel := context.WithTimeout(context.Background(), ConnectTimeout)
+	defer cancel()
+	if client.Ping(ctx) == nil {
 		status.Connected = true
 	}
 
 	// 获取版本号
 	if status.Connected {
-		infoResult := utils.ExecCommandQuiet("virsh", "qemu-agent-command", vmName,
-			`{"execute":"guest-info"}`)
-		if infoResult.Error == nil {
-			var info guestInfoResponse
-			if err := json.Unmarshal([]byte(infoResult.Stdout), &info); err == nil {
-				status.Version = info.Return.Version
-			}
+		if info, err := client.Info(ctx); err == nil {
+			status.Version = info.Version
 		}
 	}
 
@@ -108,19 +123,15 @@ func CheckVMGuestAgentStatus(vmName string) *GuestAgentStatus {
 // GetVMGuestAgentIPs 从 QEMU Guest Agent 获取虚拟机所有网口的 IP 地址
 // 返回按 MAC 分组的 IPv4 地址列表，自动过滤 loopback 和 link-local 地址
 func GetVMGuestAgentIPs(vmName string) ([]GuestAgentIPResult, error) {
-	result := utils.ExecCommandQuiet("virsh", "qemu-agent-command", vmName,
-		`{"execute":"guest-network-get-interfaces"}`)
-	if result.Error != nil {
-		return nil, fmt.Errorf("guest agent 命令执行失败: %w", result.Error)
-	}
-
-	var resp guestNetworkResponse
-	if err := json.Unmarshal([]byte(result.Stdout), &resp); err != nil {
-		return nil, fmt.Errorf("解析 guest agent 返回失败: %w", err)
+	ctx, cancel := context.WithTimeout(context.Background(), ConnectTimeout)
+	defer cancel()
+	var interfaces []guestNetworkInterface
+	if err := NewClient(vmName).Command(ctx, "guest-network-get-interfaces", nil, &interfaces, ConnectTimeout); err != nil {
+		return nil, err
 	}
 
 	var results []GuestAgentIPResult
-	for _, iface := range resp.Return {
+	for _, iface := range interfaces {
 		mac := strings.ToLower(strings.TrimSpace(iface.HardwareAddress))
 		if mac == "" || mac == "00:00:00:00:00:00" {
 			continue
@@ -205,4 +216,53 @@ func GetVMAllAgentIPs(vmName string) []string {
 		}
 	}
 	return ips
+}
+
+// ConfigureLinuxDHCPHotplugNetwork 为运行中的 Linux 来宾补齐附加网口的 DHCP 兜底规则。
+// 主网口仍由优先级更高的 Netplan 规则管理；该规则只命中未被主规则匹配的 en* 网口。
+func ConfigureLinuxDHCPHotplugNetwork(vmName string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), ExecuteTimeout)
+	defer cancel()
+	client := NewClient(vmName)
+	osInfo, err := client.OSInfo(ctx)
+	if err != nil {
+		return fmt.Errorf("读取来宾系统信息失败: %w", err)
+	}
+	if strings.EqualFold(strings.TrimSpace(osInfo.ID), "mswindows") {
+		return nil
+	}
+
+	const script = `if ! systemctl is-active --quiet systemd-networkd; then exit 0; fi
+mkdir -p /etc/systemd/network
+cat > /etc/systemd/network/99-qvm-hotplug.network <<'EOF'
+[Match]
+Name=en*
+
+[Network]
+DHCP=yes
+LinkLocalAddressing=ipv6
+
+[DHCP]
+RouteMetric=200
+UseMTU=true
+EOF
+networkctl reload
+for qvm_iface in /sys/class/net/en*; do
+  [ -e "$qvm_iface" ] || continue
+  qvm_name=${qvm_iface##*/}
+  ip link set dev "$qvm_name" up
+  networkctl reconfigure "$qvm_name" || true
+done`
+
+	result, err := client.Execute(ctx, "/bin/sh", []string{"-c", script}, ExecuteTimeout)
+	if err != nil {
+		return fmt.Errorf("来宾网络配置命令执行失败: %w", err)
+	}
+	if result.ExitCode != 0 {
+		if output := strings.TrimSpace(result.Stderr); output != "" {
+			return fmt.Errorf("来宾网络配置命令失败: %s", output)
+		}
+		return fmt.Errorf("来宾网络配置命令失败，退出码 %d", result.ExitCode)
+	}
+	return nil
 }

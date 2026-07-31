@@ -207,6 +207,40 @@ except ImportError:
     return 1
 }
 
+# 生成定时泄露检测使用的 HIBP 前缀与 HMAC 指纹，并执行在线检查。
+password_security_info() {
+    local password="$1"
+    local secret="${KVM_SECURITY_SECRET:-}"
+    python3 -c '
+import hashlib
+import hmac
+import sys
+import urllib.request
+
+password = sys.argv[1]
+secret = sys.argv[2]
+full_hash = hashlib.sha1(password.encode()).hexdigest().upper()
+prefix, suffix = full_hash[:5], full_hash[5:]
+digest = hmac.new(secret.encode(), full_hash.encode(), hashlib.sha256).hexdigest().upper() if secret else ""
+status, count = "ok", 0
+try:
+    req = urllib.request.Request(
+        "https://api.pwnedpasswords.com/range/" + prefix,
+        headers={"User-Agent": "QVMConsole-Manage-PasswordCheck"},
+    )
+    with urllib.request.urlopen(req, timeout=5) as response:
+        for raw_line in response.read().decode("utf-8", "replace").splitlines():
+            parts = raw_line.strip().split(":", 1)
+            if len(parts) == 2 and parts[0].upper() == suffix:
+                status = "breached"
+                count = int(parts[1])
+                break
+except Exception:
+    status = "unavailable"
+print(f"{prefix}|{digest}|{status}|{count}")
+' "$password" "$secret"
+}
+
 # 检查依赖是否可用
 check_deps() {
     local missing=()

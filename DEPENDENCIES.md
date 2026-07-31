@@ -7,7 +7,7 @@
 | 依赖 | 最低版本 | 用途 |
 |------|---------|------|
 | Go | 1.22+ | 后端开发语言 |
-| Node.js | 18+ | 前端构建工具链 |
+| Node.js | 22.22+ | 前端构建工具链（React Router 8 要求） |
 | npm | 9+ | 前端包管理 |
 | air | 1.61.7 | Go 热重载开发工具 |
 
@@ -259,9 +259,9 @@ echo "启动开发服务器: ./start-dev.sh"
 
 命令	构建内容
 bash build.sh	默认构建全部（compat + native 两个二进制）
-bash build.sh --variant compat	仅构建 zig 兼容版 → kvm-console
+bash build.sh --variant compat	仅构建 zig 兼容版 → kvm-console（amd64 默认最高 GLIBC 2.2.5，arm64 默认最高 GLIBC 2.17）
 bash build.sh --variant native	仅构建宿主机原生版 → kvm-console
-bash build.sh --variant compat --variant native	等同于默认，构建两个
+bash build.sh --compat-glibc 2.17	将兼容版 GLIBC 上限设置为 2.17
 
 
 ## 验证安装
@@ -270,7 +270,7 @@ bash build.sh --variant compat --variant native	等同于默认，构建两个
 
 ```bash
 go version          # 应显示 go1.22+
-node --version      # 应显示 v18+
+node --version      # 应显示 v22.22+
 npm --version       # 应显示 9+
 air -v              # 应显示 air v1.61.7
 ls web/node_modules # 前端依赖目录应存在
@@ -342,4 +342,40 @@ sudo apt install -y qemu-system-x86 libspice-server1
 ### 客户端工具（用户侧，非宿主）
 
 **virt-viewer / spicy：** 用户使用 virt-viewer（Linux：`apt install virt-viewer`；Windows：从 [virt-manager.org](https://virt-manager.org/download/) 下载）或 spicy 打开下载的 `.vv` 文件即可直连。面板不提供 SPICE 的浏览器内客户端——SPICE 仅面向原生客户端。
+
+## Open vSwitch (OVS)
+
+### 多发行版依赖对照
+
+面板 OVS 网络功能依赖 Open vSwitch，不同发行版的包名和 systemd 服务名不同：
+
+| 发行版 | 包管理器 | OVS 包名 | OVS 服务名 | 安装命令 |
+|--------|----------|----------|------------|----------|
+| Ubuntu / Debian | apt | `openvswitch-switch` | `openvswitch-switch` | `sudo apt install -y openvswitch-switch` |
+| openEuler 24.03 | dnf | `openvswitch` | `openvswitch` | `sudo dnf install -y openvswitch` |
+| 麒麟 V10/V11 | dnf/yum | `openvswitch` | `openvswitch` | `sudo dnf install -y openvswitch` |
+| CentOS / RHEL | dnf/yum | `openvswitch` | `openvswitch` | `sudo dnf install -y openvswitch` |
+| Rocky / Alma | dnf/yum | `openvswitch` | `openvswitch` | `sudo dnf install -y openvswitch` |
+
+### 面板自动检测
+
+面板会自动检测系统类型并适配对应的 OVS 包名和服务名：
+
+- **后端**：`DetectOpenvswitchServiceName()` 通过 `systemctl list-unit-files` 探测实际存在的服务名
+- **前端**：OVS 页面 → 系统环境与依赖 卡片显示检测结果和一键复制安装命令
+- **安装脚本**：`install.sh` 在 OVS 配置阶段输出检测到的系统信息和包名
+
+### 验证安装
+
+```bash
+# 检查 OVS 是否已安装
+ovs-vsctl --version
+
+# 检查服务状态（服务名因发行版而异）
+systemctl status openvswitch-switch  # Ubuntu/Debian
+systemctl status openvswitch         # openEuler/CentOS
+
+# 创建网桥验证
+ovs-vsctl add-br br-test && ovs-vsctl del-br br-test
+```
 

@@ -231,7 +231,8 @@ func ApplyVPCSwitchToDomainXML(vmXML string, switchID uint) (string, error) {
 	}
 	if sw.VLANID == 0 {
 		updated, bridgeChanged := setFirstOVSInterfaceBridge(vmXML, HookOvsBridgeName())
-		if !bridgeChanged {
+		// 网卡未连接到目标 OVS 网桥时自动补一张 OVS 网卡（保留本地行为，兼容旧 VM）
+		if !bridgeChanged && !firstOVSInterfaceUsesBridge(updated, HookOvsBridgeName()) {
 			return addOVSInterfaceToXML(vmXML, HookOvsBridgeName(), 0), nil
 		}
 		updated = removeFirstInterfaceVLAN(updated)

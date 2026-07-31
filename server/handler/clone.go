@@ -3,14 +3,12 @@ package handler
 import (
 	"fmt"
 	"net/http"
-	"slices"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"kvm_console/model"
 	"kvm_console/service"
-	"kvm_console/service/arch"
 	clonepkg "kvm_console/service/clone"
 	libvirt_rpc "kvm_console/service/libvirt_rpc"
 	vm_memory "kvm_console/service/vm/memory"
@@ -34,12 +32,10 @@ type CloneVmRequest struct {
 	Remark               string                            `json:"remark"`
 	Template             string                            `json:"template" binding:"required"`
 	TemplateType         string                            `json:"template_type"`
-	TemplateCategory     string                            `json:"template_category"`
 	CloneMode            string                            `json:"clone_mode"`
 	VCPU                 int                               `json:"vcpu" binding:"required"`
 	RAM                  int                               `json:"ram" binding:"required"`
 	DiskSize             int                               `json:"disk_size"`
-	MachineType          string                            `json:"machine_type"`
 	Hostname             string                            `json:"hostname"`
 	User                 string                            `json:"user"`
 	Password             string                            `json:"password"`
@@ -67,6 +63,7 @@ type CloneVmRequest struct {
 	ExtraNics            []service.AddVMInterfaceRequest   `json:"extra_nics"`
 	StoragePoolID        string                            `json:"storage_pool_id"`
 	ExtraDisks           []service.ExtraDiskParam          `json:"extra_disks"`
+	HostDevices          []service.HostDeviceParam         `json:"host_devices"` // 硬件直通设备（仅管理员）
 	NicModel             string                            `json:"nic_model"`
 	PreserveFnOSDeviceID bool                              `json:"preserve_fnos_device_id"`
 	FnOSDeviceID         string                            `json:"fnos_device_id"`
@@ -79,7 +76,6 @@ type CloneVmRequest struct {
 	NestedVirt           *bool                             `json:"nested_virt,omitempty"`     // 嵌套虚拟化开关
 	KVMHidden            *bool                             `json:"kvm_hidden,omitempty"`      // 隐藏 KVM 标志
 	VendorID             string                            `json:"vendor_id,omitempty"`       // Hyper-V vendor_id 伪装
-	UserData             string                            `json:"user_data,omitempty"`       // cloud-init UserData 扩展（YAML/JSON 格式）
 }
 
 // BatchCloneRequest 批量克隆请求
@@ -89,12 +85,10 @@ type BatchCloneRequest struct {
 	Count               int                             `json:"count" binding:"required"`
 	Template            string                          `json:"template" binding:"required"`
 	TemplateType        string                          `json:"template_type"`
-	TemplateCategory    string                          `json:"template_category"`
 	CloneMode           string                          `json:"clone_mode"` // 克隆模式: linked / full
 	VCPU                int                             `json:"vcpu" binding:"required"`
 	RAM                 int                             `json:"ram" binding:"required"`
 	DiskSize            int                             `json:"disk_size"`
-	MachineType         string                          `json:"machine_type"`
 	Hostname            string                          `json:"hostname"` // 主机名（空则由系统自动生成）
 	User                string                          `json:"user"`     // 新用户名
 	Password            string                          `json:"password"`
@@ -121,6 +115,8 @@ type BatchCloneRequest struct {
 	SwitchID            uint                            `json:"switch_id"`         // VPC 交换机 ID
 	SecurityGroupID     uint                            `json:"security_group_id"` // 安全组 ID
 	ExtraNics           []service.AddVMInterfaceRequest `json:"extra_nics"`
+	ExtraDisks          []service.ExtraDiskParam        `json:"extra_disks"`
+	HostDevices         []service.HostDeviceParam       `json:"host_devices"`              // count > 1 时不允许
 	DisableSystemInit   bool                            `json:"disable_system_init"`       // 禁用系统初始化
 	StaticIP            string                          `json:"static_ip"`                 // OpenWrt 静态 IP（CIDR 格式）
 	Gateway             string                          `json:"gateway"`                   // OpenWrt 网关
@@ -129,7 +125,6 @@ type BatchCloneRequest struct {
 	NestedVirt          *bool                           `json:"nested_virt,omitempty"`     // 嵌套虚拟化开关
 	KVMHidden           *bool                           `json:"kvm_hidden,omitempty"`      // 隐藏 KVM 标志
 	VendorID            string                          `json:"vendor_id,omitempty"`       // Hyper-V vendor_id 伪装
-	UserData            string                          `json:"user_data,omitempty"`       // cloud-init UserData 扩展
 }
 
 // ReinstallRequest 重装系统请求
@@ -141,7 +136,6 @@ type ReinstallRequest struct {
 	Password             string `json:"password"`
 	PreserveFnOSDeviceID bool   `json:"preserve_fnos_device_id"`
 	FnOSDeviceID         string `json:"fnos_device_id"`
-	UserData             string `json:"user_data,omitempty"`
 }
 
 // CloneVm 链式克隆虚拟机（异步任务）
@@ -180,6 +174,12 @@ func CloneVm(c *gin.Context) {
 	if templateType == "" {
 		templateType = meta.Type
 	}
+	// 其它模板的实际行为由模板元数据决定，始终不初始化来宾系统。
+	if meta != nil && strings.EqualFold(strings.TrimSpace(meta.Type), "other") {
+		templateType = "other"
+		req.TemplateType = templateType
+		req.DisableSystemInit = true
+	}
 	req.User = clonepkg.NormalizeCloneUsernameForTemplate(templateType, req.User)
 
 	cloudInitMode := ""
@@ -187,9 +187,8 @@ func CloneVm(c *gin.Context) {
 		cloudInitMode = strings.ToLower(strings.TrimSpace(meta.CloudInitMode))
 	}
 	requireCredentials := cloudInitMode != "none" && !req.DisableSystemInit
-	templateCategory := strings.TrimSpace(req.TemplateCategory)
-	isOpenWrt := templateType == "openwrt" || (templateType == "other" && strings.EqualFold(templateCategory, "OpenWrt"))
-	if isOpenWrt {
+	// OpenWrt 模板不需要常规凭据校验，但需要静态 IP
+	if templateType == "openwrt" {
 		requireCredentials = false
 	}
 	if err := clonepkg.ValidateCloneCredentialsForTemplate(templateType, req.Hostname, req.User, req.Password, requireCredentials); err != nil {
@@ -199,7 +198,8 @@ func CloneVm(c *gin.Context) {
 		})
 		return
 	}
-	if isOpenWrt && !req.DisableSystemInit {
+	// OpenWrt 模板校验静态 IP
+	if templateType == "openwrt" && !req.DisableSystemInit {
 		if err := clonepkg.ValidateOpenWrtStaticIP(req.StaticIP); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"code":    400,
@@ -243,29 +243,15 @@ func CloneVm(c *gin.Context) {
 		return
 	}
 
-	// 归一化机器类型
-	hostArch := arch.DetectHostArch()
-	hostProfile := arch.GetProfile(hostArch)
-	if req.MachineType == "" {
-		req.MachineType = hostProfile.DefaultMachineType()
-	} else if req.MachineType == "i440fx" {
-		req.MachineType = "pc-i440fx"
-	}
-	if !slices.Contains(hostProfile.SupportedMachineTypes(), req.MachineType) {
-		req.MachineType = hostProfile.DefaultMachineType()
-	}
-
 	params := &clonepkg.CloneParams{
 		Name:                 req.Name,
 		Remark:               req.Remark,
 		Template:             req.Template,
 		TemplateType:         req.TemplateType,
-		TemplateCategory:     req.TemplateCategory,
 		CloneMode:            req.CloneMode,
 		VCPU:                 req.VCPU,
 		RAM:                  req.RAM,
 		DiskSize:             diskSize,
-		MachineType:          req.MachineType,
 		Hostname:             req.Hostname,
 		User:                 req.User,
 		Password:             req.Password,
@@ -293,6 +279,7 @@ func CloneVm(c *gin.Context) {
 		ExtraNics:            req.ExtraNics,
 		StoragePoolID:        req.StoragePoolID,
 		ExtraDisks:           req.ExtraDisks,
+		HostDevices:          req.HostDevices,
 		NicModel:             req.NicModel,
 		PreserveFnOSDeviceID: req.PreserveFnOSDeviceID,
 		FnOSDeviceID:         req.FnOSDeviceID,
@@ -304,10 +291,13 @@ func CloneVm(c *gin.Context) {
 		NestedVirt:           req.NestedVirt,
 		KVMHidden:            req.KVMHidden,
 		VendorID:             req.VendorID,
-		UserData:             req.UserData,
 	}
 
 	params.IsAdmin = isAdmin
+	if len(req.HostDevices) > 0 && !isAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "仅管理员可配置硬件直通设备"})
+		return
+	}
 	params.DisableSystemInit = req.DisableSystemInit
 	if !isAdmin {
 		params.MemoryDynamic = sanitizeUserMemoryDynamicRequest(req.MemoryDynamic, req.RAM)
@@ -398,6 +388,10 @@ func BatchCloneVm(c *gin.Context) {
 		templateVisibilityResponse(c, err)
 		return
 	}
+	if meta := service.GetTemplateMeta(req.Template); meta != nil && strings.EqualFold(strings.TrimSpace(meta.Type), "other") {
+		req.TemplateType = "other"
+		req.DisableSystemInit = true
+	}
 
 	diskSize, err := service.ResolveCloneDiskSizeGB(req.Template, req.DiskSize)
 	if err != nil {
@@ -423,30 +417,16 @@ func BatchCloneVm(c *gin.Context) {
 		return
 	}
 
-	// 归一化机器类型
-	batchHostArch := arch.DetectHostArch()
-	batchHostProfile := arch.GetProfile(batchHostArch)
-	if req.MachineType == "" {
-		req.MachineType = batchHostProfile.DefaultMachineType()
-	} else if req.MachineType == "i440fx" {
-		req.MachineType = "pc-i440fx"
-	}
-	if !slices.Contains(batchHostProfile.SupportedMachineTypes(), req.MachineType) {
-		req.MachineType = batchHostProfile.DefaultMachineType()
-	}
-
 	params := &clonepkg.BatchCloneParams{
 		Prefix:              req.Prefix,
 		StartNum:            req.StartNum,
 		Count:               req.Count,
 		Template:            req.Template,
 		TemplateType:        req.TemplateType,
-		TemplateCategory:    req.TemplateCategory,
 		CloneMode:           req.CloneMode,
 		VCPU:                req.VCPU,
 		RAM:                 req.RAM,
 		DiskSize:            diskSize,
-		MachineType:         req.MachineType,
 		Hostname:            req.Hostname,
 		User:                req.User,
 		Password:            req.Password,
@@ -473,6 +453,8 @@ func BatchCloneVm(c *gin.Context) {
 		SwitchID:            req.SwitchID,
 		SecurityGroupID:     req.SecurityGroupID,
 		ExtraNics:           req.ExtraNics,
+		ExtraDisks:          req.ExtraDisks,
+		HostDevices:         req.HostDevices,
 		IsAdmin:             isAdmin,
 		DisableSystemInit:   req.DisableSystemInit,
 		StaticIP:            req.StaticIP,
@@ -482,7 +464,6 @@ func BatchCloneVm(c *gin.Context) {
 		NestedVirt:          req.NestedVirt,
 		KVMHidden:           req.KVMHidden,
 		VendorID:            req.VendorID,
-		UserData:            req.UserData,
 	}
 
 	username, _ := c.Get("username")
@@ -493,6 +474,11 @@ func BatchCloneVm(c *gin.Context) {
 		totalVCPU := req.VCPU * req.Count
 		totalRAM := req.RAM * req.Count
 		totalDiskGB := diskSize * req.Count
+		for _, extraDisk := range req.ExtraDisks {
+			if extraDisk.Size > 0 {
+				totalDiskGB += extraDisk.Size * req.Count
+			}
+		}
 		if err := service.CheckQuota(usernameStr, totalVCPU, totalRAM, totalDiskGB); err != nil {
 			c.JSON(http.StatusForbidden, gin.H{
 				"code":    403,
@@ -577,7 +563,7 @@ func ReinstallVm(c *gin.Context) {
 	if meta.DefaultConfig != nil {
 		firstBootRebootMode = meta.DefaultConfig.FirstBootRebootMode
 	}
-	requireCredentials := templateType == "linux" || templateType == "windows" || templateType == "fnos" || (templateType == "other" && strings.EqualFold(meta.Category, "FnOS"))
+	requireCredentials := templateType == "linux" || templateType == "windows" || templateType == "fnos"
 	req.User = clonepkg.NormalizeCloneUsernameForTemplate(templateType, req.User)
 	if err := clonepkg.ValidateCloneCredentialsForTemplate(templateType, req.Hostname, req.User, req.Password, requireCredentials); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -617,7 +603,6 @@ func ReinstallVm(c *gin.Context) {
 		Name:                 name,
 		Template:             req.Template,
 		TemplateType:         templateType,
-		TemplateCategory:     meta.Category,
 		DiskSize:             diskSize,
 		Hostname:             strings.TrimSpace(req.Hostname),
 		User:                 req.User,
@@ -628,7 +613,6 @@ func ReinstallVm(c *gin.Context) {
 		PreserveFnOSDeviceID: req.PreserveFnOSDeviceID,
 		FnOSDeviceID:         strings.TrimSpace(req.FnOSDeviceID),
 		Operator:             usernameStr,
-		UserData:             req.UserData,
 	}
 
 	task, err := taskqueue.SubmitWithStruct(model.TaskTypeReinstall, params, usernameStr)

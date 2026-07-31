@@ -61,6 +61,10 @@ func ExecCommandWithTimeout(name string, timeout time.Duration, args ...string) 
 
 // ExecCommandContextWithTimeout 执行系统命令（支持取消和超时）
 func ExecCommandContextWithTimeout(ctx context.Context, name string, timeout time.Duration, args ...string) *CmdResult {
+	return execCommandContextWithTimeout(ctx, name, timeout, false, args...)
+}
+
+func execCommandContextWithTimeout(ctx context.Context, name string, timeout time.Duration, sensitive bool, args ...string) *CmdResult {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -73,6 +77,9 @@ func ExecCommandContextWithTimeout(ctx context.Context, name string, timeout tim
 	cmd.Stderr = &stderr
 
 	argsStr := strings.Join(args, " ")
+	if sensitive {
+		argsStr = "[敏感参数已隐藏]"
+	}
 	logger.CMD.Info("执行命令", "cmd", name, "args", argsStr)
 
 	start := time.Now()
@@ -130,7 +137,7 @@ func ExecCommandContextWithTimeout(ctx context.Context, name string, timeout tim
 		return &CmdResult{
 			Stderr:   "命令执行超时",
 			ExitCode: -1,
-			Error:    fmt.Errorf("命令执行超时: %s %s", name, strings.Join(args, " ")),
+			Error:    fmt.Errorf("命令执行超时: %s", name),
 		}
 
 	case <-ctx.Done():
@@ -143,7 +150,7 @@ func ExecCommandContextWithTimeout(ctx context.Context, name string, timeout tim
 		return &CmdResult{
 			Stderr:   "命令已取消",
 			ExitCode: -1,
-			Error:    fmt.Errorf("命令已取消: %s %s: %w", name, strings.Join(args, " "), ctx.Err()),
+			Error:    fmt.Errorf("命令已取消: %s: %w", name, ctx.Err()),
 		}
 	}
 }
@@ -151,6 +158,11 @@ func ExecCommandContextWithTimeout(ctx context.Context, name string, timeout tim
 // ExecCommandLongRunning 执行长时间运行的命令（超时 10 分钟）
 func ExecCommandLongRunning(name string, args ...string) *CmdResult {
 	return ExecCommandWithTimeout(name, 10*time.Minute, args...)
+}
+
+// ExecCommandSensitiveLongRunning 执行包含密码、令牌等敏感参数的长任务，日志不记录参数正文。
+func ExecCommandSensitiveLongRunning(name string, args ...string) *CmdResult {
+	return execCommandContextWithTimeout(context.Background(), name, 10*time.Minute, true, args...)
 }
 
 // ExecShell 执行 Shell 命令（通过 bash -c）

@@ -119,6 +119,13 @@ func Setup() *gin.Engine {
 		authorized.Use(middleware.AuthMiddleware())
 		authorized.Use(middleware.ForcePasswordChangeMiddleware())
 		{
+			security := authorized.Group("/security")
+			security.Use(middleware.AdminMiddleware())
+			{
+				security.GET("/password-breach/status", handler.GetPasswordBreachStatus) // 获取泄露密码状态
+				security.POST("/password-breach/scan", handler.StartPasswordBreachScan)  // 立即执行泄露密码检测
+			}
+
 			// ==================== 虚拟机管理 ====================
 			vm := authorized.Group("/vm")
 			vm.Use(middleware.VMAccessMiddleware()) // 非admin用户操作VM时校验归属权限
@@ -169,6 +176,8 @@ func Setup() *gin.Engine {
 				// 普通创建
 				vm.POST("/create", middleware.ElasticCloudOnlyMiddleware(), handler.CreateVm)
 				vm.POST("/import-disk", middleware.ElasticCloudOnlyMiddleware(), middleware.AdminMiddleware(), handler.AdminImportDisk)
+				vm.POST("/import-appliance/inspect", middleware.ElasticCloudOnlyMiddleware(), middleware.AdminMiddleware(), handler.InspectAdminAppliance) // 检查 OVF/OVA 虚拟机包
+				vm.POST("/import-appliance", middleware.ElasticCloudOnlyMiddleware(), middleware.AdminMiddleware(), handler.ImportAdminAppliance)          // 导入 OVF/OVA 虚拟机包
 				vm.GET("/os-variants", handler.GetOSVariants)
 				vm.GET("/iso-list", handler.GetISOList)
 
@@ -202,15 +211,14 @@ func Setup() *gin.Engine {
 				vm.POST("/:name/spice/expose", handler.ExposeSpice)
 				vm.GET("/:name/spice/vv", handler.DownloadSpiceVV)
 
-				// QEMU Monitor（普通用户仅开放安全子集）
-				vm.GET("/:name/monitor/status", handler.GetVMMonitorStatus)
-				vm.POST("/:name/monitor/command", handler.ExecuteVMMonitorCommand)
-
 				// 磁盘管理
 				vm.GET("/:name/disks", handler.GetDiskList)
 				vm.GET("/:name/disk-migration/options", middleware.AdminMiddleware(), handler.GetDiskMigrationOptions)
 				vm.POST("/:name/disk", middleware.ElasticCloudOnlyMiddleware(), handler.AddDisk)
 				vm.POST("/:name/disk/:dev/resize", middleware.ElasticCloudOnlyMiddleware(), handler.ResizeDisk)
+				vm.GET("/:name/disk/:dev/guest-status", handler.GetDiskGuestStatus)                                      // 获取磁盘来宾映射与文件系统状态
+				vm.POST("/:name/disk/:dev/guest-mount", middleware.ElasticCloudOnlyMiddleware(), handler.GuestMountDisk) // 配置或重试来宾磁盘挂载
+				vm.POST("/:name/disk/:dev/guest-grow", middleware.ElasticCloudOnlyMiddleware(), handler.GuestGrowDisk)   // 重试 Linux 系统分区扩容
 				vm.PUT("/:name/disk/:dev/bus", middleware.ElasticCloudOnlyMiddleware(), handler.ChangeDiskBus)
 				vm.POST("/:name/disk/attach", middleware.ElasticCloudOnlyMiddleware(), handler.AttachDisk)
 				vm.POST("/:name/disk/import", middleware.ElasticCloudOnlyMiddleware(), middleware.AdminMiddleware(), handler.ImportDiskForVM)
@@ -279,16 +287,8 @@ func Setup() *gin.Engine {
 				network.POST("/port-forward/add", handler.AddPortForward)
 				network.PUT("/port-forward/:id", handler.UpdatePortForward)
 				network.DELETE("/port-forward/:id", handler.DeletePortForward)
-				network.DELETE("/port-forward/by-key/:rule_key", handler.DeletePortForwardByRuleKey)
 				network.POST("/port-forward/batch-delete", handler.BatchDeletePortForward)
 				network.POST("/port-forward/save", handler.SavePortForwardRules)
-				network.POST("/port-forward/probe/run", handler.RunPortForwardHTTPProbe)
-				network.GET("/port-forward/whitelist/summary", handler.GetPortForwardWhitelistSummary)
-				network.GET("/port-forward/whitelist", middleware.AdminMiddleware(), handler.GetPortForwardWhitelistList)
-				network.POST("/port-forward/whitelist/user", middleware.AdminMiddleware(), handler.AddPortForwardUserWhitelist)
-				network.DELETE("/port-forward/whitelist/user/:username", middleware.AdminMiddleware(), handler.DeletePortForwardUserWhitelist)
-				network.POST("/port-forward/whitelist/vm", middleware.AdminMiddleware(), handler.AddPortForwardVMWhitelist)
-				network.DELETE("/port-forward/whitelist/vm/:vm_name", middleware.AdminMiddleware(), handler.DeletePortForwardVMWhitelist)
 
 				// 端口转发手动 IP 映射
 				network.GET("/port-forward/ip-mapping", handler.GetPortForwardIPs)
@@ -480,8 +480,11 @@ func Setup() *gin.Engine {
 				self.GET("/vm/:name/qcow2-disks", handler.GetVmQcow2Disks)                                        // 获取qcow2磁盘列表
 
 				// 虚拟机导出/导入
-				self.POST("/vm/export", middleware.ElasticCloudOnlyMiddleware(), handler.ExportVMHandler) // 导出虚拟机
-				self.POST("/vm/import", middleware.ElasticCloudOnlyMiddleware(), handler.ImportVMHandler) // 导入虚拟机
+				self.GET("/vm/:name/export-options", handler.GetVMExportOptionsHandler)                                          // 获取虚拟机可导出磁盘
+				self.POST("/vm/export", middleware.ElasticCloudOnlyMiddleware(), handler.ExportVMHandler)                        // 导出虚拟机
+				self.POST("/vm/import", middleware.ElasticCloudOnlyMiddleware(), handler.ImportVMHandler)                        // 导入虚拟机
+				self.POST("/vm/import-appliance/inspect", middleware.ElasticCloudOnlyMiddleware(), handler.InspectSelfAppliance) // 检查我的存储 OVF/OVA
+				self.POST("/vm/import-appliance", middleware.ElasticCloudOnlyMiddleware(), handler.ImportSelfAppliance)          // 从 OVF/OVA 导入虚拟机
 
 				// 用户存储池
 				self.GET("/storage/info", middleware.ElasticCloudOnlyMiddleware(), handler.GetUserStorageInfo)                              // 存储池信息
@@ -509,6 +512,8 @@ func Setup() *gin.Engine {
 				host.GET("/stats/sse", handler.GetHostStatsSSE)
 				host.GET("/stats/history", handler.GetHostStatsHistory)
 				host.GET("/cpus", handler.GetHostCPUCores)
+				host.GET("/cpu/hardware", middleware.AdminMiddleware(), handler.GetHostCPUHardware)     // 获取宿主机 CPU 硬件信息与每核使用率
+				host.GET("/memory/modules", middleware.AdminMiddleware(), handler.GetHostMemoryModules) // 获取宿主机内存条信息
 				host.GET("/disks", handler.GetHostDisks)
 				host.GET("/kvm-intel-unrestricted-guest", middleware.AdminMiddleware(), handler.GetHostKVMIntelUnrestrictedGuestStatus)
 				host.PUT("/kvm-intel-unrestricted-guest", middleware.AdminMiddleware(), handler.UpdateHostKVMIntelUnrestrictedGuest)

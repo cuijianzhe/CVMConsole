@@ -14,6 +14,12 @@ import (
 
 // BatchCloneVM 批量克隆（支持取消）
 func BatchCloneVM(ctx context.Context, params *BatchCloneParams, progressFn func(int, string)) ([]CloneResult, error) {
+	if len(params.HostDevices) > 0 && !params.IsAdmin {
+		return nil, fmt.Errorf("仅管理员可配置硬件直通设备")
+	}
+	if params.Count > 1 && len(params.HostDevices) > 0 {
+		return nil, fmt.Errorf("批量克隆不能复用同一组物理直通设备，请改为单台克隆")
+	}
 	maxConcurrency := config.GlobalConfig.BatchCloneMaxConcurrency
 	if maxConcurrency <= 0 {
 		maxConcurrency = 10
@@ -65,8 +71,10 @@ func BatchCloneVM(ctx context.Context, params *BatchCloneParams, progressFn func
 
 			vmName := fmt.Sprintf("%s-%s", params.Prefix, padNum(params.StartNum+index))
 
-			// 密码：如果用户指定了密码则使用，否则保持为空（不修改模板原密码）
 			vmPassword := params.Password
+			if vmPassword == "" {
+				vmPassword = GenerateRandomStrongPassword()
+			}
 
 			// 批量模式下，用户指定主机名时追加编号后缀确保每台唯一（如 myserver-01, myserver-02）
 			vmHostname := params.Hostname
@@ -78,13 +86,11 @@ func BatchCloneVM(ctx context.Context, params *BatchCloneParams, progressFn func
 				Name:                vmName,
 				Template:            params.Template,
 				TemplateType:        params.TemplateType,
-				TemplateCategory:    params.TemplateCategory,
 				CloneMode:           params.CloneMode,
 				VCPU:                params.VCPU,
 				MaxVCPU:             params.MaxVCPU,
 				RAM:                 params.RAM,
 				DiskSize:            params.DiskSize,
-				MachineType:         params.MachineType,
 				Network:             params.Network,
 				Hostname:            vmHostname,
 				User:                params.User,
@@ -111,6 +117,8 @@ func BatchCloneVM(ctx context.Context, params *BatchCloneParams, progressFn func
 				FirstBootRebootMode: params.FirstBootRebootMode,
 				SwitchID:            params.SwitchID,
 				SecurityGroupID:     params.SecurityGroupID,
+				ExtraDisks:          params.ExtraDisks,
+				HostDevices:         params.HostDevices,
 				IsAdmin:             params.IsAdmin,
 				DisableSystemInit:   params.DisableSystemInit,
 				StaticIP:            params.StaticIP,

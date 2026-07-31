@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 
+	vmpkg "kvm_console/service/vm"
 	"kvm_console/service/vm/memory"
 	"kvm_console/service/vm_xml"
 )
@@ -12,6 +13,8 @@ import (
 const LinuxCloneIPWaitSeconds = 180
 
 var fnOSDeviceIDRegexp = regexp.MustCompile(`^[0-9a-fA-F]{32}([0-9a-fA-F]{8})?$`)
+
+type HostDeviceParam = vmpkg.HostDeviceParam
 
 // CloneParams 克隆参数
 type CloneParams struct {
@@ -25,7 +28,6 @@ type CloneParams struct {
 	MaxVCPU               int                            `json:"max_vcpu,omitempty"`               // CPU 热添加上限，0 或 <= vcpu 表示不启用
 	RAM                   int                            `json:"ram"`                              // 内存（GB）
 	DiskSize              int                            `json:"disk_size,omitempty"`              // 磁盘大小（GB，可选）
-	MachineType           string                         `json:"machine_type,omitempty"`           // 机器类型: q35/pc-i440fx
 	Network               string                         `json:"network,omitempty"`                // 网络（默认 default）
 	Hostname              string                         `json:"hostname,omitempty"`               // 主机名
 	User                  string                         `json:"user,omitempty"`                   // 新用户名
@@ -42,7 +44,7 @@ type CloneParams struct {
 	TemplateRootPass      string                         `json:"template_root_pass,omitempty"`     // 模板 root 密码（用于 SSH 初始化）
 	TemplateUser          string                         `json:"template_user,omitempty"`          // 模板中已有的用户名
 	DiskBus               string                         `json:"disk_bus,omitempty"`               // 系统盘总线类型: virtio/scsi/sata/ide
-	VideoModel            string                         `json:"video_model,omitempty"`            // 视频模型: virtio/vga/vmvga/cirrus
+	VideoModel            string                         `json:"video_model,omitempty"`            // 视频模型: virtio/vga/vmvga/cirrus/ramfb/none
 	SpiceEnabled          *bool                          `json:"spice_enabled,omitempty"`          // 是否启用 SPICE（nil=回退全局默认）
 	CPUTopologyMode       string                         `json:"cpu_topology_mode,omitempty"`      // CPU 拓扑模式: auto/single_socket/host_default
 	CPULimitPercent       int                            `json:"cpu_limit_percent,omitempty"`      // CPU 限制百分比，0 表示无限制
@@ -54,7 +56,8 @@ type CloneParams struct {
 	ExtraNics             []AddVMInterfaceRequest        `json:"extra_nics,omitempty"`
 	StoragePoolID         string                         `json:"storage_pool_id,omitempty"`
 	ExtraDisks            []ExtraDiskParam               `json:"extra_disks,omitempty"`
-	NicModel              string                         `json:"nic_model,omitempty"` // 网卡模型: virtio/e1000e/rtl8139
+	HostDevices           []HostDeviceParam              `json:"host_devices,omitempty"` // 硬件直通设备
+	NicModel              string                         `json:"nic_model,omitempty"`    // 网卡模型: virtio/e1000e/rtl8139
 	PreserveFnOSDeviceID  bool                           `json:"preserve_fnos_device_id,omitempty"`
 	FnOSDeviceID          string                         `json:"fnos_device_id,omitempty"`
 	SystemDiskIOPS        *DiskIOPSTune                  `json:"system_disk_iops,omitempty"` // 系统盘 IOPS 限制
@@ -67,10 +70,10 @@ type CloneParams struct {
 	PCIERootPorts         int                            `json:"pcie_root_ports,omitempty"`     // q35 预留 pcie-root-port 数量
 	PostBootCommand       string                         `json:"post_boot_command,omitempty"`   // Linux 模板启动后执行的自定义命令
 	PostBootBlocking      bool                           `json:"post_boot_blocking,omitempty"`  // 启动后命令阻塞模式
-	UserData              string                         `json:"user_data,omitempty"`           // cloud-init UserData 扩展（YAML/JSON 格式）
 	NestedVirt            *bool                          `json:"nested_virt,omitempty"`         // 嵌套虚拟化开关
 	KVMHidden             *bool                          `json:"kvm_hidden,omitempty"`          // 隐藏 KVM 标志
 	VendorID              string                         `json:"vendor_id,omitempty"`           // Hyper-V vendor_id 伪装
+	UserData              string                         `json:"user_data,omitempty"`           // cloud-init 自定义 user-data（#cloud-config 开头时替换默认配置）
 	VGPUProfileID         uint                           `json:"vgpu_profile_id,omitempty"`     // vGPU 配置文件 ID
 	VGPUUUID              string                         `json:"vgpu_uuid,omitempty"`           // vGPU 设备 UUID
 	PrimaryMAC            string                         `json:"-"`                             // 首网卡 MAC，在离线网络配置与域 XML 间保持一致
@@ -78,18 +81,16 @@ type CloneParams struct {
 
 // BatchCloneParams 批量克隆参数
 type BatchCloneParams struct {
-	Prefix              string                     `json:"prefix"`                      // 名称前缀
-	StartNum            int                        `json:"start_num"`                   // 起始编号
-	Count               int                        `json:"count"`                       // 数量
-	Template            string                     `json:"template"`                    // 模板
-	TemplateType        string                     `json:"template_type,omitempty"`     // 模板类型
-	TemplateCategory    string                     `json:"template_category,omitempty"` // 模板分类
-	CloneMode           string                     `json:"clone_mode,omitempty"`        // 克隆模式: linked / full
+	Prefix              string                     `json:"prefix"`                  // 名称前缀
+	StartNum            int                        `json:"start_num"`               // 起始编号
+	Count               int                        `json:"count"`                   // 数量
+	Template            string                     `json:"template"`                // 模板
+	TemplateType        string                     `json:"template_type,omitempty"` // 模板类型
+	CloneMode           string                     `json:"clone_mode,omitempty"`    // 克隆模式: linked / full
 	VCPU                int                        `json:"vcpu"`
 	MaxVCPU             int                        `json:"max_vcpu,omitempty"` // CPU 热添加上限
 	RAM                 int                        `json:"ram"`
 	DiskSize            int                        `json:"disk_size,omitempty"`
-	MachineType         string                     `json:"machine_type,omitempty"`
 	Network             string                     `json:"network,omitempty"`
 	Hostname            string                     `json:"hostname,omitempty"` // 主机名（空则由系统自动生成）
 	User                string                     `json:"user,omitempty"`     // 新用户名
@@ -117,6 +118,8 @@ type BatchCloneParams struct {
 	SwitchID            uint                       `json:"switch_id,omitempty"`              // VPC 交换机 ID
 	SecurityGroupID     uint                       `json:"security_group_id,omitempty"`      // 安全组 ID
 	ExtraNics           []AddVMInterfaceRequest    `json:"extra_nics,omitempty"`
+	ExtraDisks          []ExtraDiskParam           `json:"extra_disks,omitempty"`
+	HostDevices         []HostDeviceParam          `json:"host_devices,omitempty"`        // 仅 count=1 时允许
 	IsAdmin             bool                       `json:"is_admin,omitempty"`            // 是否管理员
 	DisableSystemInit   bool                       `json:"disable_system_init,omitempty"` // 禁用系统初始化
 	StaticIP            string                     `json:"static_ip,omitempty"`           // OpenWrt 静态 IP
@@ -126,7 +129,6 @@ type BatchCloneParams struct {
 	NestedVirt          *bool                      `json:"nested_virt,omitempty"`         // 嵌套虚拟化开关
 	KVMHidden           *bool                      `json:"kvm_hidden,omitempty"`          // 隐藏 KVM 标志
 	VendorID            string                     `json:"vendor_id,omitempty"`           // Hyper-V vendor_id 伪装
-	UserData            string                     `json:"user_data,omitempty"`           // cloud-init UserData 扩展
 }
 
 // ReinstallParams 重装系统参数
@@ -134,7 +136,6 @@ type ReinstallParams struct {
 	Name                  string `json:"name"`                              // 虚拟机名称
 	Template              string `json:"template"`                          // 新模板名称
 	TemplateType          string `json:"template_type,omitempty"`           // 模板类型
-	TemplateCategory      string `json:"template_category,omitempty"`       // 模板分类
 	DiskSize              int    `json:"disk_size,omitempty"`               // 系统盘大小（GB）
 	Hostname              string `json:"hostname,omitempty"`                // 主机名
 	User                  string `json:"user,omitempty"`                    // 登录用户
@@ -145,8 +146,8 @@ type ReinstallParams struct {
 	PreserveFnOSDeviceID  bool   `json:"preserve_fnos_device_id,omitempty"` // 是否保留 FnOS 设备 ID
 	FnOSDeviceID          string `json:"fnos_device_id,omitempty"`          // 自定义 FnOS 设备 ID
 	Operator              string `json:"operator,omitempty"`                // 操作人
+	UserData              string `json:"user_data,omitempty"`               // cloud-init 自定义 user-data
 	LinuxIdentityPrepared bool   `json:"-"`                                 // Linux 身份是否已离线重置
-	UserData              string `json:"user_data,omitempty"`               // cloud-init UserData 扩展
 }
 
 // CloneResult 克隆结果

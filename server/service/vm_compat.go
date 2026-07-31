@@ -33,11 +33,6 @@ type PCIDevice = vmpkg.PCIDevice
 // aliased here for handler compatibility (handler/vm_create.go, handler/types.go)
 type HostDeviceParam = vmpkg.HostDeviceParam
 
-// ── Monitor types ──
-
-type VMMonitorStatus = vmpkg.VMMonitorStatus
-type VMMonitorCommandResult = vmpkg.VMMonitorCommandResult
-
 // ── Schedule types ──
 
 type VMScheduleInput = vmpkg.VMScheduleInput
@@ -55,6 +50,8 @@ type VMDiskMigrationDisk = vmpkg.VMDiskMigrationDisk
 
 type ExportVMParams = vmpkg.ExportVMParams
 type ExportVMResult = vmpkg.ExportVMResult
+type VMExportOptions = vmpkg.VMExportOptions
+type VMExportDiskOption = vmpkg.VMExportDiskOption
 
 // ── Password reset types ──
 
