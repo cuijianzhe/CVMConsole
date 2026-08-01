@@ -53,7 +53,7 @@ const vmCreateBody =
 const selfVmCreateBody =
   'JSON: name, remark, vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, boot_order[], video_model(virtio/vga/vmvga/cirrus/ramfb/none，none=禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), memory_dynamic{dynamic_enabled,memory_backend,memory_initial,memory_min,memory_max,memory_auto_balloon,memory_current}, switch_id, security_group_id, storage_pool_id, extra_disks[{size,format,bus,storage_pool_id}]'
 const cloneBody =
-  'JSON: template/name, new_name/name, remark, vcpu, ram, disk_size, disk_bus, switch_id, security_group_id, storage_pool_id, extra_disks[{size,format,bus,storage_pool_id}], host_devices[{pci_address}](仅管理员), vgpu_instances[{uuid}](仅管理员,要挂载的vGPU实例UUID列表), nic_model, video_model(支持none禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode, cpu_limit_percent(仅管理员, 0-100), first_boot_reboot_mode(normal/cold), preserve_fnos_device_id/fnos_device_id(FnOS 可选), autostart, freeze, apic, pae, rtc_offset, credentials, kvm_hidden(bool), vendor_id(str), nested_virt(bool,默认true) 等克隆表单字段'
+  'JSON: template, name, remark, template_type, clone_mode(linked链式克隆/full完整克隆,默认linked), vcpu, ram, disk_size, disk_bus, hostname(可选,留空随机生成), user(可选,留空用模板默认), password(可选,留空单台随机生成/批量保留模板原密码), template_root_pass, template_user, switch_id, security_group_id, extra_nics[{nic_model,switch_id,security_group_id}], storage_pool_id, extra_disks[{size,format,bus,storage_pool_id,cloud_disk_spec_id,iops_total,iops_read,iops_write}], system_disk_iops(仅管理员), host_devices[{pci_address}](仅管理员), vgpu_instances[{uuid}](仅管理员,要挂载的vGPU实例UUID列表), nic_model, video_model(支持none禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode, cpu_limit_percent(仅管理员, 0-100), cpu_affinity(仅管理员,如0,2,4), first_boot_reboot_mode(normal/cold), memory_dynamic(动态内存请求), guest_agent, smbios1, uefi(bool), rtc_offset, rtc_startdate, disable_system_init(bool,禁用系统初始化), static_ip/gateway/dns(OpenWrt 静态网络), preserve_fnos_device_id/fnos_device_id(FnOS 可选), pcie_root_ports(q35预留pcie-root-port数量), autostart, freeze, apic, pae, kvm_hidden(bool), vendor_id(str), nested_virt(bool,默认true) 等克隆表单字段'
 const reinstallBody = 'JSON: template, disk_size, hostname, user, password, preserve_fnos_device_id, fnos_device_id'
 const scheduleBody = 'JSON: name, action(start/shutdown/destroy/reboot/delete), cron/execute_at, enabled, timezone, params'
 const portForwardBody =
@@ -414,14 +414,15 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   'GET /vm/os-variants': { summary: '获取 libosinfo 系统变体列表', response: 'data: OS variant 列表。' },
   'GET /vm/iso-list': { summary: '获取全局 ISO 列表', response: 'data: ISO 文件列表。' },
   'POST /vm/clone': {
-    summary: '从模板克隆虚拟机',
+    summary: '从模板克隆虚拟机（支持链式 linked / 完整 full 两种模式，由 clone_mode 字段控制）',
     body: cloneBody,
     highRiskNote: '创建 VM 类高风险验证按现有策略触发',
   },
   'POST /vm/linked-clone': {
-    summary: '原生链式克隆虚拟机',
+    summary: '原生链式克隆虚拟机（固定 linked 模式，基于 backing_file 链式磁盘）',
     body: cloneBody,
     highRiskNote: '创建 VM 类高风险验证按现有策略触发',
+    notes: ['固定链式克隆，clone_mode 字段即便传入也会被忽略'],
   },
   'POST /vm/batch-clone': {
     summary: '批量克隆虚拟机',
