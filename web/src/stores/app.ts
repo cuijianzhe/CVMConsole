@@ -12,6 +12,8 @@ export interface UiCustomization {
   systemHomeIcon: string
   /** 首页标题（侧边栏产品名，留空回退站点标题） */
   homeTitle: string
+  /** 首页副标题（侧边栏左上角小字，留空回退默认“KVM 虚拟化管理平台”） */
+  homeSubtitle: string
   /** 登录页图标（base64） */
   loginPageIcon: string
   /** 产品名称（登录页展示，留空回退站点标题） */
@@ -91,6 +93,7 @@ export const useAppStore = create<AppState>()((set) => ({
   uiCustomization: {
     systemHomeIcon: '',
     homeTitle: '',
+    homeSubtitle: '',
     loginPageIcon: '',
     productName: '',
     browserFavicon: '',

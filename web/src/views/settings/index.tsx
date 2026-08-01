@@ -117,6 +117,7 @@ export default function SettingsPage() {
       useAppStore.getState().setUiCustomization({
         systemHomeIcon: form.system_home_icon,
         homeTitle: form.home_title,
+        homeSubtitle: form.home_subtitle,
         loginPageIcon: form.login_page_icon,
         productName: form.product_name,
         browserFavicon: form.browser_favicon,

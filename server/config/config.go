@@ -107,6 +107,7 @@ type Config struct {
 	// UI 自定义配置
 	SystemHomeIcon string `json:"system_home_icon"` // 系统首页图标（base64）
 	HomeTitle      string `json:"home_title"`       // 首页标题/产品名称
+	HomeSubtitle   string `json:"home_subtitle"`    // 首页副标题（侧边栏左上角小字，留空回退默认“KVM 虚拟化管理平台”）
 	LoginPageIcon  string `json:"login_page_icon"`  // 登录页面图标（base64）
 	ProductName    string `json:"product_name"`     // 产品名称（登录页面显示）
 	BrowserFavicon string `json:"browser_favicon"`  // 浏览器Favicon图标（base64）
@@ -272,6 +273,7 @@ func Init() {
 		SiteTitle:                             getEnv("KVM_SITE_TITLE", DefaultSiteTitle),
 		SystemHomeIcon:                        getEnv("KVM_SYSTEM_HOME_ICON", ""),
 		HomeTitle:                             getEnv("KVM_HOME_TITLE", "CVMConsole"),
+		HomeSubtitle:                          getEnv("KVM_HOME_SUBTITLE", ""),
 		LoginPageIcon:                         getEnv("KVM_LOGIN_PAGE_ICON", ""),
 		ProductName:                           getEnv("KVM_PRODUCT_NAME", ""),
 		BrowserFavicon:                        getEnv("KVM_BROWSER_FAVICON", ""),
@@ -518,6 +520,7 @@ var PersistableKeys = []string{
 	"site_title",
 	"system_home_icon",
 	"home_title",
+	"home_subtitle",
 	"login_page_icon",
 	"product_name",
 	"browser_favicon",
@@ -603,6 +606,7 @@ var keyToEnvVar = map[string]string{
 	"public_base_url":           "KVM_PUBLIC_BASE_URL",
 	"site_title":                "KVM_SITE_TITLE",
 	"home_title":                "KVM_HOME_TITLE",
+	"home_subtitle":             "KVM_HOME_SUBTITLE",
 	"product_name":              "KVM_PRODUCT_NAME",
 	"browser_title":             "KVM_BROWSER_TITLE",
 	"footer_text":               "KVM_FOOTER_TEXT",
@@ -736,6 +740,8 @@ func (c *Config) LoadFromDB(settings map[string]string) {
 			c.SystemHomeIcon = value
 		case "home_title":
 			c.HomeTitle = value
+		case "home_subtitle":
+			c.HomeSubtitle = value
 		case "login_page_icon":
 			c.LoginPageIcon = value
 		case "product_name":
@@ -940,6 +946,7 @@ func (c *Config) ToSettingsMap() map[string]string {
 		"site_title":                c.SiteTitle,
 		"system_home_icon":          c.SystemHomeIcon,
 		"home_title":                c.HomeTitle,
+		"home_subtitle":             c.HomeSubtitle,
 		"login_page_icon":           c.LoginPageIcon,
 		"product_name":              c.ProductName,
 		"browser_favicon":           c.BrowserFavicon,

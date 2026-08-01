@@ -50,6 +50,7 @@ type SettingsResponse struct {
 	SiteTitle                             string `json:"site_title"`
 	SystemHomeIcon                        string `json:"system_home_icon"`
 	HomeTitle                             string `json:"home_title"`
+	HomeSubtitle                          string `json:"home_subtitle"`
 	LoginPageIcon                         string `json:"login_page_icon"`
 	ProductName                           string `json:"product_name"`
 	BrowserFavicon                        string `json:"browser_favicon"`
@@ -127,6 +128,7 @@ type UpdateSettingsRequest struct {
 	SiteTitle                             *string `json:"site_title"`
 	SystemHomeIcon                        *string `json:"system_home_icon"`
 	HomeTitle                             *string `json:"home_title"`
+	HomeSubtitle                          *string `json:"home_subtitle"`
 	LoginPageIcon                         *string `json:"login_page_icon"`
 	ProductName                           *string `json:"product_name"`
 	BrowserFavicon                        *string `json:"browser_favicon"`
@@ -191,6 +193,7 @@ type PublicSettingsResponse struct {
 	SiteTitle                  string `json:"site_title"`
 	SystemHomeIcon             string `json:"system_home_icon"`
 	HomeTitle                  string `json:"home_title"`
+	HomeSubtitle               string `json:"home_subtitle"`
 	LoginPageIcon              string `json:"login_page_icon"`
 	ProductName                string `json:"product_name"`
 	BrowserFavicon             string `json:"browser_favicon"`
@@ -214,6 +217,7 @@ func GetPublicSettings(c *gin.Context) {
 			SiteTitle:                  siteTitle,
 			SystemHomeIcon:             config.GlobalConfig.SystemHomeIcon,
 			HomeTitle:                  config.GlobalConfig.HomeTitle,
+			HomeSubtitle:               config.GlobalConfig.HomeSubtitle,
 			LoginPageIcon:              config.GlobalConfig.LoginPageIcon,
 			ProductName:                config.GlobalConfig.ProductName,
 			BrowserFavicon:             config.GlobalConfig.BrowserFavicon,
@@ -269,6 +273,7 @@ func GetSettings(c *gin.Context) {
 			SiteTitle:                             siteTitle,
 			SystemHomeIcon:                        cfg.SystemHomeIcon,
 			HomeTitle:                             cfg.HomeTitle,
+			HomeSubtitle:                          cfg.HomeSubtitle,
 			LoginPageIcon:                         cfg.LoginPageIcon,
 			ProductName:                           cfg.ProductName,
 			BrowserFavicon:                        cfg.BrowserFavicon,
@@ -441,6 +446,10 @@ func UpdateSettings(c *gin.Context) {
 		if cfg.HomeTitle == "" {
 			cfg.HomeTitle = "QVMConsole"
 		}
+	}
+	if req.HomeSubtitle != nil {
+		// 首页副标题：仅去除首尾空白，允许留空（留空时前端回退默认“KVM 虚拟化管理平台”）
+		cfg.HomeSubtitle = strings.TrimSpace(*req.HomeSubtitle)
 	}
 	if req.LoginPageIcon != nil {
 		cfg.LoginPageIcon = *req.LoginPageIcon

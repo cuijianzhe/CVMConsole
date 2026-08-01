@@ -98,7 +98,10 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
         />
         <div className="qvm-logo-txt">
           <div className="qvm-logo-name">{uiCustomization.homeTitle?.trim() || siteTitle}</div>
-          <div className="qvm-logo-sub">KVM 虚拟化管理平台</div>
+          {/* 首页副标题：优先使用 UI 自定义配置，留空回退默认“KVM 虚拟化管理平台” */}
+          <div className="qvm-logo-sub">
+            {uiCustomization.homeSubtitle?.trim() || 'KVM 虚拟化管理平台'}
+          </div>
         </div>
       </div>
 

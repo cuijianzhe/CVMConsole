@@ -46,6 +46,7 @@ export async function syncPublicSiteInfo(): Promise<string> {
     appStore.setUiCustomization({
       systemHomeIcon: String(data.system_home_icon || ''),
       homeTitle: String(data.home_title || ''),
+      homeSubtitle: String(data.home_subtitle || ''),
       loginPageIcon: String(data.login_page_icon || ''),
       productName: String(data.product_name || ''),
       browserFavicon: String(data.browser_favicon || ''),

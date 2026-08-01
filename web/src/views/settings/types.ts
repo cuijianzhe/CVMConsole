@@ -94,6 +94,8 @@ export interface SettingsForm {
   system_home_icon: string
   /** 首页标题/侧边栏产品名 */
   home_title: string
+  /** 首页副标题（侧边栏左上角小字，留空回退默认“KVM 虚拟化管理平台”） */
+  home_subtitle: string
   /** 登录页面图标（base64） */
   login_page_icon: string
   /** 产品名称（登录页显示） */
@@ -177,6 +179,7 @@ export const DEFAULT_SETTINGS_FORM: SettingsForm = {
   // ==================== UI 自定义 ====================
   system_home_icon: '',
   home_title: '',
+  home_subtitle: '',
   login_page_icon: '',
   product_name: '',
   browser_favicon: '',
@@ -281,6 +284,7 @@ export function buildSettingsPayload(form: SettingsForm): Record<string, unknown
     // ==================== UI 自定义 ====================
     system_home_icon: form.system_home_icon,
     home_title: form.home_title,
+    home_subtitle: form.home_subtitle,
     login_page_icon: form.login_page_icon,
     product_name: form.product_name,
     browser_favicon: form.browser_favicon,

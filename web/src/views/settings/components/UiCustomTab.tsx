@@ -136,6 +136,18 @@ export default function UiCustomTab({ form, patch }: SettingsTabProps) {
         />
       </SettingRow>
 
+      <SettingRow
+        label="首页副标题"
+        tip="侧边栏左上角产品名下方的小字（留空则默认显示「KVM 虚拟化管理平台」） | 环境变量: KVM_HOME_SUBTITLE"
+      >
+        <Input
+          value={form.home_subtitle}
+          onChange={(v) => patch({ home_subtitle: v })}
+          placeholder="留空则默认显示 KVM 虚拟化管理平台"
+          maxLength={60}
+        />
+      </SettingRow>
+
       <SectionHead icon={<IconImage />} title="登录页" />
 
       <SettingRow
