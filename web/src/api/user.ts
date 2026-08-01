@@ -199,7 +199,7 @@ export interface LightweightVmQuotaPayload {
 /** 创建用户载荷 */
 export interface CreateUserPayload extends Partial<UserQuotaPayload> {
   username: string
-  email: string
+  email?: string
   password?: string
   role: string
   cloud_type?: string
@@ -212,6 +212,17 @@ export interface CreateUserPayload extends Partial<UserQuotaPayload> {
 /** 创建用户（管理员，敏感操作走 428 二次验证） */
 export function createUser(data: CreateUserPayload) {
   return service.post<unknown, ApiResponse<unknown>>('/user', data)
+}
+
+/** 管理员更新用户邮箱和登录密码（密码留空时保持不变） */
+export function updateUserAccount(
+  username: string,
+  data: { email?: string; password?: string },
+) {
+  return service.put<
+    unknown,
+    ApiResponse<{ username: string; email: string; status: string; activated: boolean }>
+  >(`/user/${encodeURIComponent(username)}/account`, data)
 }
 
 /** 删除用户及其所有资产（管理员，任务队列执行） */
@@ -294,6 +305,13 @@ export function deleteLightweightVmRegistration(username: string, id: number) {
 export function removeLightweightRegisteredVm(username: string, vmName: string) {
   return service.delete<unknown, ApiResponse<unknown>>(
     `/user/${encodeURIComponent(username)}/lightweight-vm/${encodeURIComponent(vmName)}`,
+  )
+}
+
+/** 删除已开通轻量云 VM（异步任务，成功后同步移除注册记录和单 VM 配额） */
+export function deleteLightweightRegisteredVm(username: string, vmName: string) {
+  return service.post<unknown, ApiResponse<{ task_id?: string }>>(
+    `/user/${encodeURIComponent(username)}/lightweight-vm/${encodeURIComponent(vmName)}/delete`,
   )
 }
 

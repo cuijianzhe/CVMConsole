@@ -449,13 +449,15 @@ func Setup() *gin.Engine {
 			user.Use(middleware.AdminMiddleware())
 			{
 				user.GET("/list", handler.GetUserList)
-				user.GET("/list/simple", handler.GetUserListSimple)                      // 轻量级用户列表（仅基础信息 + VM 列表）
+			user.GET("/list/simple", handler.GetUserListSimple)                      // 轻量级用户列表（仅基础信息 + VM 列表）
 				user.POST("/refresh-quota-snapshots", handler.RefreshUserQuotaSnapshots) // 手动刷新配额缓存
-				user.POST("", handler.CreateUser)
+				user.POST("", handler.CreateUser)                         // 创建邀请用户或可直接登录用户
+				user.PUT("/:username/account", handler.UpdateUserAccount) // 更新用户邮箱和密码
 				user.PUT("/:username/vms", handler.AssignVMs)
 				user.POST("/:username/lightweight-registrations", handler.CreateLightweightVMRegistrations)
 				user.PUT("/:username/lightweight-vm-quota", handler.UpdateLightweightVMQuota)
 				user.DELETE("/:username/lightweight-vm/:vmName", handler.RemoveLightweightVMRegistrationByVMName)
+				user.POST("/:username/lightweight-vm/:vmName/delete", handler.DeleteLightweightVM) // 删除轻量云 VM
 				user.DELETE("/:username/lightweight-registrations/:id", handler.DeleteLightweightVMRegistration)
 				user.PUT("/:username/lightweight-registrations/:id/confirm", handler.ConfirmLightweightVMRegistration)
 				user.PUT("/:username/quota", handler.UpdateUserQuota)
