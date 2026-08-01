@@ -15,6 +15,7 @@ export function detailToListItem(vm: VmDetailInfo): VmListItem {
     memory: vm.memory,
     max_memory: vm.max_memory || vm.memory,
     ip: vm.ip || '',
+    mac_address: vm.mac_address || '',
     disk_size: vm.disk_size || '',
     template: vm.template || '',
     network: vm.network || '',
