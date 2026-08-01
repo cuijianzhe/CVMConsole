@@ -36,6 +36,8 @@ export interface CreateExtraDisk extends ExtraDiskPayload {
   iops_total: number
   iops_read: number
   iops_write: number
+  /** 选中的数据盘云盘规格 ID（空表示手动填写） */
+  cloud_disk_spec_id?: number | ''
 }
 
 /** 创建模式额外网口 */
@@ -70,6 +72,10 @@ export interface VmFormModel {
   system_disk_iops_read: number
   system_disk_iops_write: number
   storage_pool_id: string
+  /** 选中的资源规格 ID（创建模式按规格快速填充 CPU/内存，空表示手动填写） */
+  resource_spec_id: number | ''
+  /** 选中的云盘规格 ID（创建模式按规格快速填充系统盘配置，空表示手动填写） */
+  cloud_disk_spec_id: number | ''
   extra_disks: CreateExtraDisk[]
   add_disks: AddDiskPayload[] // 编辑模式新增磁盘
   floppy_image: string

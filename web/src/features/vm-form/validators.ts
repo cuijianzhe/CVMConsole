@@ -66,7 +66,7 @@ export function validateTemplateUsername(user: string, isWindowsTemplate: boolea
 }
 
 /** 登录密码（模板初始化；留空则由后端自动生成随机强密码） */
-export function validateTemplatePassword(password: string, batchCount: number): string {
+export function validateTemplatePassword(password: string, _batchCount = 0): string {
   // 留空不强制，单台和批量均由后端自动生成随机强密码
   if (!password) return ''
   if (

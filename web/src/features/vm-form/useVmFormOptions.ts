@@ -23,6 +23,8 @@ import {
   type VGPUInstance,
 } from '@/api/settings'
 import { getPublicSettings } from '@/api/settings'
+import { listResourceSpecs, type ResourceSpecItem } from '@/api/resourceSpec'
+import { listCloudDiskSpecs, type CloudDiskSpecItem } from '@/api/cloudDiskSpec'
 
 export interface UseVmFormOptionsParams {
   isAdmin: boolean
@@ -46,6 +48,9 @@ export function useVmFormOptions({ isAdmin }: UseVmFormOptionsParams) {
   const [hostArch, setHostArch] = useState('x86_64')
   const [spiceSupported, setSpiceSupported] = useState(true)
   const [spiceDefault, setSpiceDefault] = useState(false)
+  // 资源规格 & 云盘规格（创建虚拟机时按规格快速选择 CPU/内存、磁盘配置）
+  const [resourceSpecs, setResourceSpecs] = useState<ResourceSpecItem[]>([])
+  const [cloudDiskSpecs, setCloudDiskSpecs] = useState<CloudDiskSpecItem[]>([])
 
   const baseLoadedRef = useRef(false)
 
@@ -110,6 +115,17 @@ export function useVmFormOptions({ isAdmin }: UseVmFormOptionsParams) {
           result.spiceDefault = !!res.data?.spice_enabled_by_default
           setSpiceDefault(!!res.data?.spice_enabled_by_default)
         })
+        .catch(() => undefined),
+    )
+    // 资源规格 & 云盘规格（所有已认证用户均可读取列表，用于创建虚拟机时快速选择）
+    tasks.push(
+      listResourceSpecs({ page_size: 200 })
+        .then((res) => setResourceSpecs(res.data?.list || []))
+        .catch(() => undefined),
+    )
+    tasks.push(
+      listCloudDiskSpecs({ page_size: 200 })
+        .then((res) => setCloudDiskSpecs(res.data?.list || []))
         .catch(() => undefined),
     )
     await Promise.all(tasks)
@@ -242,6 +258,8 @@ export function useVmFormOptions({ isAdmin }: UseVmFormOptionsParams) {
     hostArch,
     spiceSupported,
     spiceDefault,
+    resourceSpecs,
+    cloudDiskSpecs,
     ensureBaseLoaded,
     loadISOs,
     loadOSVariants,

@@ -89,6 +89,44 @@ export default function IsoStorageSection() {
 
       {/* 系统磁盘 */}
       <SectionCard icon={<DiskIcon />} title="系统磁盘">
+        {/* 云盘规格快速选择（仅系统盘规格，留空可手动填写，选中后磁盘相关字段置灰） */}
+        {options.cloudDiskSpecs.filter((s) => s.disk_type === 'SYSTEM').length > 0 && (
+          <FormField
+            label="云盘规格"
+            tip="从资源管理中选择已有系统盘规格，选中后系统盘容量/格式/IOPS 自动填充且不可手动修改；留空则手动填写"
+          >
+            <Select
+              style={{ width: '100%' }}
+              value={f.cloud_disk_spec_id === '' ? undefined : String(f.cloud_disk_spec_id)}
+              placeholder="手动填写（不选择规格）"
+              showClear
+              onChange={(v) => {
+                const raw = v === undefined || v === '' ? '' : Number(v)
+                setField('cloud_disk_spec_id', raw as number | '')
+                if (raw === '') return
+                const spec = options.cloudDiskSpecs.find((s) => s.id === (raw as number))
+                if (!spec) return
+                // 选中规格后填充系统盘配置
+                setField('disk_size', spec.capacity_gb)
+                if (spec.disk_format) setField('disk_format', spec.disk_format.toLowerCase())
+                // IOPS 限速
+                if (spec.iops_mode === 'TOTAL') {
+                  setField('system_disk_iops_total', spec.total_iops || 0)
+                } else {
+                  setField('system_disk_iops_total', 0)
+                  setField('system_disk_iops_read', spec.read_iops || 0)
+                  setField('system_disk_iops_write', spec.write_iops || 0)
+                }
+              }}
+            >
+              {options.cloudDiskSpecs.filter((s) => s.disk_type === 'SYSTEM').map((spec) => (
+                <Select.Option key={spec.id} value={String(spec.id)}>
+                  {spec.name}（{spec.capacity_gb}GB / {spec.disk_format}）
+                </Select.Option>
+              ))}
+            </Select>
+          </FormField>
+        )}
         <div className="qvm-vf-grid-2">
           <FormField label="系统盘（GB）" required>
             <InputNumber
@@ -97,6 +135,7 @@ export default function IsoStorageSection() {
               min={10}
               max={2000}
               step={10}
+              disabled={f.cloud_disk_spec_id !== ''}
               onChange={(v) => setField('disk_size', Number(v || 0))}
             />
           </FormField>
@@ -104,6 +143,7 @@ export default function IsoStorageSection() {
             <Select
               style={{ width: '100%' }}
               value={f.disk_format}
+              disabled={f.cloud_disk_spec_id !== ''}
               onChange={(v) => setField('disk_format', v as string)}
               optionList={DISK_FORMAT_OPTIONS.map((item) => ({ value: item.value, label: item.label }))}
             />
@@ -122,11 +162,11 @@ export default function IsoStorageSection() {
           <FormField label="系统盘 IOPS">
             <div className="qvm-vf-iops-row">
               <span className="qvm-vf-iops-label">总</span>
-              <InputNumber size="small" style={{ width: 100 }} value={f.system_disk_iops_total} min={0} step={100} placeholder="总IOPS" onChange={(v) => setField('system_disk_iops_total', Number(v || 0))} />
+              <InputNumber size="small" style={{ width: 100 }} value={f.system_disk_iops_total} min={0} step={100} placeholder="总IOPS" disabled={f.cloud_disk_spec_id !== ''} onChange={(v) => setField('system_disk_iops_total', Number(v || 0))} />
               <span className="qvm-vf-iops-label">读</span>
-              <InputNumber size="small" style={{ width: 100 }} value={f.system_disk_iops_read} min={0} step={100} placeholder="读IOPS" disabled={f.system_disk_iops_total > 0} onChange={(v) => setField('system_disk_iops_read', Number(v || 0))} />
+              <InputNumber size="small" style={{ width: 100 }} value={f.system_disk_iops_read} min={0} step={100} placeholder="读IOPS" disabled={f.cloud_disk_spec_id !== '' || f.system_disk_iops_total > 0} onChange={(v) => setField('system_disk_iops_read', Number(v || 0))} />
               <span className="qvm-vf-iops-label">写</span>
-              <InputNumber size="small" style={{ width: 100 }} value={f.system_disk_iops_write} min={0} step={100} placeholder="写IOPS" disabled={f.system_disk_iops_total > 0} onChange={(v) => setField('system_disk_iops_write', Number(v || 0))} />
+              <InputNumber size="small" style={{ width: 100 }} value={f.system_disk_iops_write} min={0} step={100} placeholder="写IOPS" disabled={f.cloud_disk_spec_id !== '' || f.system_disk_iops_total > 0} onChange={(v) => setField('system_disk_iops_write', Number(v || 0))} />
               <span className="qvm-vf-iops-mutex">互斥</span>
             </div>
           </FormField>

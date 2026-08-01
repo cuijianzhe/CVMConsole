@@ -90,6 +90,8 @@ export function createDefaultVmForm(options: CreateDefaultFormOptions = {}): VmF
     system_disk_iops_read: 0,
     system_disk_iops_write: 0,
     storage_pool_id: '',
+    resource_spec_id: '',
+    cloud_disk_spec_id: '',
     extra_disks: [],
     add_disks: [],
     floppy_image: '',

@@ -3,7 +3,7 @@
  * CPU 核心、内存、CPU 热添加、CPU 限制（管理员）、动态内存。
  */
 import { useState } from 'react'
-import { Button, InputNumber, Radio, Tag } from '@douyinfe/semi-ui'
+import { Button, InputNumber, Radio, Select, Tag } from '@douyinfe/semi-ui'
 import { IconServer } from '@douyinfe/semi-icons'
 import SectionCard from './SectionCard'
 import FormField from './FormField'
@@ -13,7 +13,7 @@ import MemoryDynamicDialog from '../dialogs/MemoryDynamicDialog'
 import VirtioMemDetailDialog from '../dialogs/VirtioMemDetailDialog'
 
 export default function CpuMemorySection() {
-  const { form, ctx } = useVmFormScope()
+  const { form, ctx, options } = useVmFormScope()
   const { form: f, setField, handleDynamicMemoryEnabledChange, handleMemoryBackendChange, handleBaseMemoryChange, windowsElasticMemoryDisabled } = form
   const isEdit = ctx.mode === 'edit'
   const running = ctx.vmStatus === 'running'
@@ -25,6 +25,21 @@ export default function CpuMemorySection() {
   const memoryMin = isEdit && running ? ctx.editOrigMemory || 1 : 1
   const memoryValue = isEdit ? f.memory : f.ram
 
+  // 创建模式下是否已选择资源规格（选中后 CPU/内存字段置灰，由规格填充）
+  const hasResourceSpec = !isEdit && f.resource_spec_id !== ''
+
+  /** 选择资源规格后联动填充 CPU/内存并禁用手动编辑 */
+  const handleResourceSpecChange = (v: string | string[] | undefined) => {
+    const raw = v === undefined || v === '' || Array.isArray(v) ? '' : Number(v)
+    setField('resource_spec_id', raw as number | '')
+    if (raw === '') return
+    const spec = options.resourceSpecs.find((s) => s.id === (raw as number))
+    if (!spec) return
+    // 选中规格后填充 CPU/内存（创建模式写入 vcpu / ram）
+    setField('vcpu', spec.cpu_cores)
+    setField('ram', spec.memory_gb)
+  }
+
   const dynamicTip =
     f.memory_backend === 'virtio_mem'
       ? '弹性内存：设定内存作为规格内存，基础内存自动按 50% 计算，并额外提供 30% 突发上限；运行后按使用率自动伸缩。'
@@ -32,6 +47,27 @@ export default function CpuMemorySection() {
 
   return (
     <SectionCard icon={<IconServer />} title="CPU 与内存">
+      {/* 创建模式：资源规格快速选择（留空可手动填写，选中后 CPU/内存置灰） */}
+      {!isEdit && options.resourceSpecs.length > 0 && (
+        <FormField
+          label="资源规格"
+          tip="从资源管理中选择已有规格，选中后 CPU/内存自动填充且不可手动修改；留空则手动填写"
+        >
+          <Select
+            style={{ width: '100%' }}
+            value={f.resource_spec_id === '' ? undefined : String(f.resource_spec_id)}
+            placeholder="手动填写（不选择规格）"
+            showClear
+            onChange={handleResourceSpecChange}
+          >
+            {options.resourceSpecs.map((spec) => (
+              <Select.Option key={spec.id} value={String(spec.id)}>
+                {spec.name}（{spec.cpu_cores}C / {spec.memory_gb}G）
+              </Select.Option>
+            ))}
+          </Select>
+        </FormField>
+      )}
       <div className="qvm-vf-grid-2">
         <FormField label="CPU 核心" required>
           <InputNumber
@@ -39,7 +75,7 @@ export default function CpuMemorySection() {
             value={f.vcpu}
             min={vcpuMin}
             max={vcpuMax}
-            disabled={isEdit && running && !f.cpu_hotplug_enabled}
+            disabled={(isEdit && running && !f.cpu_hotplug_enabled) || hasResourceSpec}
             onChange={(v) => setField('vcpu', Number(v || 1))}
           />
         </FormField>
@@ -50,6 +86,7 @@ export default function CpuMemorySection() {
             min={memoryMin}
             max={64}
             step={1}
+            disabled={hasResourceSpec}
             onChange={(v) => {
               setField(isEdit ? 'memory' : 'ram', Number(v || 1))
               handleBaseMemoryChange()

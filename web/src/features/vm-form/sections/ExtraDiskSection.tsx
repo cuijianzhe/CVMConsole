@@ -41,9 +41,45 @@ export default function ExtraDiskSection({ title = '额外数据盘', tip }: Ext
         iops_total: 0,
         iops_read: 0,
         iops_write: 0,
+        cloud_disk_spec_id: '',
         guest_mount: { enabled: false, filesystem: 'ext4', mount_point: '/data' },
       },
     ])
+  }
+
+  /** 数据盘规格列表（仅 DATA 类型） */
+  const dataDiskSpecs = options.cloudDiskSpecs.filter((s) => s.disk_type === 'DATA')
+
+  /** 选择数据盘规格后联动填充磁盘配置并禁用手动编辑（一次性更新所有字段，避免快照覆盖） */
+  const handleDataDiskSpecChange = (index: number, v: string | string[] | undefined) => {
+    const raw = v === undefined || v === '' || Array.isArray(v) ? '' : Number(v)
+    if (raw === '') {
+      // 清空规格，仅更新 cloud_disk_spec_id，保留用户已填写的其他值
+      updateExtraDisk(index, 'cloud_disk_spec_id', '')
+      return
+    }
+    const spec = dataDiskSpecs.find((s) => s.id === (raw as number))
+    if (!spec) return
+    // 一次性更新整个磁盘项，避免连续 setField 导致快照覆盖
+    setField(
+      'extra_disks',
+      f.extra_disks.map((disk, i) => {
+        if (i !== index) return disk
+        // 选中规格后填充磁盘配置
+        const iopsTotal = spec.iops_mode === 'TOTAL' ? (spec.total_iops || 0) : 0
+        const iopsRead = spec.iops_mode === 'READ_WRITE' ? (spec.read_iops || 0) : 0
+        const iopsWrite = spec.iops_mode === 'READ_WRITE' ? (spec.write_iops || 0) : 0
+        return {
+          ...disk,
+          cloud_disk_spec_id: raw as number | '',
+          size: spec.capacity_gb,
+          format: spec.disk_format ? spec.disk_format.toLowerCase() : disk.format,
+          iops_total: iopsTotal,
+          iops_read: iopsRead,
+          iops_write: iopsWrite,
+        }
+      }),
+    )
   }
 
   const updateExtraDisk = (index: number, key: string, value: unknown) => {
@@ -72,19 +108,39 @@ export default function ExtraDiskSection({ title = '额外数据盘', tip }: Ext
   return (
     <SectionCard icon={<DiskIcon />} title={title}>
       <FormField label="额外磁盘" tip={tip}>
-        {f.extra_disks.map((disk, index) => (
+        {f.extra_disks.map((disk, index) => {
+          // 当前磁盘是否已选择数据盘规格（选中后容量/格式/IOPS 字段置灰）
+          const hasDataDiskSpec = disk.cloud_disk_spec_id !== undefined && disk.cloud_disk_spec_id !== ''
+          return (
           <div key={index} className="qvm-vf-disk-row">
+            {/* 数据盘规格选择（仅 DATA 类型，留空可手动填写） */}
+            {dataDiskSpecs.length > 0 && (
+              <Select
+                style={{ width: 150 }}
+                value={disk.cloud_disk_spec_id ? String(disk.cloud_disk_spec_id) : undefined}
+                placeholder="规格选择"
+                showClear
+                filter
+                onChange={(v) => handleDataDiskSpecChange(index, v)}
+                optionList={dataDiskSpecs.map((spec) => ({
+                  value: String(spec.id),
+                  label: `${spec.name}（${spec.capacity_gb}G）`,
+                }))}
+              />
+            )}
             <InputNumber
               style={{ width: 110 }}
               value={disk.size}
               min={1}
               max={2000}
               placeholder="大小(GB)"
+              disabled={hasDataDiskSpec}
               onChange={(v) => updateExtraDisk(index, 'size', Number(v || 0))}
             />
             <Select
               style={{ width: 96 }}
               value={disk.format}
+              disabled={hasDataDiskSpec}
               onChange={(v) => updateExtraDisk(index, 'format', v)}
               optionList={[
                 { value: 'qcow2', label: 'qcow2' },
@@ -166,7 +222,8 @@ export default function ExtraDiskSection({ title = '额外数据盘', tip }: Ext
               </span>
             )}
           </div>
-        ))}
+          )
+        })}
         <Button type="primary" theme="light" size="small" icon={<IconPlus />} onClick={addExtraDisk}>
           添加额外磁盘
         </Button>
