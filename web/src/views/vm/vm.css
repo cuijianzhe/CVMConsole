@@ -419,12 +419,29 @@ body[theme-mode='dark'] .qvm-export-disk-list strong {
   flex: none;
   padding: 0 3px;
 }
+/* 表格内标签列较窄，编辑器改为纵向布局（标签在上、输入框在下），卡片视图不受影响 */
+.qvm-vm-table .qvm-tag-editor {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+.qvm-vm-table .qvm-tag-input-wrap {
+  width: 100%;
+  min-width: 0;
+}
 .qvm-tpl-name {
   color: var(--qvm-text-2);
   font-size: 12px;
 }
 .qvm-runtime {
   color: var(--qvm-text-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+/* CPU/内存等配置数字单元格 */
+.qvm-vm-spec {
+  font-family: var(--qvm-num-font);
+  color: var(--qvm-text-1);
   font-size: 12px;
   white-space: nowrap;
 }

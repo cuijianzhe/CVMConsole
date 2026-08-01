@@ -46,6 +46,22 @@ export function formatMemoryGB(memory: number): string {
   return `${Number.isInteger(gb) ? gb : gb.toFixed(1)}G`
 }
 
+/**
+ * 按列内容最长字符估算自适应列宽
+ * @param values 该列所有单元格的文本内容
+ * @param opts.charWidth 单字符像素（英文约 8、中文约 14，按列字体混合度折中）
+ * @param opts.padding 左右内边距 + 图标/徽标余量
+ * @param opts.min/max 上下限，防止过窄不可读或过长撑爆
+ */
+export function autoColWidth(
+  values: string[],
+  opts: { charWidth?: number; padding?: number; min?: number; max?: number } = {},
+): number {
+  const { charWidth = 8, padding = 24, min = 60, max = 260 } = opts
+  const maxLen = values.reduce((m, v) => Math.max(m, (v || '').length), 0)
+  return Math.max(min, Math.min(max, maxLen * charWidth + padding))
+}
+
 /** 配置摘要文本：4C / 8G / 100G */
 export function vmConfigText(vm: VmListItem): string {
   return `${vm.vcpu}C / ${formatMemoryGB(vm.memory)} / ${vm.disk_size || '-'}`
