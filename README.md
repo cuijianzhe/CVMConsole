@@ -120,7 +120,7 @@ CVMConsole 需要社区贡献者的支持才能持续完善。欢迎并鼓励您
 
 ## 致谢
 
-感谢 [CVMConsole](https://www.qvmconsole.cn/) 的开发者以及贡献者，此项目根据实际使用经验，与AI达成一致，造好轮子，用好轮子！
+感谢 [QVMConsole](https://www.qvmconsole.cn/) 的开发者以及贡献者，此项目根据实际使用经验，与AI达成一致，造好轮子，用好轮子！
 
 ---
 

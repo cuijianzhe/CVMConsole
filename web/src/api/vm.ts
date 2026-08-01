@@ -18,6 +18,7 @@ export interface VmListItem {
   memory: number // MB
   max_memory: number // MB
   ip: string
+  mac_address: string // MAC 地址（主网口）
   disk_size: string // 如 "20 GB"
   template: string
   network: string

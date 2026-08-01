@@ -14,6 +14,7 @@ import { formatRuntime } from '@/utils/format'
 import VmStatusIcon from './VmStatusIcon'
 import VmResourceBars from './VmResourceBars'
 import VmIpCell from './VmIpCell'
+import VmMacCell from './VmMacCell'
 import VmActionsCell, { type VmMenuCommand } from './VmActionsCell'
 import VmTagsEditor from './VmTagsEditor'
 import { shouldOpenVmDetail } from '../utils'
@@ -135,6 +136,14 @@ export default function VmTableView({
         className: 'col-hide-sm',
         onHeaderCell: () => ({ className: 'col-hide-sm' }),
         render: (_text, vm) => <VmIpCell vm={vm} />,
+      },
+      {
+        title: 'MAC 地址',
+        dataIndex: 'mac_address',
+        width: 160,
+        className: 'col-hide-sm',
+        onHeaderCell: () => ({ className: 'col-hide-sm' }),
+        render: (_text, vm) => <VmMacCell vm={vm} />,
       },
       {
         title: '运行时长',

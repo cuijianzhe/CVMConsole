@@ -520,6 +520,16 @@ body[theme-mode='dark'] .qvm-export-disk-list strong {
   color: var(--qvm-text-2);
 }
 
+/* MAC 地址 */
+.qvm-mac-addr {
+  font-family: var(--qvm-num-font);
+  font-size: 12px;
+  color: var(--qvm-text-1);
+}
+.qvm-mac-addr.na {
+  color: var(--qvm-text-2);
+}
+
 /* 操作图标 */
 .qvm-act-cell {
   display: flex;
