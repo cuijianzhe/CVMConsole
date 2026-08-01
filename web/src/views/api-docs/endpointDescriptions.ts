@@ -90,16 +90,6 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
     response: 'data: stage, token, username, role, cloud_type, security, allowed_methods。',
     requiredFields: ['username', 'password'],
   },
-  'GET /auth/invite': {
-    summary: '读取邀请注册信息',
-    query: ['token'],
-    response: 'data: 邀请账号、邮箱、角色、过期状态。',
-  },
-  'POST /auth/invite/complete': {
-    summary: '完成邀请注册',
-    body: 'JSON: token, password, confirm_password',
-    response: 'data: stage, token, username, role, cloud_type, security。',
-  },
   'POST /auth/password/forgot': {
     summary: '发送旧版找回密码邮件链接',
     body: 'JSON: email',
@@ -728,6 +718,14 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   'POST /user': {
     summary: '创建用户或邀请用户',
     body: 'JSON: username, email, password, role, cloud_type, quota 字段, enable_port_forward, dedicated_vpc_switch_id',
+    notes: ['email 选填；password 留空时必须提供 email 发送注册邀请，填写 password 时直接创建可登录用户。'],
+    highRiskNote: '创建账户属于敏感操作，必须完成高风险二次验证。',
+  },
+  'PUT /user/:username/account': {
+    summary: '更新用户邮箱和登录密码',
+    body: 'JSON: email(可选；空字符串表示清除), password(可选；留空时保持当前密码)',
+    notes: ['email 与 password 至少提交一项；为待邀请用户设置密码后，账户会直接激活并可登录。'],
+    highRiskNote: '修改邮箱或密码属于敏感操作，必须完成高风险二次验证。',
   },
   'PUT /user/:username/vms': { summary: '分配 VM 给用户', body: 'JSON: vms, lightweight_quotas' },
   'POST /user/:username/lightweight-registrations': {
@@ -739,6 +737,7 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
     body: 'JSON: vm_name, max_cpu, max_memory, max_disk, max_bandwidth_*, max_traffic_*, max_snapshots, max_runtime_hours',
   },
   'DELETE /user/:username/lightweight-vm/:vmName': { summary: '移除已开通轻量云 VM 注册记录' },
+  'POST /user/:username/lightweight-vm/:vmName/delete': { summary: '删除已开通轻量云 VM' },
   'DELETE /user/:username/lightweight-registrations/:id': { summary: '删除轻量云待开通登记' },
   'PUT /user/:username/quota': {
     summary: '更新用户配额',
@@ -747,7 +746,6 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   'PUT /user/:username/status': { summary: '封禁或解封用户', body: 'JSON: status(active/disabled)' },
   'GET /user/:username/quota': { summary: '获取用户配额使用情况' },
   'PUT /user/:username/ssh': { summary: '切换用户 SSH 权限', body: 'JSON: enabled' },
-  'POST /user/:username/resend-invite': { summary: '重发邀请邮件' },
   'POST /user/:username/traffic/reset': { summary: '重置用户流量配额' },
   'DELETE /user/:username': { summary: '删除用户及其资产' },
 

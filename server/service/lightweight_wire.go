@@ -213,6 +213,10 @@ func DeleteLightweightVMRegistration(username string, id uint) error {
 	return lwpkg.DeleteLightweightVMRegistration(username, id)
 }
 
+func ValidateLightweightVMRemoval(username string, vmName string) error {
+	return lwpkg.ValidateLightweightVMRemoval(username, vmName)
+}
+
 func RemoveLightweightVMRegistrationByVMName(username string, vmName string) error {
 	return lwpkg.RemoveLightweightVMRegistrationByVMName(username, vmName)
 }

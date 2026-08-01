@@ -10,6 +10,11 @@ import (
 )
 
 func BindVMToVPC(username, vmName string, switchID, securityGroupID uint) error {
+	return bindVMToVPCWithSecurityGroupOwner(username, vmName, switchID, securityGroupID, "")
+}
+
+// bindVMToVPCWithSecurityGroupOwner 支持交换机与安全组由不同用户管理的轻量云专用 VPC。
+func bindVMToVPCWithSecurityGroupOwner(username, vmName string, switchID, securityGroupID uint, securityGroupOwner string) error {
 	if strings.TrimSpace(vmName) == "" {
 		return fmt.Errorf("虚拟机名称不能为空")
 	}
@@ -33,6 +38,10 @@ func BindVMToVPC(username, vmName string, switchID, securityGroupID uint) error 
 	if username == "" {
 		return fmt.Errorf("无法识别虚拟机归属用户")
 	}
+	securityGroupOwner = strings.TrimSpace(securityGroupOwner)
+	if securityGroupOwner == "" {
+		securityGroupOwner = username
+	}
 	if _, err := EnsureDefaultSecurityGroup(username); err != nil {
 		return err
 	}
@@ -52,9 +61,9 @@ func BindVMToVPC(username, vmName string, switchID, securityGroupID uint) error 
 			var sg model.VPCSecurityGroup
 			var err error
 			if sw.IsSystem {
-				err = model.DB.Where("id = ? AND (username = ? OR username = ?)", securityGroupID, username, sw.Username).First(&sg).Error
+				err = model.DB.Where("id = ? AND (username = ? OR username = ?)", securityGroupID, securityGroupOwner, sw.Username).First(&sg).Error
 			} else {
-				err = model.DB.Where("id = ? AND username = ?", securityGroupID, username).First(&sg).Error
+				err = model.DB.Where("id = ? AND username = ?", securityGroupID, securityGroupOwner).First(&sg).Error
 			}
 			if err != nil {
 				return fmt.Errorf("安全组不存在或不属于该用户")
@@ -64,9 +73,9 @@ func BindVMToVPC(username, vmName string, switchID, securityGroupID uint) error 
 		var sg model.VPCSecurityGroup
 		var err error
 		if sw.IsSystem {
-			err = model.DB.Where("id = ? AND (username = ? OR username = ?)", securityGroupID, username, sw.Username).First(&sg).Error
+			err = model.DB.Where("id = ? AND (username = ? OR username = ?)", securityGroupID, securityGroupOwner, sw.Username).First(&sg).Error
 		} else {
-			err = model.DB.Where("id = ? AND username = ?", securityGroupID, username).First(&sg).Error
+			err = model.DB.Where("id = ? AND username = ?", securityGroupID, securityGroupOwner).First(&sg).Error
 		}
 		if err != nil {
 			return fmt.Errorf("安全组不存在或不属于该用户")
@@ -193,6 +202,7 @@ func BindVMToVPCAsAdmin(vmName string, switchID, securityGroupID uint) error {
 	if HookSwitchUsesDirectBridge(sw) {
 		return BindVMToVPC(switchOwner, vmName, switchID, 0)
 	}
+	securityGroupOwner := switchOwner
 	if securityGroupID == 0 {
 		var group model.VPCSecurityGroup
 		if err := model.DB.Where("username = ? AND is_default = ?", switchOwner, true).First(&group).Error; err != nil {
@@ -204,11 +214,51 @@ func BindVMToVPCAsAdmin(vmName string, switchID, securityGroupID uint) error {
 		if err := model.DB.First(&group, securityGroupID).Error; err != nil {
 			return fmt.Errorf("安全组不存在")
 		}
-		if !sw.IsSystem && group.Username != sw.Username {
-			return fmt.Errorf("安全组必须属于交换机用户 %s", sw.Username)
+		if sw.IsSystem && group.Username != switchOwner {
+			if !isLightweightDedicatedVPCSecurityGroup(group, vmName, sw.ID) {
+				return fmt.Errorf("安全组不存在或不属于该用户")
+			}
+			if err := model.DB.Model(&group).Update("username", switchOwner).Error; err != nil {
+				return fmt.Errorf("修复轻量云专属安全组归属失败: %w", err)
+			}
+			group.Username = switchOwner
+			securityGroupOwner = group.Username
+		} else if !sw.IsSystem && group.Username != sw.Username {
+			if !isLightweightDedicatedVPCSecurityGroup(group, vmName, sw.ID) {
+				return fmt.Errorf("安全组必须属于交换机用户 %s", sw.Username)
+			}
+			if err := model.DB.Model(&group).Update("username", sw.Username).Error; err != nil {
+				return fmt.Errorf("修复轻量云专属安全组归属失败: %w", err)
+			}
+			group.Username = sw.Username
+			securityGroupOwner = group.Username
 		}
 	}
-	return BindVMToVPC(switchOwner, vmName, switchID, securityGroupID)
+	return bindVMToVPCWithSecurityGroupOwner(switchOwner, vmName, switchID, securityGroupID, securityGroupOwner)
+}
+
+// isLightweightDedicatedVPCSecurityGroup 判断安全组是否为当前轻量云 VM 的专属安全组。
+func isLightweightDedicatedVPCSecurityGroup(group model.VPCSecurityGroup, vmName string, switchID uint) bool {
+	if !group.IsVMScoped || strings.TrimSpace(group.VMName) != strings.TrimSpace(vmName) || switchID == 0 {
+		return false
+	}
+	vmOwner := ""
+	if HookFindVMOwner != nil {
+		vmOwner = strings.TrimSpace(HookFindVMOwner(vmName))
+	}
+	groupOwner := strings.TrimSpace(group.Username)
+	if vmOwner != "" && groupOwner != "" && vmOwner != groupOwner {
+		return false
+	}
+	owner := vmOwner
+	if owner == "" {
+		owner = groupOwner
+	}
+	if owner == "" || HookIsLightweightCloudUser == nil || !HookIsLightweightCloudUser(owner) {
+		return false
+	}
+	var user model.User
+	return model.DB.Where("username = ? AND dedicated_vpc_switch_id = ?", owner, switchID).First(&user).Error == nil
 }
 
 func ApplyVPCSwitchToDomainXML(vmXML string, switchID uint) (string, error) {
@@ -297,6 +347,12 @@ func GetVPCBindingInfo(operator, role, vmName string) (*VPCBindingInfo, error) {
 	if username == "" && role != "admin" {
 		username = operator
 	}
+	if username == "" && role == "admin" {
+		var cache model.VMCache
+		if err := model.DB.Where("name = ?", vmName).First(&cache).Error; err == nil && strings.TrimSpace(cache.OwnerUsername) != "" {
+			username = strings.TrimSpace(cache.OwnerUsername)
+		}
+	}
 	if username != "" && !isLightweightOperator {
 		_, _ = EnsureDefaultSecurityGroup(username)
 	}
@@ -320,6 +376,7 @@ func GetVPCBindingInfo(operator, role, vmName string) (*VPCBindingInfo, error) {
 			username = binding.Username
 		}
 	}
+	info.OwnerUsername = username
 	if quota, err := HookGetLightweightVMQuota(vmName); err == nil {
 		info.LightweightQuota = quota
 	}

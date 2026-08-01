@@ -8,7 +8,6 @@ import type { LightweightVmQuotaPayload, UserListItem } from '@/api/user'
 export function userStatusLabel(status?: string): string {
   const map: Record<string, string> = {
     active: '正常',
-    pending_invite: '待激活',
     disabled: '已封禁',
   }
   return map[status || ''] || status || '-'
@@ -17,7 +16,6 @@ export function userStatusLabel(status?: string): string {
 /** 用户状态 → Tag 颜色 */
 export function userStatusTagColor(status?: string): 'green' | 'orange' | 'red' | 'grey' {
   if (status === 'active') return 'green'
-  if (status === 'pending_invite') return 'orange'
   if (status === 'disabled') return 'red'
   return 'grey'
 }

@@ -10,6 +10,7 @@ import (
 	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/service"
+	"kvm_console/service/libvirt_rpc"
 	"kvm_console/taskqueue"
 	"kvm_console/utils"
 )
@@ -18,7 +19,7 @@ import (
 type CreateUserRequest struct {
 	Username                    string                                     `json:"username" binding:"required"`
 	Email                       string                                     `json:"email"`
-	Password                    string                                     `json:"password"`   // SMTP 未配置时必填
+	Password                    string                                     `json:"password"`   // 选填；填写后直接创建激活用户
 	Role                        string                                     `json:"role"`       // admin/user
 	CloudType                   string                                     `json:"cloud_type"` // elastic/lightweight
 	DedicatedVPCSwitchID        uint                                       `json:"dedicated_vpc_switch_id"`
@@ -39,6 +40,12 @@ type CreateUserRequest struct {
 	LightweightVMRegistrations  []service.LightweightVMRegistrationRequest `json:"lightweight_vm_registrations"`
 	LightweightExistingVMs      []string                                   `json:"lightweight_existing_vms"`       // 选择已有VM列表
 	LightweightExistingVMQuotas []service.LightweightVMQuotaRequest        `json:"lightweight_existing_vm_quotas"` // 已有VM配额
+}
+
+// UpdateUserAccountRequest 更新用户账户资料请求
+type UpdateUserAccountRequest struct {
+	Email    *string `json:"email"`
+	Password string  `json:"password"`
 }
 
 // UpdateQuotaRequest 更新配额请求
@@ -171,8 +178,15 @@ func resolveUpdateUserEnablePortForward(username string, value *bool) (bool, err
 	return user.EnablePortForward, nil
 }
 
+func validateManagedPassword(password string) error {
+	return service.ValidateStrongPassword(password)
+}
+
 // CreateUser 创建用户
 func CreateUser(c *gin.Context) {
+	if !requireHighRiskVerification(c, "create_user") {
+		return
+	}
 	var req CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -207,7 +221,7 @@ func CreateUser(c *gin.Context) {
 		})
 		return
 	}
-	if err := service.ValidateStrongPassword(password); err != nil {
+	if err := validateManagedPassword(password); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": "密码不符合要求: " + err.Error(),
@@ -215,7 +229,14 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := service.CreateActiveUserDirectly(req.Username, email, password, role, cloudType,
+	dedicatedVPCSwitchID := req.DedicatedVPCSwitchID
+	useExistingVMs := service.IsLightweightCloudType(cloudType) && len(req.LightweightExistingVMs) > 0
+	if useExistingVMs {
+		dedicatedVPCSwitchID = 0
+	}
+
+	// 直接创建激活用户
+	user, err := service.CreateActiveUserDirectly(req.Username, email, password, role, cloudType, dedicatedVPCSwitchID, useExistingVMs,
 		req.MaxCPU, req.MaxMemory, req.MaxDisk, req.MaxVM, req.MaxStorage, req.MaxRuntimeHours,
 		enablePortForward, maxPortForwards, maxSnapshots,
 		req.MaxBandwidthUp, req.MaxBandwidthDown, req.MaxTrafficDown, req.MaxTrafficUp, req.MaxPublicIPs)
@@ -255,8 +276,62 @@ func CreateUser(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
-		"message": "用户已创建，用户可直接使用初始密码登录",
+		"message": "用户已创建，可直接使用初始密码登录",
 		"data":    gin.H{"username": user.Username},
+	})
+}
+
+// UpdateUserAccount 管理员更新用户邮箱和密码。
+func UpdateUserAccount(c *gin.Context) {
+	if !requireHighRiskVerification(c, "update_user_account") {
+		return
+	}
+
+	username := strings.TrimSpace(c.Param("username"))
+	var req UpdateUserAccountRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "参数错误"})
+		return
+	}
+	if req.Email == nil && req.Password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "请至少提交邮箱或新密码"})
+		return
+	}
+	if req.Password != "" {
+		if err := validateManagedPassword(req.Password); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "密码不符合要求: " + err.Error()})
+			return
+		}
+	}
+
+	user, activated, err := service.UpdateManagedUserAccount(username, req.Email, req.Password)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "不存在") || strings.Contains(err.Error(), "不能为空") || strings.Contains(err.Error(), "密码") {
+			status = http.StatusBadRequest
+		}
+		c.JSON(status, gin.H{"code": status, "message": err.Error()})
+		return
+	}
+	message := "用户账户资料已更新"
+	if activated {
+		message = "用户账户资料已更新，待邀请账户已激活，可直接登录"
+	} else if req.Password != "" {
+		if req.Email == nil {
+			message = "用户登录密码已更新"
+		} else {
+			message = "用户邮箱和密码已更新"
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": message,
+		"data": gin.H{
+			"username":  user.Username,
+			"email":     user.Email,
+			"status":    user.Status,
+			"activated": activated,
+		},
 	})
 }
 
@@ -337,6 +412,43 @@ func RemoveLightweightVMRegistrationByVMName(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 200, "message": "轻量云 VM 已移除"})
+}
+
+// DeleteLightweightVM 删除已开通的轻量云 VM，并在删除成功后移除所属记录。
+func DeleteLightweightVM(c *gin.Context) {
+	if !requireHighRiskVerification(c, "delete_vm") {
+		return
+	}
+	username := c.Param("username")
+	vmName := c.Param("vmName")
+	if err := service.ValidateLightweightVMRemoval(username, vmName); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
+		return
+	}
+	if _, _, _, _, err := libvirt_rpc.GetDomainInfoRPC(vmName); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "虚拟机不存在"})
+		return
+	}
+	if service.IsVMLocked(vmName) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "该虚拟机已锁定，无法删除。请先解锁后再操作。"})
+		return
+	}
+
+	operator, _ := c.Get("username")
+	operatorName, _ := operator.(string)
+	task, err := taskqueue.SubmitWithStruct(model.TaskTypeDelete, map[string]interface{}{
+		"name":                 vmName,
+		"lightweight_username": username,
+	}, operatorName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "提交删除任务失败: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "删除任务已提交",
+		"data":    gin.H{"task_id": task.ID},
+	})
 }
 
 // UpdateLightweightVMQuota 更新轻量云单 VM 的流量、带宽和端口转发配额。
