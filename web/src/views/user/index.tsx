@@ -21,7 +21,6 @@ import {
   IconAlertTriangle,
   IconDelete,
   IconLock,
-  IconMailStroked1,
   IconMore,
   IconPlus,
   IconRefresh,
@@ -36,7 +35,6 @@ import type { ColumnProps } from '@douyinfe/semi-ui/lib/es/table'
 import {
   deleteUser,
   getUserList,
-  resendInvite,
   resetUserTraffic,
   toggleUserSSH,
   updateUserStatus,
@@ -191,16 +189,6 @@ export default function UserPage() {
         Toast.success(res.message || (isDisable ? '用户已封禁' : '用户已解封'))
       }
       refreshAfterTask(isDisable ? 2000 : 500)
-    } catch {
-      // 请求层已提示
-    }
-  }
-
-  /** 重发邀请邮件 */
-  const handleResendInvite = async (row: UserListItem) => {
-    try {
-      await resendInvite(row.username)
-      Toast.success(`已向 ${row.email} 重发邀请邮件`)
     } catch {
       // 请求层已提示
     }
@@ -406,14 +394,6 @@ export default function UserPage() {
                   >
                     {row.cloud_type === 'lightweight' ? '注册 VM' : '分配 VM'}
                   </Dropdown.Item>
-                  {row.status === 'pending_invite' && (
-                    <Dropdown.Item
-                      icon={<IconMailStroked1 />}
-                      onClick={() => void handleResendInvite(row)}
-                    >
-                      重发邀请
-                    </Dropdown.Item>
-                  )}
                   <Dropdown.Item
                     icon={<IconRefresh />}
                     disabled={trafficDisabled}
@@ -535,7 +515,6 @@ export default function UserPage() {
           style={{ width: 130 }}
           optionList={[
             { label: '正常', value: 'active' },
-            { label: '待激活', value: 'pending_invite' },
             { label: '已封禁', value: 'disabled' },
           ]}
         />

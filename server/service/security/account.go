@@ -197,7 +197,8 @@ func UpdateManagedUserAccount(username string, emailInput *string, newPassword s
 			updates["email_verified_at"] = &now
 		}
 	}
-	activated := passwordChanged && user.Status == UserStatusPendingInvite
+	// 本地无邀请注册流程：用户始终为 active 态，改密码时无需额外激活/Provision
+	activated := false
 	if passwordChanged {
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 		if err != nil {
@@ -209,11 +210,6 @@ func UpdateManagedUserAccount(username string, emailInput *string, newPassword s
 		updates["login_verified_until"] = nil
 		for key, value := range PasswordFingerprintUpdateFields(newPassword) {
 			updates[key] = value
-		}
-		if activated {
-			loginVerifiedUntil := now.Add(LoginVerificationWindow)
-			updates["status"] = UserStatusActive
-			updates["login_verified_until"] = &loginVerifiedUntil
 		}
 	}
 
@@ -237,9 +233,6 @@ func UpdateManagedUserAccount(username string, emailInput *string, newPassword s
 				if _, err := D.EnsureDefaultVPCSwitch(user.Username); err != nil {
 					return nil, false, err
 				}
-			}
-			if err := InvalidateAuthActionTokens(user.ID, ActionTokenPurposeInviteRegister); err != nil {
-				return nil, false, err
 			}
 		} else if user.Role == "user" {
 			if err := SyncUserPassword(user.Username, newPassword); err != nil {

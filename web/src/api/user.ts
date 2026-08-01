@@ -125,7 +125,7 @@ export interface UserListItem {
   role?: string
   cloud_type?: string // elastic / lightweight
   dedicated_vpc_switch_id?: number
-  status?: string // active / pending_invite / disabled
+  status?: string // active / disabled
   max_cpu?: number
   max_memory?: number
   max_disk?: number
@@ -273,13 +273,6 @@ export function toggleUserSSH(username: string, enabled: boolean) {
 export function resetUserTraffic(username: string) {
   return service.post<unknown, ApiResponse<unknown>>(
     `/user/${encodeURIComponent(username)}/traffic/reset`,
-  )
-}
-
-/** 重发邀请邮件（管理员） */
-export function resendInvite(username: string) {
-  return service.post<unknown, ApiResponse<unknown>>(
-    `/user/${encodeURIComponent(username)}/resend-invite`,
   )
 }
 

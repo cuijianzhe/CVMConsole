@@ -150,6 +150,7 @@ const buildExtraDisksPayload = (form: VmFormModel) =>
       iops_read: d.iops_read || 0,
       iops_write: d.iops_write || 0,
       guest_mount: d.guest_mount,
+      cloud_disk_spec_id: d.cloud_disk_spec_id || undefined,
     }))
 
 // ==================== 创建链路（ISO 安装） ====================
@@ -164,7 +165,7 @@ export const buildCreatePayload = (
   ctx: CreateBuildContext,
 ): CreateVmPayload => {
   const nics = buildAllNicsPayload(form.extra_nics)
-  const payload: CreateVmPayload = {
+  const payload: any = {
     name: form.name,
     remark: form.remark,
     vcpu: form.vcpu,
@@ -173,6 +174,8 @@ export const buildCreatePayload = (
     disk_size: form.disk_size,
     disk_format: form.disk_format,
     disk_bus: form.disk_bus,
+    resource_spec_id: form.resource_spec_id || undefined,
+    cloud_disk_spec_id: form.cloud_disk_spec_id || undefined,
     system_disk_iops: buildSystemDiskIopsPayload(form, ctx.isAdmin),
     os_variant: form.os_variant,
     iso_path: form.iso_path,
@@ -218,7 +221,7 @@ export const buildCreatePayload = (
   if (ctx.isAdmin) payload.cpu_affinity = (form.cpu_affinity || '').trim()
   const memoryPayload = buildMemoryDynamicPayload(form, false)
   if (memoryPayload) payload.memory_dynamic = memoryPayload
-  return payload
+  return payload as CreateVmPayload
 }
 
 // ==================== 克隆链路（模板单台 + 批量） ====================
@@ -248,6 +251,8 @@ const buildCloneSharedFields = (form: VmFormModel, ctx: CloneBuildContext) => {
       max_vcpu: buildCpuHotplugMaxVCPU(form, ctx.hostCores),
       ram: form.ram,
       disk_size: form.disk_size,
+      resource_spec_id: form.resource_spec_id || undefined,
+      cloud_disk_spec_id: form.cloud_disk_spec_id || undefined,
       user: initUser,
       password: form.system_init_enabled ? form.import_password : '',
       disable_system_init: !form.system_init_enabled || undefined,
@@ -282,7 +287,7 @@ const buildCloneSharedFields = (form: VmFormModel, ctx: CloneBuildContext) => {
 
 export const buildClonePayload = (form: VmFormModel, ctx: CloneBuildContext): CloneVmPayload => {
   const { base, initUser } = buildCloneSharedFields(form, ctx)
-  const payload: CloneVmPayload = {
+  const payload: any = {
     ...base,
     name: form.name,
     remark: form.remark,
@@ -302,7 +307,7 @@ export const buildClonePayload = (form: VmFormModel, ctx: CloneBuildContext): Cl
   if (ctx.isAdmin) payload.cpu_affinity = (form.cpu_affinity || '').trim()
   const memoryPayload = buildMemoryDynamicPayload(form, false)
   if (memoryPayload) payload.memory_dynamic = memoryPayload
-  return payload
+  return payload as CloneVmPayload
 }
 
 export const buildBatchClonePayload = (
@@ -310,7 +315,7 @@ export const buildBatchClonePayload = (
   ctx: CloneBuildContext,
 ): BatchCloneVmPayload => {
   const { base, initUser } = buildCloneSharedFields(form, ctx)
-  const payload: BatchCloneVmPayload = {
+  const payload: any = {
     ...base,
     uefi: base.uefi ? true : undefined,
     prefix: form.name,
@@ -323,19 +328,21 @@ export const buildBatchClonePayload = (
   const cpuLimitPercent = buildCPULimitPercentPayload(form, ctx.isAdmin)
   if (cpuLimitPercent !== undefined) payload.cpu_limit_percent = cpuLimitPercent
   if (ctx.isAdmin) payload.cpu_affinity = (form.cpu_affinity || '').trim()
-  return payload
+  return payload as BatchCloneVmPayload
 }
 
 // ==================== 导入链路 ====================
 
 export const buildImportPayload = (form: VmFormModel, ctx: CreateBuildContext): ImportVmPayload => {
   const nics = buildAllNicsPayload(form.extra_nics)
-  const payload: ImportVmPayload = {
+  const payload: any = {
     name: form.name,
     remark: form.remark,
     vcpu: form.vcpu,
     max_vcpu: buildCpuHotplugMaxVCPU(form, ctx.hostCores),
     ram: form.ram,
+    resource_spec_id: form.resource_spec_id || undefined,
+    cloud_disk_spec_id: form.cloud_disk_spec_id || undefined,
     switch_id: nics.primarySwitchId,
     security_group_id: nics.primarySecurityGroupId,
     copy_disk: form.copy_disk,
@@ -392,7 +399,7 @@ export const buildImportPayload = (form: VmFormModel, ctx: CreateBuildContext): 
   if (ctx.isAdmin) payload.cpu_affinity = (form.cpu_affinity || '').trim()
   const memoryPayload = buildMemoryDynamicPayload(form, false)
   if (memoryPayload) payload.memory_dynamic = memoryPayload
-  return payload
+  return payload as ImportVmPayload
 }
 
 // ==================== 编辑链路（差异快照提交） ====================
