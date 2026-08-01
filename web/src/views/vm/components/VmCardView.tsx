@@ -11,6 +11,7 @@ import { vmConfigText } from '../utils'
 import VmStatusIcon from './VmStatusIcon'
 import VmResourceBars from './VmResourceBars'
 import VmIpCell from './VmIpCell'
+import VmMacCell from './VmMacCell'
 import VmActionsCell, { type VmMenuCommand } from './VmActionsCell'
 import VmTagsEditor from './VmTagsEditor'
 import { shouldOpenVmDetail } from '../utils'
@@ -121,6 +122,10 @@ export default function VmCardView({
             <div className="qvm-vcard-row">
               <span className="qvm-vcard-label">IP 地址</span>
               <VmIpCell vm={vm} />
+            </div>
+            <div className="qvm-vcard-row">
+              <span className="qvm-vcard-label">MAC 地址</span>
+              <VmMacCell vm={vm} />
             </div>
             <div className="qvm-vcard-row">
               <span className="qvm-vcard-label">模板</span>
