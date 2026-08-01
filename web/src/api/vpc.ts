@@ -15,6 +15,7 @@ export interface VpcSwitch {
   name: string
   bridge_name: string
   bridge_mode: string // nat / bridge
+  bridge_ip_mode: string // upstream: 上级路由分配 / preset: 预设 IP 段分配
   bridge_vlan_id: number
   allow_promiscuous?: boolean
   allow_mac_change?: boolean
@@ -44,6 +45,7 @@ export interface VpcSwitchPayload {
   username?: string
   name: string
   bridge_name?: string
+  bridge_ip_mode?: string // upstream / preset（仅桥接模式生效）
   bridge_vlan_id?: number
   allow_promiscuous?: boolean
   allow_mac_change?: boolean

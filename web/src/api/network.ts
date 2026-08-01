@@ -184,6 +184,12 @@ export interface NetworkBridge {
   host_addrs?: string
   host_gateway?: string
   host_dns?: string
+  /** DHCP 配置（桥接直通模式，预设 IP 分配用） */
+  dhcp_cidr?: string
+  dhcp_start?: string
+  dhcp_end?: string
+  dhcp_gateway?: string
+  dhcp_dns?: string
 }
 
 /** 获取宿主机网桥列表 */
@@ -197,6 +203,12 @@ export function createNetworkBridge(data: {
   mode: string
   uplink_if: string
   migrate_host_ip: boolean
+  /** 预设 IP 地址段（DHCP），填 CIDR 即启用，留空表示不启用 */
+  dhcp_cidr?: string
+  dhcp_start?: string
+  dhcp_end?: string
+  dhcp_gateway?: string
+  dhcp_dns?: string
 }) {
   return service.post<unknown, ApiResponse<unknown>>('/network/bridges', data)
 }

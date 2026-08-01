@@ -26,6 +26,7 @@ interface SwitchFormState {
   username: string
   name: string
   bridge_name: string
+  bridge_ip_mode: string // IP 分配模式：upstream（上级路由分配）/ preset（预设 IP 段分配）
   bridge_vlan_id: number
   allow_promiscuous: boolean
   allow_mac_change: boolean
@@ -105,6 +106,7 @@ export default function SwitchDialog({
       username: row?.username || defaultUsername || '',
       name: row?.name || '',
       bridge_name: row?.bridge_name || bridges[0]?.name || 'br-ovs',
+      bridge_ip_mode: row?.bridge_ip_mode || 'upstream',
       bridge_vlan_id: row?.bridge_vlan_id || 0,
       allow_promiscuous: !!row?.allow_promiscuous,
       allow_mac_change: !!row?.allow_mac_change,
@@ -248,6 +250,29 @@ export default function SwitchDialog({
 
       {isBridgeMode && (
         <>
+          <div className="qvm-form-item">
+            <div className="qvm-form-label">IP 分配模式</div>
+            <Select
+              style={{ width: '100%' }}
+              value={form.bridge_ip_mode}
+              onChange={(v) => patch({ bridge_ip_mode: String(v) })}
+              optionList={[
+                { value: 'upstream', label: '上级路由分配' },
+                { value: 'preset', label: '预设 IP 段分配' },
+              ]}
+            />
+            <div className="qvm-form-tip">
+              {form.bridge_ip_mode === 'preset'
+                ? '由桥接网桥的 DHCP 自动分配预设 IP，虚拟机接入时自动写入静态绑定（dhcp-hosts）。'
+                : '由上级路由器 DHCP 分配 IP，面板不自动管理地址。'}
+            </div>
+            {/* 预设 IP 模式下展示桥接网桥的 DHCP 范围（只读提示） */}
+            {form.bridge_ip_mode === 'preset' && selectedBridge?.dhcp_start && (
+              <div className="qvm-form-tip">
+                DHCP 范围：{selectedBridge.dhcp_start} ~ {selectedBridge.dhcp_end}（{selectedBridge.dhcp_cidr}）
+              </div>
+            )}
+          </div>
           <div className="qvm-form-item">
             <div className="qvm-form-label">桥接 VLAN ID</div>
             <InputNumber
