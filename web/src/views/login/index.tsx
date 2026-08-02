@@ -42,13 +42,6 @@ const FEATURES = [
   { icon: <IconActivity />, text: '实时监控 SSE 推送', color: '#F59E0B', bg: 'rgba(251,191,36,.1)', bd: 'rgba(251,191,36,.22)' },
 ]
 
-/** 浮动装饰虚拟机卡片（纯展示） */
-const FLOAT_VMS = [
-  { cls: 'qvm-fvm-1', name: 'web-server-01', meta: '4C / 8G · 运行 12 天', running: true },
-  { cls: 'qvm-fvm-2', name: 'db-mysql-prod', meta: '8C / 16G · 运行 45 天', running: true },
-  { cls: 'qvm-fvm-3', name: 'test-env-02', meta: '2C / 4G · 已停止', running: false },
-]
-
 export default function LoginPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -237,19 +230,6 @@ export default function LoginPage() {
             ))}
           </div>
         </div>
-
-
-
-        {/* 浮动 VM 装饰卡片 */}
-        {FLOAT_VMS.map((vm) => (
-          <div className={`qvm-float-vm ${vm.cls}`} key={vm.name}>
-            <div className="fv-name">
-              <span className={`qvm-dot ${vm.running ? 'run' : 'off'}`} />
-              {vm.name}
-            </div>
-            <div className="fv-meta">{vm.meta}</div>
-          </div>
-        ))}
       </section>
 
       {/* ============ 右侧登录卡片 / 安全初始化 / 登录验证面板 ============ */}

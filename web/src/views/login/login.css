@@ -42,13 +42,16 @@ body[theme-mode='dark'] .qvm-login-bg::after {
   padding: 56px 60px;
   display: flex;
   flex-direction: column;
+  align-items: center;
   position: relative;
   z-index: 1;
 }
 .qvm-brand-logo {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 13px;
+  align-self: center;
 }
 .qvm-logo-mark {
   width: 44px;
@@ -87,6 +90,11 @@ body[theme-mode='dark'] .qvm-login-bg::after {
 .qvm-brand-mid {
   margin: auto 0;
   padding: 40px 0;
+  width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 .qvm-brand-slogan {
   font-size: 34px;
@@ -94,6 +102,7 @@ body[theme-mode='dark'] .qvm-login-bg::after {
   line-height: 1.35;
   letter-spacing: 0.3px;
   color: var(--qvm-text-0);
+  text-align: center;
 }
 .qvm-brand-slogan em {
   font-style: normal;
@@ -107,18 +116,21 @@ body[theme-mode='dark'] .qvm-login-bg::after {
   color: var(--qvm-text-1);
   line-height: 1.8;
   margin-top: 16px;
-  max-width: 420px;
+  max-width: 460px;
+  text-align: center;
 }
 .qvm-feature-list {
-  margin-top: 34px;
+  margin: 34px auto 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
   max-width: 480px;
+  justify-content: center;
 }
 .qvm-feature-item {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 10px;
   font-size: 13px;
   color: var(--qvm-text-1);
