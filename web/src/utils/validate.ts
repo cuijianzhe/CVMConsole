@@ -5,7 +5,8 @@
  */
 import { checkPasswordBreach, type PasswordBreachResult } from '@/api/auth'
 
-export const STRONG_PASSWORD_MIN_LENGTH = 12
+/** 密码最小长度：0 表示不强制长度，仅做泄露/弱密码检测 */
+export const STRONG_PASSWORD_MIN_LENGTH = 0
 export const PASSWORD_ALLOWED_PATTERN = /^[A-Za-z0-9!@#$%^&*_\-+=?]+$/
 
 /**

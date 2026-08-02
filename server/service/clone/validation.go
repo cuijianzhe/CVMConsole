@@ -14,7 +14,6 @@ import (
 	"kvm_console/utils"
 )
 
-const strongPasswordMinLength = 12
 const windowsCloneDefaultUsername = "administrator"
 
 var (
