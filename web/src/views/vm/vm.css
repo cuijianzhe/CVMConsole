@@ -438,13 +438,6 @@ body[theme-mode='dark'] .qvm-export-disk-list strong {
   font-size: 12px;
   white-space: nowrap;
 }
-/* CPU/内存等配置数字单元格 */
-.qvm-vm-spec {
-  font-family: var(--qvm-num-font);
-  color: var(--qvm-text-1);
-  font-size: 12px;
-  white-space: nowrap;
-}
 
 /* 状态图标（悬停 Tooltip 见 VmStatusIcon） */
 .qvm-st-ic {

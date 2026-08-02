@@ -17,7 +17,7 @@ import VmIpCell from './VmIpCell'
 import VmMacCell from './VmMacCell'
 import VmActionsCell, { type VmMenuCommand } from './VmActionsCell'
 import VmTagsEditor from './VmTagsEditor'
-import { shouldOpenVmDetail, autoColWidth, formatMemoryMB } from '../utils'
+import { shouldOpenVmDetail, autoColWidth } from '../utils'
 
 export type VmSortField = 'name' | 'resource' | 'ip'
 export type VmSortOrder = 'ascend' | 'descend'
@@ -73,8 +73,6 @@ export default function VmTableView({
     return {
       name: autoColWidth(vms.map((v) => v.name), { charWidth: 9, padding: 60, min: 120, max: 240 }),
       template: autoColWidth(vms.map((v) => v.template || '-'), { charWidth: 8, padding: 20, min: 90, max: 200 }),
-      cpu: autoColWidth(vms.map((v) => `${v.vcpu} 核`), { charWidth: 9, padding: 20, min: 72, max: 120 }),
-      memory: autoColWidth(vms.map((v) => formatMemoryMB(v.memory)), { charWidth: 8, padding: 20, min: 80, max: 120 }),
       ip: autoColWidth(vms.map((v) => v.ip || '-'), { charWidth: 8, padding: 20, min: 120, max: 160 }),
       mac: autoColWidth(vms.map((v) => v.mac_address || '未分配'), { charWidth: 8, padding: 20, min: 140, max: 180 }),
       runtime: autoColWidth(vms.map((v) => formatRuntime(v.continuous_runtime_seconds)), { charWidth: 8, padding: 20, min: 90, max: 140 }),
@@ -134,25 +132,11 @@ export default function VmTableView({
         render: (_text, vm) => <VmTagsEditor vm={vm} onSave={onTagsSave} />,
       },
       {
-        title: 'CPU',
-        dataIndex: 'vcpu',
-        width: colWidths.cpu,
-        align: 'center',
-        render: (vcpu) => <span className="qvm-vm-spec">{vcpu} 核</span>,
-      },
-      {
-        title: '内存',
-        dataIndex: 'memory',
-        width: colWidths.memory,
-        align: 'center',
-        render: (mem) => <span className="qvm-vm-spec">{formatMemoryMB(Number(mem))}</span>,
-      },
-      {
         title: '配置 (资源使用)',
         dataIndex: 'cpu_percent',
         sorter: true,
         sortOrder: sortState('resource'),
-        width: 230,
+        width: 200,
         render: (_text, vm) => <VmResourceBars vm={vm} />,
       },
       {
