@@ -36,56 +36,49 @@ body[theme-mode='dark'] .qvm-login-bg::after {
   background: linear-gradient(180deg, rgba(7, 11, 20, 0.25), rgba(7, 11, 20, 0) 40%);
 }
 
-/* ============ 左侧品牌区 ============ */
+/* ============ 左上角品牌 Logo 条 ============ */
+.qvm-login-logo-bar {
+  position: absolute;
+  top: 28px;
+  left: 36px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  /* 90%: 13px → 12px */
+  gap: 12px;
+}
+.qvm-login-logo-bar .qvm-logo-mark {
+  /* 90%: 44px → 40px */
+  width: 40px;
+  height: 40px;
+  /* 90%: 13px → 12px */
+  border-radius: 12px;
+  background: var(--qvm-grad);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--qvm-on-grad-text);
+  box-shadow: var(--qvm-glow);
+  flex: none;
+}
+.qvm-brand-logo-name {
+  font-family: var(--qvm-num-font);
+  /* 90%: 28.5px → 25.6px */
+  font-size: 25.6px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--qvm-text-0);
+}
+
+/* ============ 左侧品牌区（标语 + 描述 + 功能列表居中） ============ */
 .qvm-login-brand {
   width: 46%;
-  padding: 56px 60px;
+  padding: 100px 60px 56px;
   display: flex;
   flex-direction: column;
   align-items: center;
   position: relative;
   z-index: 1;
-}
-.qvm-brand-logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 13px;
-  align-self: center;
-}
-.qvm-logo-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 13px;
-  background: var(--qvm-grad);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--qvm-num-font);
-  font-weight: 700;
-  font-size: 23px;
-  color: var(--qvm-on-grad-text);
-  box-shadow: var(--qvm-glow);
-  flex: none;
-}
-.qvm-logo-mark.sm {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
-  font-size: 19px;
-}
-.qvm-brand-logo-name {
-  font-family: var(--qvm-num-font);
-  font-size: 19px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  color: var(--qvm-text-0);
-}
-.qvm-brand-logo-sub {
-  font-size: 10.5px;
-  color: var(--qvm-text-2);
-  letter-spacing: 0.6px;
-  margin-top: 1px;
 }
 .qvm-brand-mid {
   margin: auto 0;
@@ -143,61 +136,6 @@ body[theme-mode='dark'] .qvm-login-bg::after {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-.qvm-brand-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--qvm-text-2);
-}
-.qvm-brand-foot .dot-ok {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--qvm-acc);
-  box-shadow: 0 0 8px rgba(45, 212, 191, 0.8);
-}
-
-/* 浮动 VM 装饰卡片 */
-.qvm-float-vm {
-  position: absolute;
-  border-radius: 14px;
-  background: var(--qvm-panel-bg);
-  border: 1px solid var(--qvm-stroke);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  padding: 12px 16px;
-  box-shadow: var(--qvm-panel-shadow);
-  animation: qvm-floaty 7s ease-in-out infinite;
-}
-.qvm-float-vm .fv-name {
-  font-size: 12px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--qvm-text-0);
-}
-.qvm-float-vm .fv-meta {
-  font-family: var(--qvm-num-font);
-  font-size: 10.5px;
-  color: var(--qvm-text-2);
-  margin-top: 5px;
-}
-.qvm-fvm-1 {
-  right: 26px;
-  top: 15%;
-}
-.qvm-fvm-2 {
-  right: 110px;
-  top: 44%;
-  animation-delay: 2.2s;
-}
-.qvm-fvm-3 {
-  right: 40px;
-  bottom: 14%;
-  animation-delay: 4.1s;
 }
 
 /* ============ 右侧登录区 ============ */
@@ -467,6 +405,9 @@ body[theme-mode='dark'] .qvm-bs-secret {
 /* ============ 响应式 ============ */
 @media (max-width: 960px) {
   .qvm-login-brand {
+    display: none;
+  }
+  .qvm-login-logo-bar {
     display: none;
   }
   .qvm-login-side {

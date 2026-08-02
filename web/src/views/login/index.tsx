@@ -16,7 +16,7 @@ import {
   IconEyeClosedSolid,
   IconBolt,
   IconGlobeStroke,
-  IconUserGroup,
+  IconSaveStroked,
   IconActivity,
 } from '@douyinfe/semi-icons'
 import { useNavigate, useSearchParams } from 'react-router'
@@ -38,7 +38,7 @@ import './login.css'
 const FEATURES = [
   { icon: <IconBolt />, text: '模板克隆 秒级开机', color: '#2DD4BF', bg: 'rgba(45,212,191,.12)', bd: 'rgba(45,212,191,.24)' },
   { icon: <IconGlobeStroke />, text: 'VPC 网络 与防火墙', color: '#38BDF8', bg: 'rgba(56,189,248,.12)', bd: 'rgba(56,189,248,.24)' },
-  { icon: <IconUserGroup />, text: '多租户 配额管理', color: '#8B5CF6', bg: 'rgba(139,92,246,.12)', bd: 'rgba(139,92,246,.24)' },
+  { icon: <IconSaveStroked />, text: '存储管理与数据保护', color: '#8B5CF6', bg: 'rgba(139,92,246,.12)', bd: 'rgba(139,92,246,.24)' },
   { icon: <IconActivity />, text: '实时监控 SSE 推送', color: '#F59E0B', bg: 'rgba(251,191,36,.1)', bd: 'rgba(251,191,36,.22)' },
 ]
 
@@ -187,26 +187,25 @@ export default function LoginPage() {
       <div className="qvm-aurora" />
       <div className="qvm-grid-tex" />
 
-      {/* ============ 左侧品牌区 ============ */}
-      <section className="qvm-login-brand">
-        <div className="qvm-brand-logo qvm-fade-up">
-          <div className="qvm-logo-mark">
-            <img
-              src={uiCustomization.loginPageIcon || '/favicon.png'}
-              alt="QVMConsole"
-              style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 13 }}
-              onError={(e) => {
-                ;(e.target as HTMLImageElement).src = '/favicon.png'
-              }}
-            />
-          </div>
-          <div>
-            <div className="qvm-brand-logo-name">
-              {uiCustomization.productName?.trim() || siteTitle}
-            </div>
-          </div>
+      {/* ============ 左上角品牌 Logo（固定定位，不随品牌区滚动） ============ */}
+      <div className="qvm-login-logo-bar qvm-fade-up">
+        <div className="qvm-logo-mark">
+          <img
+            src={uiCustomization.loginPageIcon || '/favicon.png'}
+            alt="QVMConsole"
+            style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 12 }}
+            onError={(e) => {
+              ;(e.target as HTMLImageElement).src = '/favicon.png'
+            }}
+          />
         </div>
+        <div className="qvm-brand-logo-name">
+          {uiCustomization.productName?.trim() || siteTitle}
+        </div>
+      </div>
 
+      {/* ============ 左侧品牌区（标语 + 描述 + 功能列表，居中排版） ============ */}
+      <section className="qvm-login-brand">
         <div className="qvm-brand-mid">
           <div className="qvm-brand-slogan qvm-fade-up" style={{ '--qvm-delay': '60ms' } as CSSProperties}>
             <em>现代化</em> KVM 虚拟化控制台
