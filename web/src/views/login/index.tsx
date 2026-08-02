@@ -358,10 +358,10 @@ export default function LoginPage() {
         <div className="qvm-login-foot">
           {uiCustomization.footerLink?.trim() ? (
             <a href={uiCustomization.footerLink.trim()} target="_blank" rel="noopener noreferrer">
-              {uiCustomization.footerText?.trim() || `© ${siteTitle} · Open source Apache 2.0`}
+              {uiCustomization.footerText?.trim() || `© ${siteTitle} · 极致体验`}
             </a>
           ) : (
-            uiCustomization.footerText?.trim() || `© ${siteTitle} · Open source Apache 2.0`
+            uiCustomization.footerText?.trim() || `© ${siteTitle} · 极致体验`
           )}
         </div>
       </section>

@@ -21,7 +21,6 @@ const sysInfoFields: { label: string; keys: string[] }[] = [
   { label: '系统架构', keys: ['arch'] },
   { label: '主机名', keys: ['hostname'] },
   { label: 'CPU 核数', keys: ['num_cpu'] },
-  { label: 'Go 版本', keys: ['go_version'] },
   { label: 'QEMU 版本', keys: ['qemu'] },
   { label: 'libvirt 版本', keys: ['libvirt'] },
   { label: '系统运行时间', keys: ['uptime'] },
