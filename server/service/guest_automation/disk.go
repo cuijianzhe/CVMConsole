@@ -331,9 +331,24 @@ if ! lsblk -slnpo NAME "$root_real" | grep -Fxq "$dev_real"; then echo "所选�
 part=$(lsblk -slnpo NAME,TYPE "$root_real" | awk -v d="$dev_real" '$2=="part"{print $1}' | tail -1)
 if [ -n "$part" ]; then
   part=$(readlink -f "$part")
-  part_start=$(lsblk -bnro START "$part" | head -1)
-  [ -n "$part_start" ] || { echo "读取根分区起始位置失败" >&2; exit 14; }
-  blocker=$(lsblk -bnrpo NAME,TYPE,START "$dev_real" | awk -v p="$part" -v s="$part_start" '$2=="part" && $1!=p && $3>s {print $1; exit}')
+  # 兼容旧版 util-linux（<2.27）：lsblk START 列不存在时回退 sfdisk
+  part_start=$(lsblk -bnro START "$part" 2>/dev/null | head -1)
+  if [ -z "$part_start" ]; then
+    command -v sfdisk >/dev/null || { echo "lsblk 不支持 START 列且缺少 sfdisk" >&2; exit 14; }
+    part_start=$(sfdisk -d "$dev_real" 2>/dev/null | awk -v p="$part" '$0 ~ "^" p "[[:space:]:]" {for(i=1;i<=NF;i++){split($i,a,"="); if(a[1]=="start"){print a[2]; exit}}}')
+    [ -n "$part_start" ] || { echo "读取根分区起始位置失败" >&2; exit 14; }
+  fi
+  # 检查根分区后方是否有其他分区阻挡扩容（同样兼容旧版 lsblk）
+  blocker=""
+  if lsblk -bnrpo NAME,TYPE,START "$dev_real" >/dev/null 2>&1; then
+    blocker=$(lsblk -bnrpo NAME,TYPE,START "$dev_real" | awk -v p="$part" -v s="$part_start" '$2=="part" && $1!=p && $3>s {print $1; exit}')
+  elif command -v sfdisk >/dev/null; then
+    blocker=$(sfdisk -d "$dev_real" 2>/dev/null | awk -v p="$part" -v s="$part_start" '{
+      split($1, a, ":"); name=a[1];
+      start=0; for(i=1;i<=NF;i++){split($i,kv,"="); if(kv[1]=="start") start=kv[2]}
+      if(name != p && start > s){print name; exit}
+    }')
+  fi
   [ -z "$blocker" ] || { echo "根分区后方仍有分区 $blocker" >&2; exit 14; }
   command -v growpart >/dev/null || { echo "缺少 growpart" >&2; exit 15; }
   num=$(lsblk -nro PARTN "$part")
