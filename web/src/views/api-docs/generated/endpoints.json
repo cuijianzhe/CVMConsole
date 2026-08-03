@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-02T02:31:27.532Z",
-  "count": 333,
+  "generated_at": "2026-08-03T08:52:56.513Z",
+  "count": 334,
   "endpoints": [
     {
       "method": "POST",
@@ -2168,6 +2168,17 @@
       "vmAccess": false,
       "highRisk": "",
       "comment": ""
+    },
+    {
+      "method": "GET",
+      "path": "/template/:name/prepare-linux/check",
+      "handler": "GetLinuxTemplatePrepareCheck",
+      "auth": "jwt",
+      "admin": true,
+      "elasticOnly": true,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": "检查 Linux 模板预处理链式依赖"
     },
     {
       "method": "PUT",
