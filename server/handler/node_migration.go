@@ -100,9 +100,6 @@ func PreviewVMMigration(c *gin.Context) {
 }
 
 func MigrateVM(c *gin.Context) {
-	if !requireHighRiskVerification(c, "migrate_vm") {
-		return
-	}
 	if err := migration.EnsureVMNotMigrating(c.Param("name"), "迁移"); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"code": 409, "message": err.Error()})
 		return

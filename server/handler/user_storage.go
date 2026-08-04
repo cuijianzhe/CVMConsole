@@ -233,9 +233,6 @@ func UploadUserStorageFile(c *gin.Context) {
 
 // DeleteUserStorageFile 删除存储池文件
 func DeleteUserStorageFile(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_user_storage_file") {
-		return
-	}
 	username, _ := c.Get("username")
 	category := c.Param("category")
 	filename := c.Param("filename")
@@ -481,9 +478,6 @@ type SelfCreateVmRequest struct {
 
 // SelfCreateVm 用户自助创建虚拟机
 func SelfCreateVm(c *gin.Context) {
-	if !requireHighRiskVerification(c, "create_vm") {
-		return
-	}
 	if !requireMaintenanceModeDisabled(c, "创建并启动虚拟机") {
 		return
 	}

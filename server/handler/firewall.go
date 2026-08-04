@@ -60,9 +60,6 @@ type firewallApplyRequest struct {
 }
 
 func ApplyFirewallPolicy(c *gin.Context) {
-	if !requireHighRiskVerification(c, "apply_firewall") {
-		return
-	}
 	var req firewallApplyRequest
 	_ = c.ShouldBindJSON(&req)
 	policy := req.Policy
@@ -84,9 +81,6 @@ func ApplyFirewallPolicy(c *gin.Context) {
 }
 
 func DisableFirewall(c *gin.Context) {
-	if !requireHighRiskVerification(c, "disable_firewall") {
-		return
-	}
 	username, _ := c.Get("username")
 	task, err := taskqueue.SubmitWithStruct(model.TaskTypeDisableFirewall, service.FirewallOperationParams{Action: "disable"}, username.(string))
 	if err != nil {
@@ -97,9 +91,6 @@ func DisableFirewall(c *gin.Context) {
 }
 
 func RollbackFirewall(c *gin.Context) {
-	if !requireHighRiskVerification(c, "rollback_firewall") {
-		return
-	}
 	username, _ := c.Get("username")
 	task, err := taskqueue.SubmitWithStruct(model.TaskTypeRollbackFirewall, service.FirewallOperationParams{Action: "rollback"}, username.(string))
 	if err != nil {
@@ -178,9 +169,6 @@ func PreviewEnableHostFirewall(c *gin.Context) {
 }
 
 func EnableHostFirewall(c *gin.Context) {
-	if !requireHighRiskVerification(c, "enable_host_firewall") {
-		return
-	}
 	var req service.HostFirewallEnableRequest
 	_ = c.ShouldBindJSON(&req)
 	username, _ := c.Get("username")
@@ -193,9 +181,6 @@ func EnableHostFirewall(c *gin.Context) {
 }
 
 func DisableHostFirewall(c *gin.Context) {
-	if !requireHighRiskVerification(c, "disable_host_firewall") {
-		return
-	}
 	username, _ := c.Get("username")
 	task, err := taskqueue.SubmitWithStruct(model.TaskTypeDisableHostFirewall, service.FirewallOperationParams{Action: "disable_host"}, username.(string))
 	if err != nil {
@@ -215,9 +200,6 @@ func ListHostFirewallRules(c *gin.Context) {
 }
 
 func CreateHostFirewallRule(c *gin.Context) {
-	if !requireHighRiskVerification(c, "create_host_firewall_rule") {
-		return
-	}
 	var req service.HostFirewallRuleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "参数错误"})
@@ -232,9 +214,6 @@ func CreateHostFirewallRule(c *gin.Context) {
 }
 
 func UpdateHostFirewallRule(c *gin.Context) {
-	if !requireHighRiskVerification(c, "update_host_firewall_rule") {
-		return
-	}
 	var req service.HostFirewallRuleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "参数错误"})
@@ -249,9 +228,6 @@ func UpdateHostFirewallRule(c *gin.Context) {
 }
 
 func DeleteHostFirewallRule(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_host_firewall_rule") {
-		return
-	}
 	if err := service.DeleteHostFirewallRule(c.Param("id")); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
@@ -260,9 +236,6 @@ func DeleteHostFirewallRule(c *gin.Context) {
 }
 
 func AddHostFirewallVNCDefaultRule(c *gin.Context) {
-	if !requireHighRiskVerification(c, "add_host_firewall_vnc_default") {
-		return
-	}
 	rule, err := service.AddHostFirewallVNCDefaultRule()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
@@ -281,9 +254,6 @@ func PreviewHostFirewallConnections(c *gin.Context) {
 }
 
 func CloseHostFirewallConnections(c *gin.Context) {
-	if !requireHighRiskVerification(c, "close_host_firewall_connections") {
-		return
-	}
 	var req service.HostFirewallCloseConnectionsRequest
 	_ = c.ShouldBindJSON(&req)
 	count, err := service.CloseHostFirewallConnections(req.Mode)

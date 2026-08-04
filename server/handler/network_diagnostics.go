@@ -21,9 +21,6 @@ func GetVMNetworkDiagnostics(c *gin.Context) {
 }
 
 func StartVMNetworkCapture(c *gin.Context) {
-	if !requireHighRiskVerification(c, "network_capture") {
-		return
-	}
 	var req service.NetworkCaptureRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "参数错误"})

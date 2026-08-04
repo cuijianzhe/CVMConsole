@@ -4,7 +4,7 @@
 import { create } from 'zustand'
 import { STORAGE_KEYS, THEME_MODES, type ThemeMode } from '@/config/constants'
 
-export const DEFAULT_SITE_TITLE = 'QVMConsole'
+export const DEFAULT_SITE_TITLE = 'CVMConsole'
 
 /** UI 自定义配置（来自公开设置，用于侧边栏/登录页/浏览器图标与标题） */
 export interface UiCustomization {

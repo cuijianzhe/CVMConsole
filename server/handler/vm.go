@@ -1020,10 +1020,6 @@ func EditVm(c *gin.Context) {
 
 // UpdateVmXML 更新虚拟机持久化配置 XML
 func UpdateVmXML(c *gin.Context) {
-	if !requireHighRiskVerification(c, "edit_vm_xml") {
-		return
-	}
-
 	name := c.Param("name")
 	if name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{

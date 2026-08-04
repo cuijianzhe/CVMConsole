@@ -25,9 +25,6 @@ func GetPasswordBreachStatus(c *gin.Context) {
 
 // StartPasswordBreachScan 立即提交密码泄露扫描，不受检测开关限制。
 func StartPasswordBreachScan(c *gin.Context) {
-	if !requireStrictHighRiskVerification(c, "run_password_breach_scan") {
-		return
-	}
 	createdBy := c.GetString("username")
 	if createdBy == "" {
 		createdBy = "admin"

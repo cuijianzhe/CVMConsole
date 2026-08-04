@@ -38,10 +38,6 @@ func LockVM(c *gin.Context) {
 
 // UnlockVM 解锁虚拟机（需要二次验证）
 func UnlockVM(c *gin.Context) {
-	if !requireHighRiskVerification(c, "unlock_vm") {
-		return
-	}
-
 	name := c.Param("name")
 	if name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{

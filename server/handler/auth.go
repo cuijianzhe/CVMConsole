@@ -359,13 +359,6 @@ func GetUserInfo(c *gin.Context) {
 // ChangePassword 修改当前用户密码
 func ChangePassword(c *gin.Context) {
 	user := getCurrentUser(c)
-	// 如果是强制修改默认密码（首次登录），跳过高风险验证
-	// 因为此时用户尚未设置邮箱/2FA，无法完成二次验证
-	if !user.ForcePasswordChange {
-		if !requireHighRiskVerification(c, "change_password") {
-			return
-		}
-	}
 
 	var req ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

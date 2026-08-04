@@ -522,10 +522,6 @@ type BatchDeletePortForwardRequest struct {
 
 // BatchDeletePortForward 批量删除端口转发
 func BatchDeletePortForward(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_port_forward") {
-		return
-	}
-
 	var req BatchDeletePortForwardRequest
 	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -574,9 +570,6 @@ func BatchDeletePortForward(c *gin.Context) {
 
 // DeletePortForward 删除端口转发
 func DeletePortForward(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_port_forward") {
-		return
-	}
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
@@ -788,9 +781,6 @@ func AddPortForwardIP(c *gin.Context) {
 
 // DeletePortForwardIP 删除手动 IP 映射
 func DeletePortForwardIP(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_port_forward_ip") {
-		return
-	}
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {

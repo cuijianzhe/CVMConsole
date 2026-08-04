@@ -198,9 +198,6 @@ func RevertSnapshot(c *gin.Context) {
 
 // DeleteSnapshot 删除快照（异步任务）
 func DeleteSnapshot(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_snapshot") {
-		return
-	}
 	vmName := c.Param("name")
 	snapName := c.Param("snap")
 	if err := service.EnsureVMNotMigrating(vmName, "删除快照"); err != nil {
@@ -237,9 +234,6 @@ func DeleteSnapshot(c *gin.Context) {
 
 // DeleteAllSnapshots 删除全部快照（异步任务）
 func DeleteAllSnapshots(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_snapshot") {
-		return
-	}
 	vmName := c.Param("name")
 	if err := service.EnsureVMNotMigrating(vmName, "删除全部快照"); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"code": 409, "message": err.Error()})

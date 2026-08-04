@@ -95,9 +95,6 @@ func RescueVm(c *gin.Context) {
 
 // ResetLinuxPassword 重置虚拟机密码（异步任务）
 func ResetLinuxPassword(c *gin.Context) {
-	if !requireHighRiskVerification(c, "reset_vm_password") {
-		return
-	}
 	name := c.Param("name")
 	if name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{

@@ -76,9 +76,6 @@ func SetDefaultStoragePool(c *gin.Context) {
 
 // FormatMountStoragePool 提交格式化并挂载任务
 func FormatMountStoragePool(c *gin.Context) {
-	if !requireHighRiskVerification(c, "format_storage_pool") {
-		return
-	}
 	id := c.Param("id")
 	var req struct {
 		FSType string `json:"fstype"`
@@ -109,9 +106,6 @@ func FormatMountStoragePool(c *gin.Context) {
 
 // CreateStoragePartition 提交创建分区任务
 func CreateStoragePartition(c *gin.Context) {
-	if !requireHighRiskVerification(c, "create_storage_partition") {
-		return
-	}
 	id := c.Param("id")
 	var req struct {
 		SizeGB int `json:"size_gb"` // 分区大小(GB)，0 表示使用全部剩余空间
@@ -142,9 +136,6 @@ func CreateStoragePartition(c *gin.Context) {
 
 // DeleteStoragePartitions 提交删除所有分区任务
 func DeleteStoragePartitions(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_storage_partitions") {
-		return
-	}
 	id := c.Param("id")
 	username, _ := c.Get("username")
 	usernameStr, _ := username.(string)
@@ -178,9 +169,6 @@ func GetAvailablePVTargets(c *gin.Context) {
 
 // CreateStorageVolume 提交创建 LVM 存储卷任务
 func CreateStorageVolume(c *gin.Context) {
-	if !requireHighRiskVerification(c, "create_storage_volume") {
-		return
-	}
 	var req service.LVMVolumeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "参数错误: " + err.Error()})
@@ -207,9 +195,6 @@ func CreateStorageVolume(c *gin.Context) {
 
 // DeleteStorageVolume 提交删除 LVM 存储卷任务
 func DeleteStorageVolume(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_storage_volume") {
-		return
-	}
 	var req struct {
 		VGName string `json:"vg_name"`
 	}

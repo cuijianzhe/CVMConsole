@@ -184,9 +184,6 @@ func validateManagedPassword(password string) error {
 
 // CreateUser 创建用户
 func CreateUser(c *gin.Context) {
-	if !requireHighRiskVerification(c, "create_user") {
-		return
-	}
 	var req CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -283,10 +280,6 @@ func CreateUser(c *gin.Context) {
 
 // UpdateUserAccount 管理员更新用户邮箱和密码。
 func UpdateUserAccount(c *gin.Context) {
-	if !requireHighRiskVerification(c, "update_user_account") {
-		return
-	}
-
 	username := strings.TrimSpace(c.Param("username"))
 	var req UpdateUserAccountRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -416,9 +409,6 @@ func RemoveLightweightVMRegistrationByVMName(c *gin.Context) {
 
 // DeleteLightweightVM 删除已开通的轻量云 VM，并在删除成功后移除所属记录。
 func DeleteLightweightVM(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_vm") {
-		return
-	}
 	username := c.Param("username")
 	vmName := c.Param("vmName")
 	if err := service.ValidateLightweightVMRemoval(username, vmName); err != nil {
@@ -613,10 +603,6 @@ func AssignVMs(c *gin.Context) {
 
 // UpdateUserStatus 更新用户状态（封禁/解封）
 func UpdateUserStatus(c *gin.Context) {
-	if !requireHighRiskVerification(c, "change_user_status") {
-		return
-	}
-
 	username := c.Param("username")
 	var req UpdateUserStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -691,9 +677,6 @@ func UpdateUserStatus(c *gin.Context) {
 
 // DeleteUser 删除用户（异步任务，级联删除所有资产）
 func DeleteUser(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_user") {
-		return
-	}
 	username := c.Param("username")
 
 	// 不允许删除内置超级管理员

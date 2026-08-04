@@ -331,16 +331,12 @@ func UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	maintenanceChanged := req.MaintenanceMode != nil && *req.MaintenanceMode != previousMaintenanceMode
-	if maintenanceChanged {
-		operation := "disable_maintenance_mode"
-		if *req.MaintenanceMode {
-			operation = "enable_maintenance_mode"
-		}
-		if !requireHighRiskVerification(c, operation) {
-			return
-		}
+	// 统一校验敏感设置项（仅系统设置保留二次验证）
+	if !verifySensitiveSettings(c, cfg, &req) {
+		return
 	}
+
+	maintenanceChanged := req.MaintenanceMode != nil && *req.MaintenanceMode != previousMaintenanceMode
 
 	if req.TemplateDir != nil {
 		cfg.TemplateDir = *req.TemplateDir
@@ -776,6 +772,65 @@ func RotateJWTSecret(c *gin.Context) {
 			"new_secret_prefix": newSecret[:8] + "...",
 		},
 	})
+}
+
+// verifySensitiveSettings 统一校验敏感设置项（仅系统设置保留二次验证）
+// 检查请求中是否包含敏感字段变更，如有则触发对应的高风险验证。
+func verifySensitiveSettings(c *gin.Context, cfg *config.Config, req *UpdateSettingsRequest) bool {
+	// 维护模式变更
+	if req.MaintenanceMode != nil && *req.MaintenanceMode != cfg.MaintenanceMode {
+		op := "disable_maintenance_mode"
+		if *req.MaintenanceMode {
+			op = "enable_maintenance_mode"
+		}
+		if !requireHighRiskVerification(c, op) {
+			return false
+		}
+	}
+	// 开发模式变更
+	if req.DevelopmentMode != nil && *req.DevelopmentMode != cfg.DevelopmentMode {
+		op := "disable_development_mode"
+		if *req.DevelopmentMode {
+			op = "enable_development_mode"
+		}
+		if !requireHighRiskVerification(c, op) {
+			return false
+		}
+	}
+	// SMTP 密码变更
+	if req.SMTPPassword != nil && strings.TrimSpace(*req.SMTPPassword) != "" {
+		if !requireHighRiskVerification(c, "update_smtp_password") {
+			return false
+		}
+	}
+	// 安全防护开关变更
+	if req.SessionFingerprintEnabled != nil && *req.SessionFingerprintEnabled != cfg.SessionFingerprintEnabled {
+		if !requireHighRiskVerification(c, "update_session_fingerprint") {
+			return false
+		}
+	}
+	if req.RequestFilterEnabled != nil && *req.RequestFilterEnabled != cfg.RequestFilterEnabled {
+		if !requireHighRiskVerification(c, "update_request_filter") {
+			return false
+		}
+	}
+	if req.PasswordBreachCheckEnabled != nil && *req.PasswordBreachCheckEnabled != cfg.PasswordBreachCheckEnabled {
+		if !requireHighRiskVerification(c, "update_password_breach_check") {
+			return false
+		}
+	}
+	if req.ScheduledPasswordBreachCheckEnabled != nil && *req.ScheduledPasswordBreachCheckEnabled != cfg.ScheduledPasswordBreachCheckEnabled {
+		if !requireHighRiskVerification(c, "update_scheduled_password_breach_check") {
+			return false
+		}
+	}
+	// 硬件直通变更
+	if req.HardwarePassthroughEnabled != nil && *req.HardwarePassthroughEnabled != cfg.HardwarePassthroughEnabled {
+		if !requireHighRiskVerification(c, "update_hardware_passthrough") {
+			return false
+		}
+	}
+	return true
 }
 
 func persistSettings(cfg *config.Config) []string {

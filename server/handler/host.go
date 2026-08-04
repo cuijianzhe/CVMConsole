@@ -55,10 +55,6 @@ func GetHostKVMIntelUnrestrictedGuestStatus(c *gin.Context) {
 
 // UpdateHostKVMIntelUnrestrictedGuest 设置 Intel KVM unrestricted_guest
 func UpdateHostKVMIntelUnrestrictedGuest(c *gin.Context) {
-	if !requireHighRiskVerification(c, "update_kvm_unrestricted_guest") {
-		return
-	}
-
 	var req HostKVMIntelUnrestrictedGuestRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -96,10 +92,6 @@ func GetHostKSMStatus(c *gin.Context) {
 
 // UpdateHostKSMProfile 设置宿主机 KSM 挡位
 func UpdateHostKSMProfile(c *gin.Context) {
-	if !requireHighRiskVerification(c, "update_host_ksm") {
-		return
-	}
-
 	var req HostKSMProfileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -137,10 +129,6 @@ func GetHostZRAMStatus(c *gin.Context) {
 
 // UpdateHostZRAMProfile 设置宿主机 zRAM 挡位
 func UpdateHostZRAMProfile(c *gin.Context) {
-	if !requireHighRiskVerification(c, "update_host_zram") {
-		return
-	}
-
 	var req HostZRAMProfileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -334,10 +322,6 @@ func GetHardwarePassthroughStatus(c *gin.Context) {
 
 // EnableIommu 一键开启 IOMMU（写入 grub 参数并 update-grub）
 func EnableIommu(c *gin.Context) {
-	if !requireHighRiskVerification(c, "enable_host_iommu") {
-		return
-	}
-
 	result := service.EnableIommuInGrub()
 	code := 200
 	if !result.Success {
@@ -352,10 +336,6 @@ func EnableIommu(c *gin.Context) {
 
 // LoadVfioPci 一键加载 vfio-pci 模块
 func LoadVfioPci(c *gin.Context) {
-	if !requireHighRiskVerification(c, "load_vfio_pci") {
-		return
-	}
-
 	result := service.LoadVfioPciModule()
 	code := 200
 	if !result.Success {
@@ -432,10 +412,6 @@ func GetVGPUInstances(c *gin.Context) {
 }
 
 func CreateVGPUInstance(c *gin.Context) {
-	if !requireHighRiskVerification(c, "create_vgpu_instance") {
-		return
-	}
-
 	var req CreateVGPUInstanceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -462,10 +438,6 @@ func CreateVGPUInstance(c *gin.Context) {
 }
 
 func DestroyVGPUInstance(c *gin.Context) {
-	if !requireHighRiskVerification(c, "destroy_vgpu_instance") {
-		return
-	}
-
 	uuid := c.Param("uuid")
 	if err := host.DestroyVGPUInstanceByUUID(uuid); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -482,10 +454,6 @@ func DestroyVGPUInstance(c *gin.Context) {
 }
 
 func AttachVGPUToVM(c *gin.Context) {
-	if !requireHighRiskVerification(c, "attach_vgpu_to_vm") {
-		return
-	}
-
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {
@@ -520,10 +488,6 @@ func AttachVGPUToVM(c *gin.Context) {
 }
 
 func DetachVGPUFromVM(c *gin.Context) {
-	if !requireHighRiskVerification(c, "detach_vgpu_from_vm") {
-		return
-	}
-
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {

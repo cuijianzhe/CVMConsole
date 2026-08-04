@@ -77,17 +77,11 @@ func inspectAppliance(c *gin.Context, admin bool) {
 
 // ImportSelfAppliance 从我的存储导入虚拟机包。
 func ImportSelfAppliance(c *gin.Context) {
-	if !requireHighRiskVerification(c, "create_vm") {
-		return
-	}
 	importApplianceHandler(c, false)
 }
 
 // ImportAdminAppliance 通过管理员来源导入虚拟机包。
 func ImportAdminAppliance(c *gin.Context) {
-	if !requireHighRiskVerification(c, "create_vm") {
-		return
-	}
 	importApplianceHandler(c, true)
 }
 

@@ -203,9 +203,6 @@ func GetDeleteTemplatePreview(c *gin.Context) {
 
 // DeleteTemplate 删除模板
 func DeleteTemplate(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_template") {
-		return
-	}
 	name := c.Param("name")
 	if name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{

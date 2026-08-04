@@ -60,9 +60,7 @@ func DeleteDisk(c *gin.Context) {
 	var req DeleteDiskRequest
 	c.ShouldBindJSON(&req)
 	if req.DeleteFile {
-		if !requireHighRiskVerification(c, "delete_disk_file") {
-			return
-		}
+		// 删除磁盘文件
 	}
 
 	// 转移模式：卸载后将磁盘文件异步转移到用户存储
@@ -272,9 +270,6 @@ func GetDiskMigrationOptions(c *gin.Context) {
 func MigrateDisk(c *gin.Context) {
 	name := c.Param("name")
 	dev := c.Param("dev")
-	if !requireHighRiskVerification(c, "migrate_vm_disk") {
-		return
-	}
 	if err := service.EnsureVMNotMigrating(name, "迁移硬盘"); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"code": 409, "message": err.Error()})
 		return

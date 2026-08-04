@@ -171,9 +171,6 @@ func CancelTask(c *gin.Context) {
 
 // ClearFinishedTasks 清理已完成的任务
 func ClearFinishedTasks(c *gin.Context) {
-	if !requireHighRiskVerification(c, "clear_finished_tasks") {
-		return
-	}
 	username, role := currentUserAndRole(c)
 	count, err := taskqueue.ClearFinishedTasksForUser(username, role)
 	if err != nil {

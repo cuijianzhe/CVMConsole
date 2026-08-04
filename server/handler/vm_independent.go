@@ -25,11 +25,6 @@ func MakeVMIndependent(c *gin.Context) {
 		return
 	}
 
-	// 二次验证（敏感操作）
-	if !requireHighRiskVerification(c, "make_vm_independent") {
-		return
-	}
-
 	params := &service.MakeVMIndependentParams{
 		VMName: vmName,
 	}

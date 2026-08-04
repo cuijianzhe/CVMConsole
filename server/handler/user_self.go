@@ -142,9 +142,6 @@ func GetSelfLightweightVMRegistrations(c *gin.Context) {
 
 // ConfirmSelfLightweightVMRegistration 用户确认并开通轻量云服务器。
 func ConfirmSelfLightweightVMRegistration(c *gin.Context) {
-	if !requireHighRiskVerification(c, "create_vm") {
-		return
-	}
 	if !requireMaintenanceModeDisabled(c, "开通轻量云服务器") {
 		return
 	}
@@ -402,9 +399,6 @@ type SelfDeleteVmRequest struct {
 
 // SelfDeleteVm 用户自助删除VM
 func SelfDeleteVm(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_vm") {
-		return
-	}
 	name := c.Param("name")
 	username, _ := c.Get("username")
 	usernameStr := username.(string)

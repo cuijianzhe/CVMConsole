@@ -46,9 +46,6 @@ func GetSpiceStatus(c *gin.Context) {
 
 // EnableSpice 开启 SPICE（敏感操作，需二次验证）
 func EnableSpice(c *gin.Context) {
-	if !requireHighRiskVerification(c, "enable_spice") {
-		return
-	}
 	name := c.Param("name")
 	var req SpicePasswordRequest
 	c.ShouldBindJSON(&req) // 密码可选
@@ -68,9 +65,6 @@ func EnableSpice(c *gin.Context) {
 
 // DisableSpice 关闭 SPICE（敏感操作，需二次验证）
 func DisableSpice(c *gin.Context) {
-	if !requireHighRiskVerification(c, "disable_spice") {
-		return
-	}
 	name := c.Param("name")
 	if err := service.DisableSpice(name); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -87,9 +81,6 @@ func DisableSpice(c *gin.Context) {
 
 // ChangeSpicePassword 修改 SPICE 密码（敏感操作，需二次验证）
 func ChangeSpicePassword(c *gin.Context) {
-	if !requireHighRiskVerification(c, "change_spice_password") {
-		return
-	}
 	name := c.Param("name")
 	var req SpicePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.Password == "" {
@@ -114,9 +105,6 @@ func ChangeSpicePassword(c *gin.Context) {
 
 // ExposeSpice 切换 SPICE 对外暴露（敏感操作，需二次验证；会联动宿主防火墙端口）
 func ExposeSpice(c *gin.Context) {
-	if !requireHighRiskVerification(c, "expose_spice") {
-		return
-	}
 	name := c.Param("name")
 	var req SpiceExposeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

@@ -376,9 +376,9 @@ func tryFallbackDiskToSCSI(vmName, diskPath, format, serial string, existingDisk
 func newDiskSerial() string {
 	data := make([]byte, 10)
 	if _, err := rand.Read(data); err == nil {
-		return "qvm-" + hex.EncodeToString(data)
+		return "cvm-" + hex.EncodeToString(data)
 	}
-	return fmt.Sprintf("qvm-%d", time.Now().UnixNano())
+	return fmt.Sprintf("cvm-%d", time.Now().UnixNano())
 }
 
 // GetDevPrefix returns the device name prefix based on bus type.

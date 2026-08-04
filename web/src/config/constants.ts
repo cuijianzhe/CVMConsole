@@ -23,11 +23,7 @@ export const STORAGE_KEYS = {
 /** 外部链接（开源仓库 / 赞助相关） */
 export const EXTERNAL_LINKS = {
   /** GitHub 开源仓库 */
-  github: 'https://github.com/QVMConsole/QVMConsole',
-  /** 爱发电赞助页 */
-  sponsorPay: 'https://www.ifdian.net/item/ff67c598693811f1836452540025c377?utm_source=copylink&utm_medium=link',
-  /** 赞助者权益说明文档 */
-  sponsorBenefits: 'https://qvmcdocs.xiaozhuhouses.asia/docs/install/sponsorship',
+  github: 'https://github.com/cuijianzhe/CVMConsole',
 } as const
 
 /** 云类型 */

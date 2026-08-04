@@ -72,9 +72,6 @@ type CreateVmRequest struct {
 
 // CreateVm 普通方式创建虚拟机（异步任务）
 func CreateVm(c *gin.Context) {
-	if !requireHighRiskVerification(c, "create_vm") {
-		return
-	}
 	if !requireMaintenanceModeDisabled(c, "创建并启动虚拟机") {
 		return
 	}
@@ -315,9 +312,6 @@ type ImportDiskByPathRequest struct {
 
 // AdminImportDisk 管理员通过绝对路径导入磁盘创建虚拟机（异步任务）
 func AdminImportDisk(c *gin.Context) {
-	if !requireHighRiskVerification(c, "create_vm") {
-		return
-	}
 	if !requireMaintenanceModeDisabled(c, "导入磁盘并创建虚拟机") {
 		return
 	}

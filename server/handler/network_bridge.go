@@ -28,9 +28,6 @@ func ListNetworkBridges(c *gin.Context) {
 }
 
 func CreateNetworkBridge(c *gin.Context) {
-	if !requireHighRiskVerification(c, "create_network_bridge") {
-		return
-	}
 	var req service.NetworkBridgeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "参数错误"})
@@ -45,9 +42,6 @@ func CreateNetworkBridge(c *gin.Context) {
 }
 
 func DeleteNetworkBridge(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_network_bridge") {
-		return
-	}
 	id, _ := strconv.Atoi(c.Param("id"))
 	name := c.Query("name")
 	// 当 ID 为 0 但提供了名称时，按名称删除（处理 OVS 残留网桥）
@@ -83,9 +77,6 @@ func GetInterfaceConfig(c *gin.Context) {
 
 // SetInterfaceConfig 设置接口的 IP/DNS 配置（高风险操作，需二次验证）。
 func SetInterfaceConfig(c *gin.Context) {
-	if !requireHighRiskVerification(c, "set_interface_config") {
-		return
-	}
 	var req service.SetInterfaceConfigRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "参数错误"})

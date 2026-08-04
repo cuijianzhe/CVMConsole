@@ -521,9 +521,6 @@ func BatchCloneVm(c *gin.Context) {
 
 // ReinstallVm 重装系统（异步任务）
 func ReinstallVm(c *gin.Context) {
-	if !requireStrictHighRiskVerification(c, "reinstall_vm") {
-		return
-	}
 	if !requireMaintenanceModeDisabled(c, "重装并启动虚拟机") {
 		return
 	}
@@ -641,9 +638,6 @@ type DeleteVmRequest struct {
 
 // DeleteVm 删除虚拟机（异步任务）
 func DeleteVm(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_vm") {
-		return
-	}
 	name := c.Param("name")
 	if name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -731,9 +725,6 @@ func GetVmQcow2Disks(c *gin.Context) {
 
 // ForceDeleteVm 强制删除虚拟机（绕过磁盘和快照操作，处理僵尸虚拟机）
 func ForceDeleteVm(c *gin.Context) {
-	if !requireHighRiskVerification(c, "force_delete_vm") {
-		return
-	}
 	name := c.Param("name")
 	if name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{

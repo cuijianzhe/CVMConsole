@@ -21,9 +21,6 @@ func GetAPIKeyInfo(c *gin.Context) {
 
 // RotateAPIKey 生成或重新生成当前用户 API Key。
 func RotateAPIKey(c *gin.Context) {
-	if !requireHighRiskVerification(c, "rotate_api_key") {
-		return
-	}
 	user := getCurrentUser(c)
 	key, err := service.RotateUserAPIKey(user.ID)
 	if err != nil {
@@ -35,9 +32,6 @@ func RotateAPIKey(c *gin.Context) {
 
 // RevokeAPIKey 撤销当前用户 API Key。
 func RevokeAPIKey(c *gin.Context) {
-	if !requireHighRiskVerification(c, "revoke_api_key") {
-		return
-	}
 	user := getCurrentUser(c)
 	if err := service.RevokeUserAPIKey(user.ID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "撤销 API 凭证失败: " + err.Error()})

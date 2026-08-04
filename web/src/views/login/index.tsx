@@ -192,7 +192,7 @@ export default function LoginPage() {
         <div className="qvm-logo-mark">
           <img
             src={uiCustomization.loginPageIcon || '/favicon.png'}
-            alt="QVMConsole"
+            alt="CVMConsole"
             style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 12 }}
             onError={(e) => {
               ;(e.target as HTMLImageElement).src = '/favicon.png'
@@ -268,7 +268,7 @@ export default function LoginPage() {
             <div className="qvm-lc-logo">
               <img
                 src={uiCustomization.loginPageIcon || '/favicon.png'}
-                alt="QVMConsole"
+                alt="CVMConsole"
                 style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 15 }}
                 onError={(e) => {
                   ;(e.target as HTMLImageElement).src = '/favicon.png'

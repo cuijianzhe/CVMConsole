@@ -59,10 +59,6 @@ func CreateVMSchedule(c *gin.Context) {
 		return
 	}
 
-	if shouldVerifyDeleteSchedule(req.Action, req.Enabled, true) && !requireHighRiskVerification(c, "create_vm_schedule_delete") {
-		return
-	}
-
 	username, _ := c.Get("username")
 	item, err := service.CreateVMSchedule(vmName, username.(string), req)
 	if err != nil {
@@ -98,10 +94,6 @@ func UpdateVMSchedule(c *gin.Context) {
 			"code":    400,
 			"message": "参数错误",
 		})
-		return
-	}
-
-	if shouldVerifyDeleteSchedule(req.Action, req.Enabled, false) && !requireHighRiskVerification(c, "update_vm_schedule_delete") {
 		return
 	}
 

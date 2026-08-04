@@ -47,9 +47,6 @@ func CheckOVSNetwork(c *gin.Context) {
 }
 
 func RepairOVSNetwork(c *gin.Context) {
-	if !requireHighRiskVerification(c, "repair_ovs_network") {
-		return
-	}
 	username, _ := c.Get("username")
 	task, err := taskqueue.SubmitWithStruct(model.TaskTypeOVSRepair, map[string]string{"action": "repair"}, username.(string))
 	if err != nil {

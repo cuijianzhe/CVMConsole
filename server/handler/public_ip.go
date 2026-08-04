@@ -53,9 +53,6 @@ func UpdatePublicIP(c *gin.Context) {
 }
 
 func DeletePublicIP(c *gin.Context) {
-	if !requireHighRiskVerification(c, "delete_public_ip") {
-		return
-	}
 	id, err := service.ParsePublicIPID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
@@ -85,9 +82,6 @@ func PreviewPublicIP(c *gin.Context) {
 }
 
 func BindPublicIP(c *gin.Context) {
-	if !requireHighRiskVerification(c, "bind_public_ip") {
-		return
-	}
 	id, err := service.ParsePublicIPID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
@@ -102,9 +96,6 @@ func BindPublicIP(c *gin.Context) {
 }
 
 func UnbindPublicIP(c *gin.Context) {
-	if !requireHighRiskVerification(c, "unbind_public_ip") {
-		return
-	}
 	id, err := service.ParsePublicIPID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
@@ -114,9 +105,6 @@ func UnbindPublicIP(c *gin.Context) {
 }
 
 func MigratePublicIP(c *gin.Context) {
-	if !requireHighRiskVerification(c, "migrate_public_ip") {
-		return
-	}
 	id, err := service.ParsePublicIPID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
@@ -131,9 +119,6 @@ func MigratePublicIP(c *gin.Context) {
 }
 
 func ApplyPublicIPRules(c *gin.Context) {
-	if !requireHighRiskVerification(c, "apply_public_ip") {
-		return
-	}
 	submitPublicIPTask(c, service.PublicIPOperationParams{Action: "apply_all"})
 }
 

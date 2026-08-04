@@ -203,9 +203,6 @@ func ApplyVPCACL(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "仅管理员可应用 VPC ACL"})
 		return
 	}
-	if !requireHighRiskVerification(c, "apply_vpc_acl") {
-		return
-	}
 	if err := service.ApplyVPCACLRules(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
 		return

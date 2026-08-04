@@ -104,7 +104,7 @@ export default function LoginVerifyPanel({ stage, onExit, onComplete }: LoginVer
       style={{ '--qvm-delay': '60ms' } as CSSProperties}
     >
       <div className="qvm-lc-head">
-        <div className="qvm-lc-logo">Q</div>
+        <div className="qvm-lc-logo">C</div>
         <div className="qvm-lc-title">登录验证</div>
         <div className="qvm-lc-sub">账户 {stage.username} 已开启登录保护，请完成验证</div>
       </div>
