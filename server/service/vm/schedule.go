@@ -184,6 +184,7 @@ func StartVMScheduleRunner() {
 	vmScheduleRunnerOnce.Do(func() {
 		go func() {
 			defer utils.RecoverAndLog("vm-schedule-runner")
+			logger.App.Info("虚拟机定时任务扫描器已启动", "interval", "30s")
 			runDueVMSchedulesOnce()
 			ticker := time.NewTicker(30 * time.Second)
 			defer ticker.Stop()
@@ -201,6 +202,14 @@ func runDueVMSchedulesOnce() {
 		logger.App.Warn("扫描虚拟机定时任务失败", "error", err)
 		return
 	}
+	if len(dueList) == 0 {
+		// 定期打印扫描心跳，确认扫描器在运行（每5分钟一次，避免日志刷屏）
+		if now.Second() < 30 && now.Minute()%5 == 0 {
+			logger.App.Debug("定时任务扫描正常", "now", now.Format("2006-01-02 15:04:05"), "due", 0)
+		}
+		return
+	}
+	logger.App.Info("发现到期定时任务", "count", len(dueList), "now", now.Format("2006-01-02 15:04:05"))
 	for _, schedule := range dueList {
 		if err := queueDueVMSchedule(schedule, now); err != nil {
 			logger.App.Warn("提交虚拟机定时任务失败", "schedule_id", schedule.ID, "vm", schedule.VMName, "error", err)
