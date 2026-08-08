@@ -129,7 +129,8 @@ func buildWindowsPantherUnattendXML(category string, hasPassword bool) string {
 // 如果检测失败，返回空字符串。
 func detectWindowsNTFSPartition(diskPath string) string {
 	// 列出所有文件系统
-	result := utils.ExecCommandLongRunning("guestfish", "--ro", "-a", diskPath,
+	// guestfish 需要读写整个磁盘镜像，属于大 IO 操作，不设置自动超时
+	result := utils.ExecCommandNoTimeout("guestfish", "--ro", "-a", diskPath,
 		"run", ":", "list-filesystems")
 	if result.Error != nil {
 		logger.App.Warn("检测 Windows 分区失败: guestfish list-filesystems", "error", result.Stderr)
@@ -155,7 +156,8 @@ func detectWindowsNTFSPartition(diskPath string) string {
 
 	// 尝试每个 NTFS 分区，找到含 /Windows 目录的系统分区
 	for _, part := range ntfsPartitions {
-		checkResult := utils.ExecCommandLongRunning("guestfish", "--ro", "-a", diskPath,
+		// guestfish 需要读写整个磁盘镜像，属于大 IO 操作，不设置自动超时
+		checkResult := utils.ExecCommandNoTimeout("guestfish", "--ro", "-a", diskPath,
 			"run", ":", "mount-ro", part, "/", ":", "is-dir", "/Windows")
 		if checkResult.Error == nil && strings.TrimSpace(checkResult.Stdout) == "true" {
 			logger.App.Info("检测到 Windows 系统分区", "disk", diskPath, "partition", part)
@@ -214,7 +216,8 @@ func injectWindowsCloudbaseInitFiles(vmName, cloneDisk, category string, passwor
 
 	// 第一次尝试：使用默认 OS 检测（适用于大多数 Windows 版本）
 	args := append([]string{"-a", cloneDisk, "--no-network"}, uploadArgs...)
-	injectResult := utils.ExecCommandLongRunning("virt-customize", args...)
+	// virt-customize 需要读写整个磁盘镜像，属于大 IO 操作，不设置自动超时
+	injectResult := utils.ExecCommandNoTimeout("virt-customize", args...)
 
 	if injectResult.Error != nil && strings.Contains(injectResult.Stderr, "no operating system") {
 		// OS 检测失败（Windows Server 2025 已知问题），回退为 guestfish 显式挂载分区
@@ -231,7 +234,8 @@ func injectWindowsCloudbaseInitFiles(vmName, cloneDisk, category string, passwor
 		// 使用 guestfish 显式挂载分区，绕过 OS 检测
 		// ntfsfix 清除可能的脏标记（重装场景中 VM 可能未正常关机）
 		progressFn(37, "通过 guestfish 注入文件...")
-		injectResult = utils.ExecCommandLongRunning("guestfish", "--rw", "-a", cloneDisk,
+		// guestfish 需要读写整个磁盘镜像，属于大 IO 操作，不设置自动超时
+		injectResult = utils.ExecCommandNoTimeout("guestfish", "--rw", "-a", cloneDisk,
 			"run", ":",
 			"ntfsfix", winPart, ":",
 			"mount", winPart, "/", ":",
@@ -515,6 +519,10 @@ func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ra
   </devices>
 </domain>`,
 		params.Name, ramKiB, D.BuildVCPUTag(params.VCPU, params.MaxVCPU), osXML, smmXML, hyperVBlock, clockOpenTag, hyperVTimerBlock, emulatorPath, cloneDisk, diskTargetDev, diskBus, diskControllerXML, networkXML, tpmXML, watchdogModel)
+	// Windows XML 为手工构建，需要显式预留创建时额外设备使用的 PCIe 根端口。
+	additionalPCIEDevices := len(params.ExtraNics) + len(params.ExtraDisks) + len(params.HostDevices)
+	pciePortCount := vm_xml.ResolveCreatePCIERootPortCount(vmXML, params.PCIERootPorts, additionalPCIEDevices)
+	vmXML = D.InjectPCIERootPorts(vmXML, pciePortCount)
 	var err error
 	if memoryMeta != nil {
 		vmXML, err = memory.ApplyMemoryMetadataToDomainXML(vmXML, memoryMeta, false)

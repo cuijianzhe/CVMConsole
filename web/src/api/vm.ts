@@ -545,12 +545,19 @@ export function resetVmLinuxPassword(
 
 // ==================== 网口 IP 状态 ====================
 
+/** 网口 IP 地址 */
+export interface VmNetworkIPAddress {
+  address: string
+  source?: string
+}
+
 /** 网口运行状态 */
 export interface VmNetworkInterface {
   target: string
   mac: string
   ip: string
   ip_source?: string
+  ip_addresses?: VmNetworkIPAddress[]
   bridge?: string
   source_bridge?: string
   virtualport_type?: string
@@ -1067,6 +1074,7 @@ export interface BatchCloneVmPayload {
   security_group_id?: number | null
   extra_nics?: ExtraNicPayload[]
   extra_disks?: ExtraDiskPayload[]
+  pcie_root_ports?: number
   static_ip?: string
   gateway?: string
   dns?: string
@@ -1246,9 +1254,17 @@ export function retryGuestDiskGrow(name: string, dev: string) {
 
 // ==================== 光驱 / 软盘管理（编辑模式） ====================
 
-/** 插入/更换光驱 ISO（force_new=true 新增光驱设备） */
-export function changeCDROM(name: string, data: { iso_path: string; device?: string; force_new?: boolean }) {
+/** 插入/更换光驱 ISO（force_new=true 新增光驱设备，bus 指定新增设备总线） */
+export function changeCDROM(name: string, data: { iso_path: string; device?: string; force_new?: boolean; bus?: string }) {
   return service.post<unknown, ApiResponse<null>>(`/vm/${encodeURIComponent(name)}/cdrom`, data)
+}
+
+/** 修改现有光驱的驱动类型（需要关机） */
+export function changeCDROMBus(name: string, dev: string, bus: string) {
+  return service.put<unknown, ApiResponse<null>>(
+    `/vm/${encodeURIComponent(name)}/cdrom/${encodeURIComponent(dev)}/bus`,
+    { bus },
+  )
 }
 
 /** 弹出光驱 */

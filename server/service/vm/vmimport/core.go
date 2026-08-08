@@ -217,7 +217,8 @@ func importVMCopyDisk(_ context.Context, srcDiskPath, destDiskPath, format strin
 	if copyDisk {
 		// 保留原文件，复制到 CloneDir
 		progressFn(12, fmt.Sprintf("检测到 %s 格式，正在复制磁盘文件到虚拟机目录（保留原文件）...", format))
-		cpResult := utils.ExecCommandLongRunning("cp", "--sparse=always", srcDiskPath, destDiskPath)
+		// 复制磁盘文件属于大 IO 操作，不设置自动超时
+		cpResult := utils.ExecCommandNoTimeout("cp", "--sparse=always", srcDiskPath, destDiskPath)
 		if cpResult.Error != nil {
 			return fmt.Errorf("复制磁盘文件失败: %s", cpResult.Stderr)
 		}
@@ -225,7 +226,8 @@ func importVMCopyDisk(_ context.Context, srcDiskPath, destDiskPath, format strin
 	} else {
 		// 不保留原文件，先复制到 CloneDir（define 成功后再删除源文件，避免 define 失败时源数据丢失）
 		progressFn(12, fmt.Sprintf("检测到 %s 格式，正在复制磁盘文件到虚拟机目录（不保留原文件）...", format))
-		cpResult := utils.ExecCommandLongRunning("cp", "--sparse=always", srcDiskPath, destDiskPath)
+		// 复制磁盘文件属于大 IO 操作，不设置自动超时
+		cpResult := utils.ExecCommandNoTimeout("cp", "--sparse=always", srcDiskPath, destDiskPath)
 		if cpResult.Error != nil {
 			return fmt.Errorf("复制磁盘文件失败: %s", cpResult.Stderr)
 		}

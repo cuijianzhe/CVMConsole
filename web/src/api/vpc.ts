@@ -285,6 +285,7 @@ export interface VMInterfaceInfo {
   binding: VpcVMBinding
   switch?: VpcSwitch | null
   security_group?: VpcSecurityGroup | null
+  mac?: string
 }
 
 /** 网口新增/更新请求 */
