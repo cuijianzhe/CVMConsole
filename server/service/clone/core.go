@@ -143,12 +143,14 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 		params.DiskBus = "virtio"
 	}
 
-	// 凭据：优先用 CloneParams 中的，否则用元数据中的
+	// 凭据：模板旧用户名必须以服务端元数据为准，避免客户端把目标用户名误当成旧用户名。
 	if params.TemplateRootPass == "" && meta.RootPassword != "" {
 		params.TemplateRootPass = meta.RootPassword
 	}
-	if params.TemplateUser == "" && meta.TemplateUser != "" {
-		params.TemplateUser = meta.TemplateUser
+	if meta != nil {
+		params.TemplateUser = strings.TrimSpace(meta.TemplateUser)
+	} else {
+		params.TemplateUser = strings.TrimSpace(params.TemplateUser)
 	}
 	if params.PostBootCommand == "" && meta.PostBootCommand != "" {
 		params.PostBootCommand = meta.PostBootCommand
@@ -210,7 +212,8 @@ func CloneVM(ctx context.Context, params *CloneParams, progressFn func(int, stri
 			convertCmd = fmt.Sprintf("qemu-img convert -f %s -O qcow2 %s %s",
 				templateFormat, utils.ShellSingleQuote(templatePath), utils.ShellSingleQuote(cloneDisk))
 		}
-		result := utils.ExecShellWithTimeout(convertCmd, 2*time.Hour)
+		// 完整克隆需要复制整个磁盘数据，属于大 IO 操作，不设置自动超时，仅响应任务取消
+		result := utils.ExecShellContext(ctx, convertCmd)
 		if result.Error != nil {
 			return nil, fmt.Errorf("创建完整克隆磁盘失败: %s", result.Stderr)
 		}

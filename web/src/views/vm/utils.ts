@@ -1,7 +1,7 @@
 /**
  * 虚拟机列表页共享工具（状态文案 / 排序权重 / 容量解析）
  */
-import type { VmListItem } from '@/api/vm'
+import type { VmListItem, VmPowerAction } from '@/api/vm'
 
 /** 虚拟机状态文案映射 */
 export function vmStatusText(status: string): string {
@@ -173,4 +173,9 @@ export const POWER_ACTION_TEXT: Record<string, string> = {
   destroy: '强制断电',
   reset: '软重启',
   hard_reboot: '硬重启',
+}
+
+/** 指令确认后最终状态可能不变的动作，不能只依赖状态变化解除 loading。 */
+export function shouldClearPowerLoadingAfterAck(action: VmPowerAction): boolean {
+  return action === 'reboot' || action === 'reset'
 }

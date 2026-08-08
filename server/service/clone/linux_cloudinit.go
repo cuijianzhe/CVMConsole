@@ -16,12 +16,17 @@ import (
 // 适用于所有 Linux 模板；若宿主机无网络则跳过包安装，seed 文件将静默失效但不影响 VM 可用性
 // 仅在主机名、用户名或密码至少有一个不为空时才执行初始化
 func prepareLinuxNoCloudInit(params *CloneParams, cloneDisk string, progressFn func(int, string)) error {
+	// 保留本地早期返回：三项全空时不执行初始化
 	if params.Hostname == "" && params.User == "" && params.Password == "" {
 		return nil
 	}
 	if progressFn != nil {
 		progressFn(20, "准备 Linux 离线初始化...")
 	}
+	// 上游：解析目标用户名（供后续代码使用）
+	targetUser := resolveLinuxCloneTargetUser(params.User, params.TemplateUser)
+	// 保留本地 templateUser 变量（供离线密码设置使用）
+	templateUser := params.TemplateUser
 	// 生成 cloud-init seed 文件内容
 	metaData := buildNoCloudMetaData(params)
 	userData := buildNoCloudUserData(params)
@@ -41,8 +46,6 @@ func prepareLinuxNoCloudInit(params *CloneParams, cloneDisk string, progressFn f
 	if err := os.WriteFile(userPath, []byte(userData), 0644); err != nil {
 		return fmt.Errorf("写入 cloud-init user-data 失败: %w", err)
 	}
-
-	templateUser := params.TemplateUser
 
 	args := []string{
 		"-a", cloneDisk,
@@ -89,25 +92,8 @@ func prepareLinuxNoCloudInit(params *CloneParams, cloneDisk string, progressFn f
 		"--run-command", "rm -f /etc/cloud/cloud.cfg.d/curtin-preserve-sources.cfg 2>/dev/null || true",
 		// 5. 清理 cloud-init 实例缓存（强制重新初始化，而非跳过）
 		"--run-command", "rm -rf /var/lib/cloud/instances/* /var/lib/cloud/instance",
-		// 6. 强制启用 SSH 密码登录（包括 root），覆盖发行版默认的 PermitRootLogin prohibit-password
-		//    同时处理 sshd_config.d/ 下可能存在的覆盖文件（Ubuntu 22.04+, Debian 12+）
-		"--run-command", `SSHD_CFG=/etc/ssh/sshd_config; ` +
-			`if [ -f "$SSHD_CFG" ]; then ` +
-			// 启用 PermitRootLogin yes
-			`if grep -qE "^\s*#?\s*PermitRootLogin" "$SSHD_CFG"; then ` +
-			`sed -i "s/^\s*#\?\s*PermitRootLogin.*/PermitRootLogin yes/" "$SSHD_CFG"; ` +
-			`else echo "PermitRootLogin yes" >> "$SSHD_CFG"; fi; ` +
-			// 启用 PasswordAuthentication yes
-			`if grep -qE "^\s*#?\s*PasswordAuthentication" "$SSHD_CFG"; then ` +
-			`sed -i "s/^\s*#\?\s*PasswordAuthentication.*/PasswordAuthentication yes/" "$SSHD_CFG"; ` +
-			`else echo "PasswordAuthentication yes" >> "$SSHD_CFG"; fi; ` +
-			`fi; ` +
-			// 清理 sshd_config.d/ 中可能覆盖上述设置的 drop-in 文件
-			`if [ -d /etc/ssh/sshd_config.d ]; then ` +
-			`for f in /etc/ssh/sshd_config.d/*.conf; do [ -f "$f" ] || continue; ` +
-			`sed -i "s/^\s*PermitRootLogin.*/PermitRootLogin yes/" "$f"; ` +
-			`sed -i "s/^\s*PasswordAuthentication.*/PasswordAuthentication yes/" "$f"; ` +
-			`done; fi`,
+		// 6. 启用 SSH 密码认证，并按目标用户决定是否允许 root 登录。
+		"--run-command", buildLinuxSSHPasswordAuthCommand(targetUser),
 		// 7. 写入 cloud-init NoCloud seed 文件（文件系统方式，无时序问题）
 		"--run-command", "mkdir -p /var/lib/cloud/seed/nocloud",
 		"--upload", metaPath + ":/var/lib/cloud/seed/nocloud/meta-data",
@@ -134,48 +120,16 @@ func prepareLinuxNoCloudInit(params *CloneParams, cloneDisk string, progressFn f
 		)
 	}
 
-	// 7. 离线修改密码（通过 virt-customize --password，直接修改 /etc/shadow，无需 cloud-init）
+	// 7. 先确保目标用户在磁盘中存在（上游修复：不能仅依赖模板元数据）
+	if targetUser != "" && targetUser != "root" {
+		args = append(args, "--run-command", buildEnsureLinuxCloneUserCommand(params.TemplateUser, targetUser))
+	}
+	// 8. 离线修改密码（通过 virt-customize --password，直接修改 /etc/shadow，无需 cloud-init）
 	// root 密码始终设置；templateUser 若不是 root 则也设置（避免对 root 重复设置导致 virt-customize 报错）
 	if params.Password != "" {
 		args = append(args, "--password", "root:password:"+params.Password)
 		if templateUser != "" && templateUser != "root" {
 			args = append(args, "--password", templateUser+":password:"+params.Password)
-		}
-	}
-
-	// 8. 用户名处理（离线）
-	if params.User != "" && params.User != "root" {
-		if templateUser != "" && templateUser != "root" && params.User != templateUser {
-			// 8a. 模板有非root用户 → 重命名为目标用户名
-			renameCmd := fmt.Sprintf(
-				`OLD=%s; NEW=%s; `+
-					`if id "$OLD" >/dev/null 2>&1 && ! id "$NEW" >/dev/null 2>&1; then `+
-					`usermod -l "$NEW" "$OLD" 2>/dev/null; `+
-					`usermod -d /home/"$NEW" -m "$NEW" 2>/dev/null; `+
-					`groupmod -n "$NEW" "$OLD" 2>/dev/null; `+
-					`find /etc/sudoers.d/ -type f -exec sed -i "s/$OLD/$NEW/g" {} \; 2>/dev/null || true; `+
-					`fi`,
-				utils.ShellSingleQuote(templateUser),
-				utils.ShellSingleQuote(params.User),
-			)
-			args = append(args, "--run-command", renameCmd)
-		} else if templateUser == "" || templateUser == "root" {
-			// 8b. 模板无非root用户（仅有root）→ 创建新用户
-			createCmd := fmt.Sprintf(
-				`NEW=%s; `+
-					`if ! id "$NEW" >/dev/null 2>&1; then `+
-					`useradd -m -s /bin/bash "$NEW" 2>/dev/null; `+
-					// 尝试加入 sudo/wheel 组（不同发行版组名不同）
-					`if getent group sudo >/dev/null 2>&1; then usermod -aG sudo "$NEW" 2>/dev/null; `+
-					`elif getent group wheel >/dev/null 2>&1; then usermod -aG wheel "$NEW" 2>/dev/null; fi; `+
-					`fi`,
-				utils.ShellSingleQuote(params.User),
-			)
-			args = append(args, "--run-command", createCmd)
-		}
-		// 为新/重命名后的用户设置密码（若与 templateUser 相同则已在上方设置过，跳过避免 virt-customize 报重复错误）
-		if params.Password != "" && params.User != templateUser {
-			args = append(args, "--password", params.User+":password:"+params.Password)
 		}
 	}
 
@@ -205,7 +159,8 @@ func prepareLinuxNoCloudInit(params *CloneParams, cloneDisk string, progressFn f
 	if progressFn != nil {
 		progressFn(25, "执行 Linux 离线初始化...")
 	}
-	result := utils.ExecCommandLongRunning("virt-customize", args...)
+	// virt-customize 需要读写整个磁盘镜像，属于大 IO 操作，不设置自动超时（上游规则 33）
+	result := utils.ExecCommandNoTimeout("virt-customize", args...)
 	if result.Error != nil {
 		return fmt.Errorf("Linux 克隆离线初始化失败: %s", D.FirstNonEmpty(result.Stderr, result.Error.Error()))
 	}
@@ -231,70 +186,29 @@ func buildNoCloudUserData(params *CloneParams) string {
 	}
 
 	var sb strings.Builder
+	targetUser := resolveLinuxCloneTargetUser(params.User, params.TemplateUser)
+	permitRoot := linuxPermitRootLoginValue(targetUser)
+	rootLoginAllowed := targetUser == "root"
+
 	sb.WriteString("#cloud-config\n\n")
 	fmt.Fprintf(&sb, "hostname: %s\n", params.Hostname)
 	sb.WriteString("manage_etc_hosts: true\n\n")
 	sb.WriteString("ssh_pwauth: true\n")
-	sb.WriteString("disable_root: false\n\n")
+	sb.WriteString(fmt.Sprintf("disable_root: %t\n\n", !rootLoginAllowed))
 
-	if params.Password != "" {
-		targetUser := params.User
-		if targetUser == "" || targetUser == "root" {
-			targetUser = params.TemplateUser
-		}
-		if targetUser != "" && targetUser != "root" {
-			sb.WriteString("users:\n")
-			fmt.Fprintf(&sb, "  - name: %s\n", targetUser)
-			sb.WriteString("    lock_passwd: false\n")
-			sb.WriteString("    shell: /bin/bash\n")
-			sb.WriteString("    sudo: ALL=(ALL) NOPASSWD:ALL\n\n")
-		}
-		sb.WriteString("chpasswd:\n  expire: false\n\n")
-	} else {
-		sb.WriteString("cloud_init_modules:\n")
-		sb.WriteString("  - migrator\n")
-		sb.WriteString("  - bootcmd\n")
-		sb.WriteString("  - write-files\n")
-		sb.WriteString("  - growpart\n")
-		sb.WriteString("  - resizefs\n")
-		sb.WriteString("  - set_hostname\n")
-		sb.WriteString("  - update_hostname\n")
-		sb.WriteString("  - update_etc_hosts\n")
-		sb.WriteString("  - rsyslog\n")
-		sb.WriteString("  - ssh\n")
-		sb.WriteString("\n")
-		sb.WriteString("cloud_config_modules:\n")
-		sb.WriteString("  - mounts\n")
-		sb.WriteString("  - locale\n")
-		sb.WriteString("  - timezone\n")
-		sb.WriteString("  - puppet\n")
-		sb.WriteString("  - chef\n")
-		sb.WriteString("  - salt-minion\n")
-		sb.WriteString("  - mcollective\n")
-		sb.WriteString("  - disable-ec2-metadata\n")
-		sb.WriteString("  - runcmd\n")
-		sb.WriteString("  - byobu\n")
-		sb.WriteString("\n")
-		sb.WriteString("cloud_final_modules:\n")
-		sb.WriteString("  - package-update-upgrade-install\n")
-		sb.WriteString("  - fan\n")
-		sb.WriteString("  - landscape\n")
-		sb.WriteString("  - lxd\n")
-		sb.WriteString("  - puppet\n")
-		sb.WriteString("  - chef\n")
-		sb.WriteString("  - salt-minion\n")
-		sb.WriteString("  - scripts-vendor\n")
-		sb.WriteString("  - scripts-per-once\n")
-		sb.WriteString("  - scripts-per-boot\n")
-		sb.WriteString("  - scripts-per-instance\n")
-		sb.WriteString("  - scripts-user\n")
-		sb.WriteString("  - ssh-authkey-fingerprints\n")
-		sb.WriteString("  - keys-to-console\n")
-		sb.WriteString("  - phone-home\n")
-		sb.WriteString("  - final-message\n")
-		sb.WriteString("  - power-state-change\n")
-		sb.WriteString("\n")
+	// 防止 cloud-init 重新锁定用户密码
+	// Ubuntu 等发行版 cloud.cfg 中 default_user 设置 lock_passwd: true，
+	// 首次启动时 cloud-init 会在 /etc/shadow 密码哈希前添加 '!' 导致无法登录
+	// 此处显式声明 lock_passwd: false，并在 NoCloud seed 中统一写入 users + chpasswd
+	if targetUser != "" && targetUser != "root" {
+		sb.WriteString("users:\n")
+		sb.WriteString(fmt.Sprintf("  - name: %s\n", targetUser))
+		sb.WriteString("    lock_passwd: false\n")
+		sb.WriteString("    shell: /bin/bash\n")
+		sb.WriteString("    sudo: ALL=(ALL) NOPASSWD:ALL\n\n")
 	}
+
+	sb.WriteString("chpasswd:\n  expire: false\n\n")
 
 	// growpart 对普通分区有效；对 LVM 系统由下方 runcmd 补充处理
 	sb.WriteString("growpart:\n  mode: auto\n  devices: ['/']\nresize_rootfs: true\n\n")
@@ -302,9 +216,9 @@ func buildNoCloudUserData(params *CloneParams) string {
 	fmt.Fprintf(&sb, "  - hostnamectl set-hostname %s 2>/dev/null || true\n", params.Hostname)
 	// 确保 cloud-init 执行后 SSH 配置不被覆盖（部分发行版 cloud-init 会重置 sshd_config）
 	sb.WriteString("  - |\n")
-	sb.WriteString("    sed -i 's/^\\s*#\\?\\s*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config 2>/dev/null || true\n")
+	sb.WriteString(fmt.Sprintf("    sed -i 's/^\\s*#\\?\\s*PermitRootLogin.*/PermitRootLogin %s/' /etc/ssh/sshd_config 2>/dev/null || true\n", permitRoot))
 	sb.WriteString("    sed -i 's/^\\s*#\\?\\s*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config 2>/dev/null || true\n")
-	sb.WriteString("    if [ -d /etc/ssh/sshd_config.d ]; then for f in /etc/ssh/sshd_config.d/*.conf; do [ -f \"$f\" ] || continue; sed -i 's/^\\s*PermitRootLogin.*/PermitRootLogin yes/' \"$f\"; sed -i 's/^\\s*PasswordAuthentication.*/PasswordAuthentication yes/' \"$f\"; done; fi\n")
+	sb.WriteString(fmt.Sprintf("    if [ -d /etc/ssh/sshd_config.d ]; then for f in /etc/ssh/sshd_config.d/*.conf; do [ -f \"$f\" ] || continue; sed -i 's/^\\s*PermitRootLogin.*/PermitRootLogin %s/' \"$f\"; sed -i 's/^\\s*PasswordAuthentication.*/PasswordAuthentication yes/' \"$f\"; done; fi\n", permitRoot))
 	sb.WriteString("    systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null || true\n")
 	// LVM 感知磁盘扩容脚本：自动检测根分区是否为 LVM，并执行 pvresize + lvextend
 	// 使用 /sys/class/block 获取父磁盘和分区号，比 lsblk pkname/partn 更可靠

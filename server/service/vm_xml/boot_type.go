@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -108,6 +109,11 @@ func resolveVMNVRAMPath(name, xmlContent string) string {
 		cleanName = "vm"
 	}
 	return fmt.Sprintf("/var/lib/libvirt/qemu/nvram/%s_VARS.fd", cleanName)
+}
+
+// GetVMNVRAMPath 根据虚拟机名称返回默认 NVRAM 文件路径。
+func GetVMNVRAMPath(name string) string {
+	return resolveVMNVRAMPath(name, "")
 }
 
 // ResolveOVMFLoaderPath 根据是否启用安全引导选择相应的 OVMF Code 固件路径。
@@ -372,6 +378,57 @@ func CreateQCOW2NVRAMFromTemplate(templatePath, nvramPath string) error {
 	}
 	if err := utils.ChownLibvirtQEMU(nvramPath); err != nil {
 		return fmt.Errorf("设置 NVRAM 文件权限失败: %w", err)
+	}
+	return nil
+}
+
+// SetShimFallbackNoReboot 预置 shim fallback 的连续引导标记。
+// 首次启动仍会自动登记发行版启动项，但不会显示倒计时并执行冷复位。
+func SetShimFallbackNoReboot(nvramPath string) error {
+	nvramPath = strings.TrimSpace(nvramPath)
+	if nvramPath == "" {
+		return fmt.Errorf("NVRAM 路径为空")
+	}
+	if _, err := os.Stat(nvramPath); err != nil {
+		return fmt.Errorf("读取 NVRAM 文件失败: %w", err)
+	}
+
+	toolPath, err := exec.LookPath("virt-fw-vars")
+	if err != nil {
+		return fmt.Errorf("未找到 virt-fw-vars，请安装 python3-virt-firmware")
+	}
+
+	tmpFile, err := os.CreateTemp(filepath.Dir(nvramPath), "."+filepath.Base(nvramPath)+".shim-*.qcow2")
+	if err != nil {
+		return fmt.Errorf("创建 NVRAM 临时文件失败: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("关闭 NVRAM 临时文件失败: %w", err)
+	}
+	_ = os.Remove(tmpPath)
+	defer os.Remove(tmpPath)
+
+	result := utils.ExecCommand(toolPath,
+		"--input", nvramPath,
+		"--output", tmpPath,
+		"--set-fallback-no-reboot",
+	)
+	if result.Error != nil {
+		return fmt.Errorf("写入 shim 连续引导标记失败: %s", firstNonEmpty(result.Stderr, result.Error.Error()))
+	}
+	if DetectQemuImageFormat(tmpPath) != "qcow2" {
+		return fmt.Errorf("写入后的 NVRAM 不是有效的 QCOW2 文件")
+	}
+	if err := os.Chmod(tmpPath, 0600); err != nil {
+		return fmt.Errorf("设置 NVRAM 文件权限失败: %w", err)
+	}
+	if err := utils.ChownLibvirtQEMU(tmpPath); err != nil {
+		return fmt.Errorf("设置 NVRAM 文件属主失败: %w", err)
+	}
+	if err := os.Rename(tmpPath, nvramPath); err != nil {
+		return fmt.Errorf("替换 NVRAM 文件失败: %w", err)
 	}
 	return nil
 }
@@ -645,15 +702,15 @@ func ExtractKernelFromISO(vmName, isoPath string) (kernel, initrd string, err er
 		return "", "", fmt.Errorf("创建内核提取目录失败: %w", err)
 	}
 
-	// 挂载 ISO
+	// 挂载 ISO（读取 ISO 属于 IO 操作，不设置自动超时）
 	mountPoint := fmt.Sprintf("/tmp/iso-mount-%s", vmName)
 	_ = os.MkdirAll(mountPoint, 0755)
-	result := utils.ExecCommand("mount", "-o", "loop,ro", isoPath, mountPoint)
+	result := utils.ExecCommandNoTimeout("mount", "-o", "loop,ro", isoPath, mountPoint)
 	if result.Error != nil {
 		return "", "", fmt.Errorf("挂载 ISO 失败: %s", firstNonEmpty(result.Stderr, result.Error.Error()))
 	}
 	defer func() {
-		_ = utils.ExecCommand("umount", mountPoint).Error
+		_ = utils.ExecCommandNoTimeout("umount", mountPoint).Error
 		_ = os.Remove(mountPoint)
 	}()
 
@@ -678,9 +735,9 @@ func ExtractKernelFromISO(vmName, isoPath string) (kernel, initrd string, err er
 		return "", "", fmt.Errorf("在 ISO 中未找到 vmlinuz")
 	}
 
-	// 复制内核
+	// 复制内核（从 ISO 读取并写入属于 IO 操作，不设置自动超时）
 	kernel = filepath.Join(extractDir, "vmlinuz")
-	cpResult := utils.ExecCommand("cp", kernelSrc, kernel)
+	cpResult := utils.ExecCommandNoTimeout("cp", kernelSrc, kernel)
 	if cpResult.Error != nil {
 		return "", "", fmt.Errorf("复制内核失败: %s", firstNonEmpty(cpResult.Stderr, cpResult.Error.Error()))
 	}
@@ -688,7 +745,7 @@ func ExtractKernelFromISO(vmName, isoPath string) (kernel, initrd string, err er
 	// 复制 initrd
 	if initrdSrc != "" {
 		initrd = filepath.Join(extractDir, "initrd.img")
-		cpResult = utils.ExecCommand("cp", initrdSrc, initrd)
+		cpResult = utils.ExecCommandNoTimeout("cp", initrdSrc, initrd)
 		if cpResult.Error != nil {
 			return "", "", fmt.Errorf("复制 initrd 失败: %s", firstNonEmpty(cpResult.Stderr, cpResult.Error.Error()))
 		}
