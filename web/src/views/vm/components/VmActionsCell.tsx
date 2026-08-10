@@ -217,7 +217,6 @@ export default function VmActionsCell({
             <IconMore />
           </span>
         </Dropdown>
-      )}
     </div>
   )
 }

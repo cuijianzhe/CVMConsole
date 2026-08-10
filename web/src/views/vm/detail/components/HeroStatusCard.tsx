@@ -124,7 +124,7 @@ export default function HeroStatusCard({
                   </Popconfirm>
                 )}
               </>
-            ) : (
+            ) : shutdownPending ? (
               <>
                 <Popconfirm
                   title="软重启：直接重置虚拟机（QEMU 进程保持运行，不等待系统优雅关机）。确定要继续吗？"
@@ -150,6 +150,7 @@ export default function HeroStatusCard({
                     强制断电
                   </Button>
                 </Popconfirm>
+              </>
               ) : (
                 <>
                   <Popconfirm title="确定要重启吗？" onConfirm={() => onPower('reboot')}>
@@ -175,7 +176,7 @@ export default function HeroStatusCard({
                   </Popconfirm>
                 </>
               )
-            )}
+            }
           </div>
 
           {/* 快捷操作 */}
