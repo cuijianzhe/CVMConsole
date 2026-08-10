@@ -8,8 +8,9 @@ import EditVmForm from '@/features/vm-form/EditVmForm'
 
 interface EditTabProps {
   vm: VmDetailInfo
+  onSaved?: (newName?: string) => void
 }
 
-export default function EditTab({ vm }: EditTabProps) {
-  return <EditVmForm vmName={vm.name} vmStatus={vm.status} />
+export default function EditTab({ vm, onSaved }: EditTabProps) {
+  return <EditVmForm vmName={vm.name} vmStatus={vm.status} onSaved={onSaved} />
 }

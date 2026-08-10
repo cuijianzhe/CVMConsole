@@ -339,7 +339,11 @@ export default function VmDetailPage() {
                 </span>
               }
             >
-              <EditTab vm={vmData} />
+              <EditTab vm={vmData} onSaved={(newName) => {
+                if (newName && newName !== vmName) {
+                  navigate(`/vm/detail/${encodeURIComponent(newName)}`, { replace: true })
+                }
+              }} />
             </TabPane>
           )}
         </Tabs>

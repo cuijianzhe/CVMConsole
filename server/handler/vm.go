@@ -1010,6 +1010,19 @@ func EditVm(c *gin.Context) {
 		}
 	}
 
+	// 重命名虚拟机（在所有其他编辑操作之后执行，避免操作中断后名称不匹配）
+	if req.NewName != "" {
+		if renameErr := service.RenameVM(name, req.NewName); renameErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"code":    400,
+				"message": renameErr.Error(),
+			})
+			return
+		}
+		// 名称已更新，后续缓存刷新使用新名称
+		name = req.NewName
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "配置修改成功",

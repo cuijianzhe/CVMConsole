@@ -732,6 +732,11 @@ func GetDomainState(vmName string) string {
 	return vmpkg.GetDomainState(vmName)
 }
 
+// RenameVM 重命名虚拟机（域必须关机，且新名称未被占用）
+func RenameVM(oldName, newName string) error {
+	return vmpkg.RenameVM(oldName, newName)
+}
+
 func QemuInfoChain(path string) ([]QemuImgInfo, error) {
 	return vmpkg.QemuInfoChain(path)
 }

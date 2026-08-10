@@ -57,8 +57,8 @@ interface EditVmFormProps {
   vmName: string
   /** 虚拟机实时状态（来自详情页 SSE） */
   vmStatus: string
-  /** 保存成功后回调（详情页用于刷新） */
-  onSaved?: () => void
+  /** 保存成功后回调（详情页用于刷新），传入当前表单中的虚拟机名称（重命名后为新名称） */
+  onSaved?: (newName?: string) => void
 }
 
 const NOOP_REGISTRATION = {
@@ -221,8 +221,14 @@ export default function EditVmForm({ vmName, vmStatus, onSaved }: EditVmFormProp
         }
       }
       Toast.success('配置修改成功' + spiceNote)
-      await loadDetail()
-      onSaved?.()
+      // 重命名时跳过 loadDetail（旧名称已失效），由父组件导航到新页面重新加载
+      const wasRenamed = payload.new_name !== undefined && payload.new_name !== vmName
+      if (wasRenamed) {
+        onSaved?.(form.form.name)
+      } else {
+        await loadDetail()
+        onSaved?.()
+      }
     } catch {
       // 错误提示由请求层统一处理
     } finally {
@@ -266,7 +272,17 @@ export default function EditVmForm({ vmName, vmStatus, onSaved }: EditVmFormProp
             <SectionCard icon={<IconInfoCircle />} title="虚拟机信息">
               <div className="qvm-vf-grid-2">
                 <FormField label="虚拟机名称">
-                  <Input value={form.form.name} disabled />
+                  <Input
+                    value={form.form.name}
+                    disabled={loadedStatus !== 'shut off'}
+                    onChange={(v) => form.setField('name', v)}
+                    placeholder="虚拟机名称"
+                  />
+                  {loadedStatus !== 'shut off' && (
+                    <div style={{ fontSize: 12, color: 'var(--qvm-text-3)', marginTop: 4 }}>
+                      名称仅可在关机状态下修改
+                    </div>
+                  )}
                 </FormField>
                 <FormField label="状态">
                   <div className="qvm-vf-switch-row">

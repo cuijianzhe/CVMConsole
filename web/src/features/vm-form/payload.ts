@@ -454,6 +454,9 @@ export const buildEditPayload = (form: VmFormModel, ctx: EditBuildContext): Upda
   const running = ctx.vmStatus === 'running'
   const runningOrPaused = running || ctx.vmStatus === 'paused'
 
+  // 虚拟机名称变更（仅关机时可提交，前端已限制编辑）
+  if (form.name !== snap.name) payload.new_name = form.name
+
   if (form.vcpu !== snap.vcpu) payload.vcpu = form.vcpu
   const maxVcpu = buildCpuHotplugMaxVCPU(form, ctx.hostCores)
   if (maxVcpu !== snap.max_vcpu) payload.max_vcpu = maxVcpu
@@ -560,6 +563,7 @@ export const captureEditFormSnapshot = (
   isAdmin: boolean,
   editBootDevices: EditBootDevice[],
 ): EditFormSnapshot => ({
+  name: form.name,
   vcpu: form.vcpu,
   max_vcpu: buildCpuHotplugMaxVCPU(form, hostCores),
   memory: form.memory,

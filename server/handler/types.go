@@ -20,6 +20,7 @@ type ResetLinuxPasswordRequest struct {
 
 // VmEditRequest 虚拟机编辑请求
 type VmEditRequest struct {
+	NewName         string                            `json:"new_name"`           // 重命名虚拟机（仅关机时生效）
 	VCPU            int                               `json:"vcpu"`
 	MaxVCPU         int                               `json:"max_vcpu,omitempty"` // CPU 热添加上限，0 或 <= vcpu 表示不启用
 	Memory          int                               `json:"memory"`             // GB

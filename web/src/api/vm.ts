@@ -265,6 +265,7 @@ export interface VgpuInstancePayload {
 
 /** 编辑虚拟机提交载荷（仅发送变化字段，后端逐项应用） */
 export interface UpdateVmPayload {
+  new_name?: string // 重命名虚拟机（仅关机时生效）
   remark?: string
   group?: string
   tags?: string[]

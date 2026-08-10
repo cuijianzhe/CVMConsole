@@ -215,6 +215,7 @@ export type EditBootDevice = VmBootDevice
 
 /** 编辑模式快照（提交时仅发送变化字段） */
 export interface EditFormSnapshot {
+  name: string
   vcpu: number
   max_vcpu: number
   memory: number
