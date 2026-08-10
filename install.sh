@@ -36,6 +36,12 @@ PORT_FORWARD_DIR="/etc/kvm-portforward"
 VM_ACCESS_DIR="/etc/libvirt/vm-access"
 FIREWALL_DIR="/etc/kvm-console/firewall"
 VPC_CONFIG_DIR="/etc/kvm-console/vpc"
+COMPATIBILITY_CHECK_SCRIPT="check-system-compatibility.sh"
+COMPATIBILITY_WARNING=0
+COMPATIBILITY_SKIPPED=0
+COMPATIBILITY_CHECK_URL=""
+COMPATIBILITY_REPORT_DIR="/tmp/kvm-console-compat-reports"
+INSTALL_LAUNCH_DIR="$(pwd)"
 
 MODE=""
 KVM_PORT=""
