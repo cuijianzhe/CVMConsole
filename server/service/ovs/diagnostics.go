@@ -213,6 +213,14 @@ func GetVMNetworkRuntimeStatus(vmName string) (*VMNetworkRuntimeStatus, error) {
 	for _, item := range runtimeIfaces {
 		runtimeByMAC[NormalizeMAC(item.MAC)] = item
 	}
+	agentIPsByMAC := make(map[string][]string)
+	if running {
+		if agentIPs, err := guest_agent.GetVMGuestAgentIPs(vmName); err == nil {
+			for _, item := range agentIPs {
+				agentIPsByMAC[NormalizeMAC(item.MAC)] = item.IPs
+			}
+		}
+	}
 
 	// 获取 VM 的 MAC -> interface_order 映射
 	ifaceOrderMap := make(map[string]int)
@@ -251,7 +259,23 @@ func GetVMNetworkRuntimeStatus(vmName string) (*VMNetworkRuntimeStatus, error) {
 		if item.Target != "" && item.Target != "-" {
 			item.OFPort = bwpkg.GetOVSInterfaceOfPort(item.Target)
 		}
-		item.IP, item.IPSource = resolveVMIPByMAC(vmName, item.MAC, item.SourceBridge, running)
+		// 优先从 Guest Agent 获取 IP 列表（上游修复：支持多 IP 场景）
+		if agentIPs := agentIPsByMAC[item.MAC]; len(agentIPs) > 0 {
+			item.IPSource = "guest_agent"
+			for _, ip := range agentIPs {
+				item.IPAddresses = append(item.IPAddresses, VMIPAddress{Address: ip, Source: item.IPSource})
+				parsed := net.ParseIP(ip)
+				if item.IP == "" && parsed != nil && parsed.To4() != nil {
+					item.IP = ip
+				}
+			}
+		} else {
+			// 回退到宿主机侧解析（保留本地 SourceBridge 参数）
+			item.IP, item.IPSource = resolveVMIPByMAC(vmName, item.MAC, item.SourceBridge, running)
+			if item.IP != "" {
+				item.IPAddresses = []VMIPAddress{{Address: item.IP, Source: item.IPSource}}
+			}
+		}
 		if item.SourceBridge == status.Bridge && item.VirtualPortType == "" {
 			item.Issues = append(item.Issues, "网卡接入 OVS 网桥但缺少 openvswitch virtualport")
 		}

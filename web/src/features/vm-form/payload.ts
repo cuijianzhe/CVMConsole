@@ -324,6 +324,7 @@ export const buildBatchClonePayload = (
     hostname: form.hostname || '', // 用户自定义主机名作为前缀，后端追加编号后缀（如 myserver-01）；留空则自动随机生成
     template_user: initUser,
     extra_disks: buildExtraDisksPayload(form),
+    pcie_root_ports: form.pcie_root_ports,
   }
   const cpuLimitPercent = buildCPULimitPercentPayload(form, ctx.isAdmin)
   if (cpuLimitPercent !== undefined) payload.cpu_limit_percent = cpuLimitPercent

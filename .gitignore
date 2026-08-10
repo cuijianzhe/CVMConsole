@@ -7,6 +7,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+# 环境变量（含密钥，不纳入版本控制）
+.env
+server/.env
 server/data
 
 node_modules
@@ -14,7 +17,6 @@ dist
 dist-ssr
 *.local
 .vscode
-scripts/
 # 保留前端脚本目录及其内容，不纳入全局 scripts/ 忽略规则
 !web/scripts/
 !web/scripts/**

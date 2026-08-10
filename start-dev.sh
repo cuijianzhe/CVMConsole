@@ -93,6 +93,9 @@ export KVM_LOG_CONSOLE_LEVEL="warn"
 #export KVM_TMPDIR="${KVM_TMPDIR:-}"
 # ====================================================
 
+# go-sqlite3 依赖 CGO，必须显式开启
+export CGO_ENABLED=1
+
 info "启动后端 (air 热重载)..."
 cd "$SERVER_DIR" && KVM_DEVELOPMENT_MODE=true air &
 BACKEND_PID=$!

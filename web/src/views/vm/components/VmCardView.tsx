@@ -20,7 +20,8 @@ interface VmCardViewProps {
   vms: VmListItem[]
   selectedKeys: string[]
   onToggleSelect: (name: string, checked: boolean) => void
-  operatingMap: Record<string, boolean>
+  operatingMap: Record<string, VmPowerAction | undefined>
+  shutdownPendingMap: Record<string, boolean | undefined>
   isAdmin: boolean
   isLightweight: boolean
   onPower: (vm: VmListItem, action: VmPowerAction) => void
@@ -36,6 +37,7 @@ export default function VmCardView({
   selectedKeys,
   onToggleSelect,
   operatingMap,
+  shutdownPendingMap,
   isAdmin,
   isLightweight,
   onPower,
@@ -99,7 +101,8 @@ export default function VmCardView({
               vm={vm}
               isAdmin={isAdmin}
               isLightweight={isLightweight}
-              operating={!!operatingMap[vm.name]}
+              pendingPowerAction={operatingMap[vm.name]}
+              shutdownAcknowledged={!!shutdownPendingMap[vm.name]}
               onPower={onPower}
               onMenu={onMenu}
               onConsole={onConsole}
