@@ -51,7 +51,8 @@ var (
 // initTaskIDSeq 从数据库初始化任务 ID 序列
 func initTaskIDSeq() {
 	var maxID uint
-	if err := model.DB.Model(&model.Task{}).Select("MAX(id)").Scan(&maxID).Error; err != nil {
+	// COALESCE 避免空表时 NULL → uint scan 报错
+	if err := model.DB.Model(&model.Task{}).Select("COALESCE(MAX(id), 0)").Scan(&maxID).Error; err != nil {
 		logger.App.Warn("初始化任务ID序列失败，从1开始", "error", err)
 		maxID = 0
 	}
