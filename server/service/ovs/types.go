@@ -128,12 +128,30 @@ type OVSCheckResult struct {
 
 // VMNetworkRuntimeStatus describes the network runtime status of a VM.
 type VMNetworkRuntimeStatus struct {
-	VMName     string                 `json:"vm_name"`
-	State      string                 `json:"state"`
-	Bridge     string                 `json:"bridge"`
-	Interfaces []VMNetworkInterface   `json:"interfaces"`
-	Bandwidth  OVSBandwidthReadStatus `json:"bandwidth"`
-	Issues     []string               `json:"issues"`
+	VMName              string                 `json:"vm_name"`
+	State               string                 `json:"state"`
+	Bridge              string                 `json:"bridge"`
+	Interfaces          []VMNetworkInterface   `json:"interfaces"`
+	Bandwidth           OVSBandwidthReadStatus `json:"bandwidth"`
+	PortSecurityEnabled bool                   `json:"port_security_enabled"`
+	Issues              []string               `json:"issues"`
+}
+
+// VMPortSecurityStatus 描述单张虚拟机网卡的防护运行态。
+type VMPortSecurityStatus struct {
+	Mode                  string   `json:"mode"`
+	AllowedIPv4Addresses  []string `json:"allowed_ipv4_addresses"`
+	AllowedIPv6Addresses  []string `json:"allowed_ipv6_addresses"`
+	NeighborMeterID       uint32   `json:"neighbor_meter_id,omitempty"`
+	BroadcastMeterID      uint32   `json:"broadcast_meter_id,omitempty"`
+	PolicingKpps          int      `json:"policing_kpps"`
+	PolicingBurstKPackets int      `json:"policing_burst_kpackets"`
+	DropPackets           uint64   `json:"drop_packets"`
+	NeighborDropPackets   uint64   `json:"neighbor_drop_packets"`
+	BroadcastDropPackets  uint64   `json:"broadcast_drop_packets"`
+	Applied               bool     `json:"applied"`
+	Isolated              bool     `json:"isolated"`
+	LastError             string   `json:"last_error,omitempty"`
 }
 
 // VMIPAddress 描述网卡上的单个 IP 地址及其来源。
@@ -158,6 +176,7 @@ type VMNetworkInterface struct {
 	IP              string        `json:"ip"`
 	IPSource        string        `json:"ip_source"`
 	Issues          []string      `json:"issues"`
+	PortSecurity  *VMPortSecurityStatus  `json:"port_security,omitempty"`
 }
 
 // OVSBandwidthReadStatus describes the OVS bandwidth QoS read status.

@@ -258,7 +258,8 @@ func importVMWindowsDefine(params *ImportVMParams, destDiskPath, format string, 
 	}
 	preserveNVRAM = true
 
-	err = importVMPostDefine(params.Name, srcDiskPath, destDiskPath, params.CopyDisk, memoryMeta, params.Remark, params.Freeze, params.StartAfterImport)
+	err = importVMPostDefine(params.Name, srcDiskPath, destDiskPath, params.CopyDisk, memoryMeta, params.Remark, params.Freeze, params.StartAfterImport,
+		params.Username, params.SwitchID, params.SecurityGroupID, params.AllowedIPv4Addresses, params.AllowedIPv6Addresses)
 	return err, isoPath != ""
 }
 
@@ -494,7 +495,8 @@ func importDiskByPathWindowsDefine(params *ImportDiskByPathParams, destDiskPath,
 	}
 	preserveNVRAM = true
 
-	err = importVMPostDefine(params.Name, mainDiskSrc, destDiskPath, params.CopyDisk, memoryMeta, params.Remark, params.Freeze, params.StartAfterImport)
+	err = importVMPostDefine(params.Name, mainDiskSrc, destDiskPath, params.CopyDisk, memoryMeta, params.Remark, params.Freeze, params.StartAfterImport,
+		params.Username, params.SwitchID, params.SecurityGroupID, params.AllowedIPv4Addresses, params.AllowedIPv6Addresses)
 	return err, isoPath != ""
 }
 

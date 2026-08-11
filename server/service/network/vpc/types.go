@@ -28,6 +28,8 @@ type VPCSwitchRequest struct {
 	BandwidthMbps     int     `json:"bandwidth_mbps"` // 兼容旧版字段，传入时同时作为上下行默认值
 	BandwidthDownMbps int     `json:"bandwidth_down_mbps"`
 	BandwidthUpMbps   int     `json:"bandwidth_up_mbps"`
+	IPv6SecurityEnabled   bool   `json:"ipv6_security_enabled,omitempty"`
+	TrustedIPv6Prefixes   string `json:"trusted_ipv6_prefixes,omitempty"`
 }
 
 type VPCSecurityGroupRequest struct {
@@ -80,6 +82,8 @@ type AddVMInterfaceRequest struct {
 	NicModel             string `json:"nic_model"`
 	BandwidthInboundAvg  int    `json:"bandwidth_inbound_avg"`
 	BandwidthOutboundAvg int    `json:"bandwidth_outbound_avg"`
+	AllowedIPv4Addresses string `json:"allowed_ipv4_addresses"`
+	AllowedIPv6Addresses string `json:"allowed_ipv6_addresses"`
 }
 
 // VMInterfaceInfo 网口信息

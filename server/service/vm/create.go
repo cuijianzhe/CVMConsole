@@ -61,6 +61,10 @@ type CreateVMParams struct {
 	ExtraNics       []AddVMInterfaceRequest        `json:"extra_nics,omitempty"`
 	StoragePoolID   string                         `json:"storage_pool_id,omitempty"`
 	HostDevices     []HostDeviceParam              `json:"host_devices,omitempty"` // 硬件直通设备
+	// 端口安全相关（ISOCreate/CreateVMLegacy 链路注入）
+	Owner                  string `json:"owner,omitempty"`                    // 虚拟机所有者用户名
+	AllowedIPv4Addresses   string `json:"allowed_ipv4_addresses,omitempty"`   // 允许的 IPv4 地址（逗号/换行分隔）
+	AllowedIPv6Addresses   string `json:"allowed_ipv6_addresses,omitempty"`   // 允许的 IPv6 地址（逗号/换行分隔）
 	IsAdmin         bool                           `json:"is_admin,omitempty"`
 	PCIERootPorts   int                            `json:"pcie_root_ports,omitempty"` // q35 机型预留 pcie-root-port 数量，0 表示使用默认 6
 	FirmwareCompat  *bool                          `json:"firmware_compat,omitempty"` // UEFI 固件兼容模式（ARM 专用，使用旧版 EDK2）
@@ -688,6 +692,13 @@ func CreateVM(params *CreateVMParams, progressFn func(int, string)) (string, err
 		}
 		if len(extraDiskFailures) > 0 {
 			logger.App.Warn("虚拟机额外磁盘部分失败", "vm", params.Name, "failures", strings.Join(extraDiskFailures, "; "))
+		}
+	}
+	if D.PrepareVMPortSecurityBinding != nil {
+		if err := D.PrepareVMPortSecurityBinding(params.Owner, params.Name, params.SwitchID, params.SecurityGroupID, params.AllowedIPv4Addresses, params.AllowedIPv6Addresses); err != nil {
+			utils.ExecCommand("virsh", "undefine", params.Name, "--nvram", "--snapshots-metadata")
+			_ = os.Remove(diskPath)
+			return "", fmt.Errorf("启动前准备端口安全绑定失败(已清理资源): %w", err)
 		}
 	}
 

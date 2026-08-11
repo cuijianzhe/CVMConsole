@@ -427,6 +427,12 @@ func defaultVMCacheBuildRecordFromHost(name string, syncedAt time.Time) (model.V
 	record.BandwidthIn, record.BandwidthOut = D.GetVMBandwidthMbps(name)
 	record.InRescue = D.IsInRescueMode(name)
 	record.CachedIP = ip_resolver.GetVMIP(name, strings.EqualFold(record.Status, "running"))
+	allIPs := ip_resolver.GetAllVMIPs(name, strings.EqualFold(record.Status, "running"))
+	if len(allIPs) > 0 {
+		if encoded, err := json.Marshal(allIPs); err == nil {
+			record.CachedIPs = string(encoded)
+		}
+	}
 
 	return record, nil
 }

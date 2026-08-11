@@ -116,6 +116,9 @@ type Deps struct {
 	// ---- Migration hook ----
 	HookEnsureVMNotMigrating func(vmName, action string) error
 
+	// ---- 端口安全 ----
+	PrepareVMPortSecurityBinding func(owner, vmName string, switchID, securityGroupID uint, allowedIPv4, allowedIPv6 string) error
+
 	// ---- SPICE graphics（创建即带，默认本地监听） ----
 	InjectSPICEGraphics   func(xmlStr, passwd, listenAddr string) string
 	EnsureQXLVideo        func(xmlStr string) string

@@ -11,6 +11,7 @@ import (
 	"kvm_console/config"
 	"kvm_console/logger"
 	"kvm_console/service/libvirt_rpc"
+	"kvm_console/service/vm"
 	"kvm_console/service/vm/memory"
 	"kvm_console/service/vm_xml"
 	"kvm_console/utils"
@@ -57,6 +58,10 @@ type LinkedCloneParams struct {
 	IsAdmin             bool                    `json:"is_admin,omitempty"`
 	PCIERootPorts       int                     `json:"pcie_root_ports,omitempty"` // q35 预留 pcie-root-port 数量
 	NestedVirt          *bool                   `json:"nested_virt,omitempty"`     // 嵌套虚拟化开关
+	Owner                string                         `json:"-"`
+	AllowedIPv4Addresses string                         `json:"allowed_ipv4_addresses,omitempty"`
+	AllowedIPv6Addresses string                         `json:"allowed_ipv6_addresses,omitempty"`
+	HostDevices          []vm.HostDeviceParam           `json:"host_devices,omitempty"`
 }
 
 // LinkedCloneResult 原生链式克隆结果
@@ -404,6 +409,12 @@ func LinkedCloneVM(ctx context.Context, params *LinkedCloneParams, progressFn fu
 		}); err != nil {
 			cleanupLinkedCloneArtifacts(params.Name, cloneDisk)
 			return nil, err
+		}
+	}
+	if D.PrepareVMPortSecurityBinding != nil {
+		if err := D.PrepareVMPortSecurityBinding(params.Owner, params.Name, params.SwitchID, params.SecurityGroupID, params.AllowedIPv4Addresses, params.AllowedIPv6Addresses); err != nil {
+			cleanupLinkedCloneArtifacts(params.Name, cloneDisk)
+			return nil, fmt.Errorf("启动前准备端口安全绑定失败: %w", err)
 		}
 	}
 

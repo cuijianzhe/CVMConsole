@@ -53,6 +53,8 @@ type ImportVMParams struct {
 	KVMHidden        *bool                             `json:"kvm_hidden,omitempty"` // 隐藏 KVM 标志
 	VendorID         string                            `json:"vendor_id,omitempty"`  // Hyper-V vendor_id 伪装
 	UserData         string                            `json:"user_data,omitempty"`  // cloud-init UserData 扩展
+	AllowedIPv4Addresses string                         `json:"allowed_ipv4_addresses,omitempty"`
+	AllowedIPv6Addresses string                         `json:"allowed_ipv6_addresses,omitempty"`
 }
 
 // ImportVMResult 导入结果
@@ -109,6 +111,8 @@ type ImportDiskByPathParams struct {
 	KVMHidden        *bool                             `json:"kvm_hidden,omitempty"`         // 隐藏 KVM 标志
 	VendorID         string                            `json:"vendor_id,omitempty"`          // Hyper-V vendor_id 伪装
 	UserData         string                            `json:"user_data,omitempty"`          // cloud-init UserData 扩展
+	AllowedIPv4Addresses string                         `json:"allowed_ipv4_addresses,omitempty"`
+	AllowedIPv6Addresses string                         `json:"allowed_ipv6_addresses,omitempty"`
 	// trustedApplianceSource 仅在虚拟机包完成归档、路径和清单校验后由任务内部设置。
 	trustedApplianceSource bool
 }

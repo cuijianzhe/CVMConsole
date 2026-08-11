@@ -16,4 +16,7 @@ var (
 	// HookGetVMInterfaceOrderByMAC returns the interface_order mapping for a VM.
 	// Returns a map of MAC address to interface_order.
 	HookGetVMInterfaceOrderByMAC func(vmName string) map[string]int
+
+	// HookGetVMPortSecurityStatus 获取虚拟机逐端口防护状态。
+	HookGetVMPortSecurityStatus func(vmName string) (bool, map[string]VMPortSecurityStatus, error)
 )

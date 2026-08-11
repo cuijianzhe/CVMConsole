@@ -179,6 +179,7 @@ func bindVMToVPCWithSecurityGroupOwner(username, vmName string, switchID, securi
 	if err := ApplyVPCSwitchRuntime(vmName, sw); err != nil {
 		return err
 	}
+
 	return ApplyVPCACLRules()
 }
 
