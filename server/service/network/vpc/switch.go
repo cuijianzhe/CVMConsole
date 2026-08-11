@@ -42,6 +42,9 @@ func CreateVPCSwitch(operator, role string, req VPCSwitchRequest) (*model.VPCSwi
 	if err := validateBridgeVLANID(bridgeMode, req.BridgeVLANID); err != nil {
 		return nil, err
 	}
+	if err := normalizeSwitchPortSecurityFields(&req, bridgeMode == BridgeModeDirect); err != nil {
+		return nil, err
+	}
 	if _, err := EnsureDefaultSecurityGroup(username); err != nil {
 		return nil, err
 	}
@@ -80,6 +83,8 @@ func CreateVPCSwitch(operator, role string, req VPCSwitchRequest) (*model.VPCSwi
 		AllowPromiscuous:     bridgeMode == BridgeModeDirect && req.AllowPromiscuous,
 		AllowMACChange:       bridgeMode == BridgeModeDirect && req.AllowMACChange,
 		AllowForgedTransmits: bridgeMode == BridgeModeDirect && req.AllowForgedTx,
+		IPv6SecurityEnabled:  bridgeMode == BridgeModeDirect && req.IPv6SecurityEnabled,
+		TrustedIPv6Prefixes:  req.TrustedIPv6Prefixes,
 		VLANID:               vlanID,
 		CIDR:                 cidr,
 		GatewayIP:            gateway,
@@ -96,6 +101,9 @@ func CreateVPCSwitch(operator, role string, req VPCSwitchRequest) (*model.VPCSwi
 	}
 	if err := EnsureVPCSwitchRuntime(*sw); err != nil {
 		return sw, err
+	}
+	if HookTriggerPortSecurityReconcile != nil {
+		HookTriggerPortSecurityReconcile()
 	}
 	return sw, nil
 }
@@ -155,6 +163,9 @@ func UpdateVPCSwitch(operator, role string, id uint, req VPCSwitchRequest) (*mod
 			sw.BridgeIPMode = newIPMode
 		}
 	}
+	if err := normalizeSwitchPortSecurityFields(&req, HookSwitchUsesDirectBridge(sw)); err != nil {
+		return nil, err
+	}
 	if !HookSwitchUsesDirectBridge(sw) {
 		if strings.TrimSpace(req.CIDR) != "" && strings.TrimSpace(req.CIDR) != sw.CIDR {
 			return nil, fmt.Errorf("暂不支持修改交换机网段，请删除后重新创建")
@@ -171,10 +182,14 @@ func UpdateVPCSwitch(operator, role string, id uint, req VPCSwitchRequest) (*mod
 		sw.AllowPromiscuous = req.AllowPromiscuous
 		sw.AllowMACChange = req.AllowMACChange
 		sw.AllowForgedTransmits = req.AllowForgedTx
+		sw.IPv6SecurityEnabled = req.IPv6SecurityEnabled
+		sw.TrustedIPv6Prefixes = req.TrustedIPv6Prefixes
 	} else {
 		sw.AllowPromiscuous = false
 		sw.AllowMACChange = false
 		sw.AllowForgedTransmits = false
+		sw.IPv6SecurityEnabled = false
+		sw.TrustedIPv6Prefixes = ""
 	}
 	sw.TrafficDownGB = req.TrafficDownGB
 	sw.TrafficUpGB = req.TrafficUpGB
@@ -198,6 +213,9 @@ func UpdateVPCSwitch(operator, role string, id uint, req VPCSwitchRequest) (*mod
 	CheckVPCSwitchTrafficAfterQuotaUpdate(sw.ID)
 	_ = EnsureVPCSwitchRuntime(sw)
 	fillVPCSwitchUsageForResponse(&sw)
+	if HookTriggerPortSecurityReconcile != nil {
+		HookTriggerPortSecurityReconcile()
+	}
 	return &sw, nil
 }
 
@@ -353,9 +371,9 @@ func allocateVPCVLANID() (int, error) {
 }
 
 const (
-		BridgeIPModeUpstream = "upstream"
-		BridgeIPModePreset   = "preset"
-	)
+	BridgeIPModeUpstream = "upstream"
+	BridgeIPModePreset   = "preset"
+)
 
 func normalizeBridgeIPMode(mode string) string {
 	mode = strings.TrimSpace(strings.ToLower(mode))

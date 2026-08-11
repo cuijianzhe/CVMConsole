@@ -126,7 +126,9 @@ func BatchCloneVM(ctx context.Context, params *BatchCloneParams, progressFn func
 				NestedVirt:          params.NestedVirt,
 				KVMHidden:           params.KVMHidden,
 				VendorID:            params.VendorID,
-			}
+			AllowedIPv4Addresses: params.AllowedIPv4Addresses,
+			AllowedIPv6Addresses: params.AllowedIPv6Addresses,
+		}
 
 			subProgress := func(_ int, msg string) {
 				logger.App.Info("批量克隆", "vm", vmName, "msg", msg)

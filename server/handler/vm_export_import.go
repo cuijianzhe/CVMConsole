@@ -186,6 +186,8 @@ type ImportVMRequest struct {
 	SecurityGroupID  uint                              `json:"security_group_id"`
 	StartAfterImport *bool                             `json:"start_after_import"`  // 导入完成后是否开启虚拟机，不传默认 true
 	UserData         string                            `json:"user_data,omitempty"` // cloud-init UserData 扩展
+	AllowedIPv4Addresses string   `json:"allowed_ipv4_addresses,omitempty"`
+	AllowedIPv6Addresses string   `json:"allowed_ipv6_addresses,omitempty"`
 }
 
 // ImportVMHandler 导入虚拟机（用户自助）
@@ -245,7 +247,7 @@ func ImportVMHandler(c *gin.Context) {
 	}
 	if role != "admin" {
 		// 仅当用户指定了交换机时才解析 VPC
-		if req.SwitchID != 0 {
+		if req.SwitchID != 0 || service.IsPortSecurityEnabled() {
 			switchID, securityGroupID, err := service.ResolveVPCForVMCreate(usernameStr, req.SwitchID, req.SecurityGroupID)
 			if err != nil {
 				c.JSON(http.StatusForbidden, gin.H{
@@ -295,6 +297,8 @@ func ImportVMHandler(c *gin.Context) {
 		SecurityGroupID:  req.SecurityGroupID,
 		IsAdmin:          role == "admin",
 		UserData:         req.UserData,
+		AllowedIPv4Addresses: req.AllowedIPv4Addresses,
+		AllowedIPv6Addresses: req.AllowedIPv6Addresses,
 	}
 	// 默认导入后开启虚拟机（向后兼容）
 	if req.StartAfterImport != nil {

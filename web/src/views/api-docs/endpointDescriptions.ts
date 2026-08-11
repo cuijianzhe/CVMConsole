@@ -49,11 +49,11 @@ export const fallbackGroupDescription = '未归入以上模块的通用接口。
 
 // 复用的请求体描述
 const vmCreateBody =
-  'JSON: name, remark, vcpu, max_vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], floppy_image, nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, watchdog, boot_order[], video_model(virtio/vga/vmvga/cirrus/ramfb/none，none=禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), cpu_limit_percent(仅管理员, 0-100), virt_type(kvm/qemu), arch(x86_64/aarch64/riscv64), memory_dynamic{dynamic_enabled,memory_backend,memory_initial,memory_min,memory_max,memory_auto_balloon,memory_current}, switch_id, security_group_id, storage_pool_id, extra_disks[{size,format,bus,storage_pool_id}], host_devices[{pci_address}](仅管理员), vgpu_instances[{uuid}](仅管理员,要挂载的vGPU实例UUID列表)'
+  'JSON: name, remark, vcpu, max_vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], floppy_image, nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, watchdog, boot_order[], video_model(virtio/vga/vmvga/cirrus/ramfb/none，none=禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), cpu_limit_percent(仅管理员, 0-100), virt_type(kvm/qemu), arch(x86_64/aarch64/riscv64), memory_dynamic{dynamic_enabled,memory_backend,memory_initial,memory_min,memory_max,memory_auto_balloon,memory_current}, switch_id, security_group_id, allowed_ipv4_addresses, allowed_ipv6_addresses, storage_pool_id, extra_nics[{switch_id,security_group_id,nic_model,allowed_ipv4_addresses,allowed_ipv6_addresses}], extra_disks[{size,format,bus,storage_pool_id}], host_devices[{pci_address}](仅管理员), vgpu_instances[{uuid}](仅管理员,要挂载的vGPU实例UUID列表)'
 const selfVmCreateBody =
-  'JSON: name, remark, vcpu, max_vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], floppy_image, nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, boot_order[], video_model(virtio/vga/vmvga/cirrus/ramfb/none，none=禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), memory_dynamic{dynamic_enabled,memory_backend,memory_initial,memory_min,memory_max,memory_auto_balloon,memory_current}, switch_id, security_group_id, storage_pool_id, extra_disks[{size,format,bus,storage_pool_id}]'
+  'JSON: name, remark, vcpu, max_vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], floppy_image, nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, boot_order[], video_model(virtio/vga/vmvga/cirrus/ramfb/none，none=禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), memory_dynamic{dynamic_enabled,memory_backend,memory_initial,memory_min,memory_max,memory_auto_balloon,memory_current}, switch_id, security_group_id, allowed_ipv4_addresses, allowed_ipv6_addresses, storage_pool_id, extra_nics[{switch_id,security_group_id,nic_model,allowed_ipv4_addresses,allowed_ipv6_addresses}], extra_disks[{size,format,bus,storage_pool_id}]'
 const cloneBody =
-  'JSON: template, name, remark, template_type, clone_mode(linked链式克隆/full完整克隆,默认linked), vcpu, ram, disk_size, disk_bus, hostname(可选,留空随机生成), user(可选,留空用模板默认), password(可选,留空单台随机生成/批量保留模板原密码), template_root_pass, template_user, switch_id, security_group_id, extra_nics[{nic_model,switch_id,security_group_id}], storage_pool_id, extra_disks[{size,format,bus,storage_pool_id,cloud_disk_spec_id,iops_total,iops_read,iops_write}], system_disk_iops(仅管理员), host_devices[{pci_address}](仅管理员), vgpu_instances[{uuid}](仅管理员,要挂载的vGPU实例UUID列表), nic_model, video_model(支持none禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode, cpu_limit_percent(仅管理员, 0-100), cpu_affinity(仅管理员,如0,2,4), first_boot_reboot_mode(normal/cold), memory_dynamic(动态内存请求), guest_agent, smbios1, uefi(bool), rtc_offset, rtc_startdate, disable_system_init(bool,禁用系统初始化), static_ip/gateway/dns(OpenWrt 静态网络), preserve_fnos_device_id/fnos_device_id(FnOS 可选), pcie_root_ports(q35预留pcie-root-port数量), autostart, freeze, apic, pae, kvm_hidden(bool), vendor_id(str), nested_virt(bool,默认true) 等克隆表单字段'
+  'JSON: template, name, remark, template_type, clone_mode(linked链式克隆/full完整克隆,默认linked), vcpu, ram, disk_size, disk_bus, hostname(可选,留空随机生成), user(可选,留空用模板默认), password(可选,留空单台随机生成/批量保留模板原密码), template_root_pass, template_user, switch_id, security_group_id, allowed_ipv4_addresses, allowed_ipv6_addresses, extra_nics[{switch_id,security_group_id,nic_model,allowed_ipv4_addresses,allowed_ipv6_addresses}], storage_pool_id, extra_disks[{size,format,bus,storage_pool_id,cloud_disk_spec_id,iops_total,iops_read,iops_write}], system_disk_iops(仅管理员), host_devices[{pci_address}](仅管理员), vgpu_instances[{uuid}](仅管理员,要挂载的vGPU实例UUID列表), nic_model, video_model(支持none禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode, cpu_limit_percent(仅管理员, 0-100), cpu_affinity(仅管理员,如0,2,4), first_boot_reboot_mode(normal/cold), memory_dynamic(动态内存请求), guest_agent, smbios1, uefi(bool), rtc_offset, rtc_startdate, disable_system_init(bool,禁用系统初始化), static_ip/gateway/dns(OpenWrt 静态网络), preserve_fnos_device_id/fnos_device_id(FnOS 可选), pcie_root_ports(q35预留pcie-root-port数量), autostart, freeze, apic, pae, kvm_hidden(bool), vendor_id(str), nested_virt(bool,默认true) 等克隆表单字段'
 const reinstallBody = 'JSON: template, disk_size, hostname, user, password, preserve_fnos_device_id, fnos_device_id'
 const scheduleBody = 'JSON: name, action(start/shutdown/destroy/reboot/delete), cron/execute_at, enabled, timezone, params'
 const portForwardBody =
@@ -62,7 +62,7 @@ const publicIPBody = 'JSON: address, cidr, gateway, iface, mac, vm_name, mode, r
 const firewallPolicyBody =
   'JSON: policy 或完整防火墙策略对象，包含 default_action, rules, region_rules, port_forward_policy 等'
 const vpcSwitchBody =
-  'JSON: name, cidr, gateway, dhcp_start, dhcp_end, vlan_id, dns, remark, username, bridge_mode, host_interface'
+  'JSON: name, bridge_name, bridge_vlan_id, cidr, gateway_ip, dhcp_start, dhcp_end, username, ipv6_security_enabled, trusted_ipv6_prefixes, allow_promiscuous, allow_mac_change, allow_forged_transmits'
 const securityGroupBody = 'JSON: name, remark, username'
 const securityRuleBody =
   'JSON: direction, protocol, port_start, port_end, target_type(cidr/switch/security_group), target_value, action, remark'
@@ -322,7 +322,7 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   'DELETE /vm/:name/schedules/:id': { summary: '删除虚拟机定时任务' },
   'GET /vm/:name/network/status': {
     summary: '读取 VM OVS 网络运行状态',
-    notes: ['每个接口含 ip / ip_source，优先 QEMU Guest Agent'],
+    notes: ['每个接口含 ip / ip_source，优先 QEMU Guest Agent；端口安全开启时同时返回策略模式、允许地址、meter、policing、丢包计数和异常原因。'],
   },
   'GET /vm/:name/network/diagnostics': { summary: '读取 VM 网络诊断信息' },
   'POST /vm/:name/network/capture': {
@@ -352,10 +352,10 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   },
   'PUT /vm/:name/security-group': { summary: '切换 VM 安全组', body: 'JSON: security_group_id' },
   'GET /vm/:name/interfaces': { summary: '列出 VM 所有网口' },
-  'POST /vm/:name/interfaces': { summary: '新增 VM 网口', body: 'JSON: switch_id, security_group_id, nic_model' },
+  'POST /vm/:name/interfaces': { summary: '新增 VM 网口', body: 'JSON: switch_id, security_group_id, nic_model, bandwidth_inbound_avg, bandwidth_outbound_avg, allowed_ipv4_addresses, allowed_ipv6_addresses' },
   'PUT /vm/:name/interfaces/:order': {
     summary: '更新 VM 指定网口',
-    body: 'JSON: switch_id, security_group_id, nic_model',
+    body: 'JSON: switch_id, security_group_id, nic_model, bandwidth_inbound_avg, bandwidth_outbound_avg, allowed_ipv4_addresses, allowed_ipv6_addresses',
   },
   'DELETE /vm/:name/interfaces/:order': { summary: '删除 VM 指定网口' },
   'DELETE /vm/:name': { summary: '删除虚拟机', body: 'JSON: delete_disks, transfer_disks, transfer_user' },
@@ -529,7 +529,8 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   'GET /template/list': { summary: '获取模板列表' },
   'POST /template/prepare': {
     summary: '制作模板',
-    body: 'JSON: vm_name, template_name, display_name, type, category, root_password, template_user',
+    body: 'JSON: vm_name, template_name, display_name, type, category, template_user, compress, transfer_mode(copy/move)。move 固定不压缩，成功后删除源虚拟机。',
+    notes: ['仅 transfer_mode=move 时触发 move_vm_disk_to_template 二次验证；未传 transfer_mode 时按 copy 兼容处理。'],
   },
   'POST /template/:name/prepare-linux': {
     summary: '预处理已导入 Linux 模板',
@@ -679,6 +680,19 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   'GET /ovs/leases': { summary: '读取 DHCP 租约' },
   'POST /ovs/check': { summary: '检查 OVS 网络' },
   'POST /ovs/repair': { summary: '修复 OVS 网络' },
+  'GET /ovs/port-security/status': {
+    summary: '读取端口安全总状态与逐端口诊断',
+    response: 'data: enabled, healthy, applied_ports, compatible_ports, isolated_ports, ports[], issues[], last_reconciled。',
+  },
+  'POST /ovs/port-security/preflight': {
+    summary: '预检端口安全能力与地址资料',
+    notes: ['只读检查，不切换总开关，也不替换现有流表。'],
+  },
+  'POST /ovs/port-security/enable': { summary: '异步启用端口安全防护' },
+  'POST /ovs/port-security/disable': { summary: '异步停用端口安全防护' },
+  'POST /ovs/port-security/reconcile': { summary: '异步协调全部端口安全策略' },
+  'POST /ovs/port-security/ports/:port/isolate': { summary: '异步手工隔离 OVS 端口' },
+  'POST /ovs/port-security/ports/:port/release': { summary: '异步释放手工隔离的 OVS 端口' },
 
   // ==================== 存储池 ====================
   'GET /storage-pool/list': { summary: '获取存储池列表' },

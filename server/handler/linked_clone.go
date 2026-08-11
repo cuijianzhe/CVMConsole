@@ -48,6 +48,9 @@ type LinkedCloneVmRequest struct {
 	ExtraDisks          []service.ExtraDiskParam          `json:"extra_disks"`
 	NicModel            string                            `json:"nic_model"`
 	SystemDiskIOPS      *service.DiskIOPSTune             `json:"system_disk_iops"` // 系统盘 IOPS 限制（仅管理员）
+	AllowedIPv4Addresses string   `json:"allowed_ipv4_addresses,omitempty"`
+	AllowedIPv6Addresses string   `json:"allowed_ipv6_addresses,omitempty"`
+	HostDevices          []service.HostDeviceParam `json:"host_devices,omitempty"`
 }
 
 // LinkedCloneVm 原生链式克隆虚拟机（异步任务）
@@ -152,6 +155,9 @@ func LinkedCloneVm(c *gin.Context) {
 		NicModel:            req.NicModel,
 		SystemDiskIOPS:      req.SystemDiskIOPS,
 		IsAdmin:             true,
+		AllowedIPv4Addresses: req.AllowedIPv4Addresses,
+		AllowedIPv6Addresses: req.AllowedIPv6Addresses,
+		HostDevices:          req.HostDevices,
 	}
 
 	username, _ := c.Get("username")

@@ -12,5 +12,5 @@ interface EditTabProps {
 }
 
 export default function EditTab({ vm, onSaved }: EditTabProps) {
-  return <EditVmForm vmName={vm.name} vmStatus={vm.status} onSaved={onSaved} />
+  return <EditVmForm vm={vm} live={true} liveTick={0} onSaved={onSaved} />
 }

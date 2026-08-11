@@ -61,7 +61,7 @@ export default function VmDetailPage() {
   const isAdmin = role === ROLES.admin
   const isLightweight = !isAdmin && cloudType === CLOUD_TYPES.lightweight
 
-  const { vmData, sseStatus, statusTick } = useVmDetailSSE(vmName)
+  const { vmData, sseStatus, statusTick, liveTick } = useVmDetailSSE(vmName)
   const [operating, setOperating] = useState(false)
   const [pendingPowerAction, setPendingPowerAction] = useState<VmPowerAction | null>(null)
   const [shutdownAcknowledged, setShutdownAcknowledged] = useState(false)
@@ -293,6 +293,8 @@ export default function VmDetailPage() {
             <InfoTab
               vm={vmData}
               isLightweight={isLightweight}
+              live={activeTab === 'info'}
+              liveTick={liveTick}
               onResetPassword={handleResetPassword}
               onReinstall={handleReinstall}
               onRemark={handleRemark}
@@ -311,7 +313,12 @@ export default function VmDetailPage() {
               </span>
             }
           >
-            <SnapshotTab vm={vmData} onQuotaChange={handleSnapshotQuotaChange} />
+            <SnapshotTab
+              vm={vmData}
+              live={activeTab === 'snapshot'}
+              liveTick={liveTick}
+              onQuotaChange={handleSnapshotQuotaChange}
+            />
           </TabPane>
           <TabPane
             itemKey="network"
@@ -321,7 +328,7 @@ export default function VmDetailPage() {
               </span>
             }
           >
-            <NetworkTab vm={vmData} />
+            <NetworkTab vm={vmData} live={activeTab === 'network'} liveTick={liveTick} />
           </TabPane>
           <TabPane
             itemKey="schedule"
@@ -331,7 +338,7 @@ export default function VmDetailPage() {
               </span>
             }
           >
-            <ScheduleTab vm={vmData} />
+            <ScheduleTab vm={vmData} live={activeTab === 'schedule'} liveTick={liveTick} />
           </TabPane>
           {virtualDisplayEnabled && (
             <TabPane
@@ -342,7 +349,12 @@ export default function VmDetailPage() {
                 </span>
               }
             >
-              <VncTab vm={vmData} onOpenWindow={handleOpenVncWindow} />
+              <VncTab
+                vm={vmData}
+                live={activeTab === 'vnc'}
+                liveTick={liveTick}
+                onOpenWindow={handleOpenVncWindow}
+              />
             </TabPane>
           )}
           {virtualDisplayEnabled && (
@@ -354,7 +366,7 @@ export default function VmDetailPage() {
                 </span>
               }
             >
-              <SpiceTab vm={vmData} />
+              <SpiceTab vm={vmData} live={activeTab === 'spice'} liveTick={liveTick} />
             </TabPane>
           )}
           {!isLightweight && vmData && (

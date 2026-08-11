@@ -157,8 +157,8 @@ export default function SecurityTab({ form, patch, saveBeforeAction, refresh }: 
         className="stg-banner"
         description={
           form.smtp_configured
-            ? 'SMTP 已配置，可用于邮箱绑定、邀请注册和密码找回。'
-            : 'SMTP 尚未配置，邮箱绑定、邀请注册和密码找回将不可用。'
+            ? 'SMTP 已配置，可用于邮箱绑定、密码找回。'
+            : 'SMTP 尚未配置，邮箱绑定、密码找回将不可用。'
         }
       />
 

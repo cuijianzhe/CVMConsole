@@ -221,6 +221,16 @@ func GetVMNetworkRuntimeStatus(vmName string) (*VMNetworkRuntimeStatus, error) {
 			}
 		}
 	}
+	portSecurityByPort := map[string]VMPortSecurityStatus{}
+	if HookGetVMPortSecurityStatus != nil {
+		enabled, portStatuses, err := HookGetVMPortSecurityStatus(vmName)
+		status.PortSecurityEnabled = enabled
+		if err != nil {
+			status.Issues = append(status.Issues, "读取端口安全状态失败: "+err.Error())
+		} else {
+			portSecurityByPort = portStatuses
+		}
+	}
 
 	// 获取 VM 的 MAC -> interface_order 映射
 	ifaceOrderMap := make(map[string]int)
@@ -258,6 +268,13 @@ func GetVMNetworkRuntimeStatus(vmName string) (*VMNetworkRuntimeStatus, error) {
 		}
 		if item.Target != "" && item.Target != "-" {
 			item.OFPort = bwpkg.GetOVSInterfaceOfPort(item.Target)
+			if portStatus, ok := portSecurityByPort[item.Target]; ok {
+				value := portStatus
+				item.PortSecurity = &value
+				if status.PortSecurityEnabled && (!value.Applied || value.LastError != "") {
+					item.Issues = append(item.Issues, "端口安全策略未正常应用")
+				}
+			}
 		}
 		// 优先从 Guest Agent 获取 IP 列表（上游修复：支持多 IP 场景）
 		if agentIPs := agentIPsByMAC[item.MAC]; len(agentIPs) > 0 {

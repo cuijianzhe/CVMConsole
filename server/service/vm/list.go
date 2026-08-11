@@ -172,6 +172,7 @@ func ListVMs(options ...VMListOptions) ([]VmInfo, error) {
 		// 仅在显式请求 include_ip 时才触发实时 IP 查询
 		if listOptions.IncludeIP && vm.IP == "" {
 			vm.IP = ip_resolver.GetVMIP(name, vm.Status == "running")
+			vm.IPs = ip_resolver.GetAllVMIPs(name, vm.Status == "running")
 		}
 		vm.IPStatus = ip_resolver.GetVMIPStatus(name, vm.Status == "running")
 
