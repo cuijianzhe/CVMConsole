@@ -133,6 +133,16 @@ export default function CloudDiskSpecPage() {
       render: (v: string) => <span className="cds-mono">{v}</span>,
     },
     {
+      title: '存储位置',
+      dataIndex: 'storage_location',
+      width: 140,
+      render: (v: string) => (
+        <span className="cds-mono" title={v || ''}>
+          {v || '默认'}
+        </span>
+      ),
+    },
+    {
       title: 'IOPS',
       width: 160,
       render: (_v: unknown, row: CloudDiskSpecItem) => (

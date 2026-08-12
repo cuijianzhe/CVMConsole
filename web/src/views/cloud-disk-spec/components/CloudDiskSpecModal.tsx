@@ -4,7 +4,7 @@
  * - 表单字段：名称、磁盘类型、容量、存储位置、磁盘格式、IOPS 模式与限速、描述
  */
 import { useEffect, useState } from 'react'
-import { Button, Input, InputNumber, Modal, Select, TextArea, Toast } from '@douyinfe/semi-ui'
+import { Button, Input, InputNumber, Modal, Select, Tag, TextArea, Toast } from '@douyinfe/semi-ui'
 import { IconSave } from '@douyinfe/semi-icons'
 import {
   createCloudDiskSpec,
@@ -14,6 +14,8 @@ import {
   type DiskFormat,
   type IOPSMode,
 } from '@/api/cloudDiskSpec'
+import { getVMStorageTargets, type VmStorageTarget } from '@/api/infra'
+import { formatBytes } from '@/utils/format'
 import { useMountModalLifecycle } from '@/hooks/useMountModalLifecycle'
 
 interface CloudDiskSpecModalProps {
@@ -61,6 +63,17 @@ export default function CloudDiskSpecModal({
   const { modalVisible, requestClose, afterModalClose } = useMountModalLifecycle(onExited)
   const [saving, setSaving] = useState(false)
   const isEdit = !!item
+  const [storageTargets, setStorageTargets] = useState<VmStorageTarget[]>([])
+  const [storageLoading, setStorageLoading] = useState(false)
+
+  // 加载存储位置列表
+  useEffect(() => {
+    setStorageLoading(true)
+    getVMStorageTargets()
+      .then((res) => setStorageTargets(res.data || []))
+      .catch(() => setStorageTargets([]))
+      .finally(() => setStorageLoading(false))
+  }, [])
 
   const [form, setForm] = useState<SpecForm>(() =>
     item
@@ -217,12 +230,26 @@ export default function CloudDiskSpecModal({
       {/* 存储位置 */}
       <div className="qvm-form-item" style={{ marginTop: 12 }}>
         <div className="qvm-form-label">存储位置</div>
-        <Input
-          value={form.storage_location}
-          onChange={(v) => patchForm({ storage_location: v })}
+        <Select
+          value={form.storage_location || undefined}
+          onChange={(v) => patchForm({ storage_location: String(v) })}
           placeholder="留空则使用默认存储池"
-          maxLength={200}
-        />
+          style={{ width: '100%' }}
+          loading={storageLoading}
+          allowClear
+        >
+          {storageTargets.map((target) => (
+            <Select.Option key={target.id} value={target.id}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>{target.display_name}</span>
+                {target.is_default && <Tag size="small" color="blue">默认</Tag>}
+                {target.available !== undefined && (
+                  <Tag size="small" color="grey">{formatBytes(target.available)} 可用</Tag>
+                )}
+              </div>
+            </Select.Option>
+          ))}
+        </Select>
       </div>
 
       {/* IOPS 限速 */}
