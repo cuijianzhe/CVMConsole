@@ -48,6 +48,7 @@ docs-web
 tmp/
 .qoder/
 .claude/
+.omo/
 
 # Frontend backup (参考备份)
 web-backup/

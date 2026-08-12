@@ -18,6 +18,7 @@ interface RuleDialogProps {
 
 interface RuleFormState {
   direction: string
+  address_family: 'ipv4' | 'ipv6'
   protocol: string
   port_text: string
   port_all: boolean
@@ -28,6 +29,7 @@ interface RuleFormState {
 
 const INITIAL_FORM: RuleFormState = {
   direction: 'ingress',
+  address_family: 'ipv4',
   protocol: 'tcp',
   port_text: '',
   port_all: false,
@@ -43,25 +45,56 @@ export default function RuleDialog({ group, switches, securityGroups, onClose, o
 
   const patch = (p: Partial<RuleFormState>) => setForm((f) => ({ ...f, ...p }))
 
+  // 仅展示与当前安全组属于同一用户的资源：管理员视图下 switches/securityGroups 可能包含所有用户的数据，
+  // 而每个用户都有一个名为"默认安全组"的项，不过滤会因同名导致下拉框无法区分且后端也按用户校验拒绝跨用户选择
   const switchOptions = useMemo(
-    () => switches.map((s) => ({ value: String(s.id), label: `${s.name} (${s.cidr})` })),
-    [switches],
+    () =>
+      switches
+        .filter((s) => s.username === group.username)
+        .map((s) => ({ value: String(s.id), label: `${s.name} (${s.cidr})` })),
+    [switches, group.username],
   )
   const groupOptions = useMemo(
-    () => securityGroups.map((g) => ({ value: String(g.id), label: g.name })),
-    [securityGroups],
+    () =>
+      securityGroups
+        .filter((g) => g.username === group.username)
+        .map((g) => ({ value: String(g.id), label: g.name })),
+    [securityGroups, group.username],
   )
 
   const targetHelp =
     form.target_type === 'cidr'
-      ? '支持 IPv4 地址或 CIDR 格式，如 0.0.0.0/0 表示所有'
+      ? form.address_family === 'ipv6'
+        ? '支持 IPv6 地址或 CIDR，如 ::/0 表示所有 IPv6 来源'
+        : '支持 IPv4 地址或 CIDR，如 0.0.0.0/0 表示所有 IPv4 来源'
       : form.target_type === 'switch'
-        ? '选择当前用户可访问的交换机'
-        : '选择当前用户拥有的安全组'
+        ? `选择当前用户可访问的交换机，仅匹配其中的 ${form.address_family === 'ipv6' ? 'IPv6' : 'IPv4'} 地址`
+        : `选择当前用户拥有的安全组，仅匹配其中的 ${form.address_family === 'ipv6' ? 'IPv6' : 'IPv4'} 地址`
+
+  const handleAddressFamilyChange = (family: 'ipv4' | 'ipv6') => {
+    patch({
+      address_family: family,
+      protocol:
+        form.protocol === 'icmp' || form.protocol === 'icmpv6'
+          ? family === 'ipv6'
+            ? 'icmpv6'
+            : 'icmp'
+          : form.protocol,
+      target_value:
+        form.target_type === 'cidr'
+          ? family === 'ipv6'
+            ? '::/0'
+            : '0.0.0.0/0'
+          : form.target_value,
+    })
+  }
 
   const handleTargetTypeChange = (type: string) => {
     if (type === 'cidr') {
-      patch({ target_type: type, target_value: '0.0.0.0/0' })
+      patch({
+        target_type: type,
+        target_value: form.address_family === 'ipv6' ? '::/0' : '0.0.0.0/0',
+      })
       return
     }
     const first = type === 'switch' ? switchOptions[0]?.value : groupOptions[0]?.value
@@ -73,7 +106,7 @@ export default function RuleDialog({ group, switches, securityGroups, onClose, o
     let port_start = 0
     let port_end = 0
     if (form.port_all) {
-      if (form.protocol === 'icmp' || form.protocol === 'all') {
+      if (form.protocol === 'icmp' || form.protocol === 'icmpv6' || form.protocol === 'all') {
         port_start = 0
         port_end = 0
       } else {
@@ -114,6 +147,7 @@ export default function RuleDialog({ group, switches, securityGroups, onClose, o
     try {
       await addVPCSecurityGroupRule(group.id, {
         direction: form.direction,
+        address_family: form.address_family,
         protocol: form.protocol,
         port_start,
         port_end,
@@ -158,19 +192,34 @@ export default function RuleDialog({ group, switches, securityGroups, onClose, o
           />
         </div>
         <div className="qvm-form-item">
-          <div className="qvm-form-label">协议</div>
+          <div className="qvm-form-label">IP 版本</div>
           <Select
             style={{ width: '100%' }}
-            value={form.protocol}
-            onChange={(v) => patch({ protocol: String(v) })}
+            value={form.address_family}
+            onChange={(v) => handleAddressFamilyChange(String(v) as 'ipv4' | 'ipv6')}
             optionList={[
-              { value: 'tcp', label: 'TCP' },
-              { value: 'udp', label: 'UDP' },
-              { value: 'icmp', label: 'ICMP' },
-              { value: 'all', label: '全部' },
+              { value: 'ipv4', label: 'IPv4' },
+              { value: 'ipv6', label: 'IPv6' },
             ]}
           />
         </div>
+      </div>
+
+      <div className="qvm-form-item">
+        <div className="qvm-form-label">协议</div>
+        <Select
+          style={{ width: '100%' }}
+          value={form.protocol}
+          onChange={(v) => patch({ protocol: String(v) })}
+          optionList={[
+            { value: 'tcp', label: 'TCP' },
+            { value: 'udp', label: 'UDP' },
+            form.address_family === 'ipv6'
+              ? { value: 'icmpv6', label: 'ICMPv6' }
+              : { value: 'icmp', label: 'ICMP' },
+            { value: 'all', label: '全部' },
+          ]}
+        />
       </div>
 
       <div className="qvm-form-item">
@@ -209,7 +258,11 @@ export default function RuleDialog({ group, switches, securityGroups, onClose, o
           <Input
             value={form.target_value}
             onChange={(v) => patch({ target_value: v })}
-            placeholder="例如 0.0.0.0/0、192.168.1.10 或 10.200.1.0/24"
+            placeholder={
+              form.address_family === 'ipv6'
+                ? '例如 ::/0、2001:db8::10 或 2001:db8::/64'
+                : '例如 0.0.0.0/0、192.168.1.10 或 10.200.1.0/24'
+            }
           />
         )}
         {form.target_type === 'switch' && (

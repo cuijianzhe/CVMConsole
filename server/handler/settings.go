@@ -52,6 +52,7 @@ type SettingsResponse struct {
 	PortSecurityBroadcastPPS              int    `json:"port_security_broadcast_pps"`
 	PortSecurityBroadcastBurstPackets     int    `json:"port_security_broadcast_burst_packets"`
 	PortSecurityReconcileIntervalSeconds  int    `json:"port_security_reconcile_interval_seconds"`
+	PublicIPv6SyncIntervalSeconds         int    `json:"public_ipv6_sync_interval_seconds"`
 	RescueISO                             string `json:"rescue_iso"`
 	SpiceEnabledByDefault                 bool   `json:"spice_enabled_by_default"`
 	PublicBaseURL                         string `json:"public_base_url"`
@@ -108,6 +109,8 @@ type SettingsResponse struct {
 	ScheduledPasswordBreachCheckEnabled bool `json:"scheduled_password_breach_check_enabled"`
 	// 硬件直通
 	HardwarePassthroughEnabled bool `json:"hardware_passthrough_enabled"`
+	// 安全组默认全放通（默认关闭，开启后新建安全组自动添加 IPv4/IPv6 全放通入站规则）
+	SecurityGroupDefaultAllowAll bool `json:"security_group_default_allow_all"`
 }
 
 // UpdateSettingsRequest 更新设置请求
@@ -137,6 +140,7 @@ type UpdateSettingsRequest struct {
 	PortSecurityBroadcastPPS              *int    `json:"port_security_broadcast_pps"`
 	PortSecurityBroadcastBurstPackets     *int    `json:"port_security_broadcast_burst_packets"`
 	PortSecurityReconcileIntervalSeconds  *int    `json:"port_security_reconcile_interval_seconds"`
+	PublicIPv6SyncIntervalSeconds         *int    `json:"public_ipv6_sync_interval_seconds"`
 	RescueISO                             *string `json:"rescue_iso"`
 	SpiceEnabledByDefault                 *bool   `json:"spice_enabled_by_default"`
 	PublicBaseURL                         *string `json:"public_base_url"`
@@ -190,6 +194,8 @@ type UpdateSettingsRequest struct {
 	ScheduledPasswordBreachCheckEnabled *bool `json:"scheduled_password_breach_check_enabled"`
 	// 硬件直通
 	HardwarePassthroughEnabled *bool `json:"hardware_passthrough_enabled"`
+	// 安全组默认全放通
+	SecurityGroupDefaultAllowAll *bool `json:"security_group_default_allow_all"`
 }
 
 type TestSMTPRequest struct {
@@ -290,6 +296,7 @@ func GetSettings(c *gin.Context) {
 			PortSecurityBroadcastPPS:              cfg.PortSecurityBroadcastPPS,
 			PortSecurityBroadcastBurstPackets:     cfg.PortSecurityBroadcastBurstPackets,
 			PortSecurityReconcileIntervalSeconds:  cfg.PortSecurityReconcileIntervalSeconds,
+			PublicIPv6SyncIntervalSeconds:         cfg.PublicIPv6SyncIntervalSeconds,
 			RescueISO:                             cfg.RescueISO,
 			SpiceEnabledByDefault:                 cfg.SpiceEnabledByDefault,
 			PublicBaseURL:                         cfg.PublicBaseURL,
@@ -339,6 +346,7 @@ func GetSettings(c *gin.Context) {
 			PasswordBreachCheckEnabled:            cfg.PasswordBreachCheckEnabled,
 			ScheduledPasswordBreachCheckEnabled:   cfg.ScheduledPasswordBreachCheckEnabled,
 			HardwarePassthroughEnabled:            cfg.HardwarePassthroughEnabled,
+			SecurityGroupDefaultAllowAll:          cfg.SecurityGroupDefaultAllowAll,
 		},
 	})
 }
@@ -494,6 +502,13 @@ func UpdateSettings(c *gin.Context) {
 			return
 		}
 		cfg.PortSecurityReconcileIntervalSeconds = *req.PortSecurityReconcileIntervalSeconds
+	}
+	if req.PublicIPv6SyncIntervalSeconds != nil {
+		if *req.PublicIPv6SyncIntervalSeconds < 10 || *req.PublicIPv6SyncIntervalSeconds > 3600 {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "公网 IPv6 前缀检测周期需在 10 - 3600 秒之间"})
+			return
+		}
+		cfg.PublicIPv6SyncIntervalSeconds = *req.PublicIPv6SyncIntervalSeconds
 	}
 	if portSecuritySettingsChanged && (cfg.PortSecurityTotalBurstKPackets*5 < cfg.PortSecurityTotalKpps*4 ||
 		cfg.PortSecurityNeighborBurstPackets*5 < cfg.PortSecurityNeighborPPS*4 ||
@@ -724,6 +739,9 @@ func UpdateSettings(c *gin.Context) {
 	}
 	if req.HardwarePassthroughEnabled != nil {
 		cfg.HardwarePassthroughEnabled = *req.HardwarePassthroughEnabled
+	}
+	if req.SecurityGroupDefaultAllowAll != nil {
+		cfg.SecurityGroupDefaultAllowAll = *req.SecurityGroupDefaultAllowAll
 	}
 
 	if cfg.AutoPortStart >= cfg.AutoPortEnd {
