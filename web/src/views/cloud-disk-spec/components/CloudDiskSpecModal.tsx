@@ -236,7 +236,7 @@ export default function CloudDiskSpecModal({
           placeholder="留空则使用默认存储池"
           style={{ width: '100%' }}
           loading={storageLoading}
-          allowClear
+          showClear
         >
           {storageTargets.map((target) => (
             <Select.Option key={target.id} value={target.id}>
