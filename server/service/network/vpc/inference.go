@@ -215,10 +215,14 @@ func registerVMStaticHostForDirectBridge(vmName string, sw model.VPCSwitch) {
 	if !HookSwitchUsesDirectBridge(sw) {
 		return
 	}
+	// upstream 模式由上级路由器 DHCP 分配 IP，面板不注册 dhcp-host
+	if sw.BridgeIPMode != "preset" {
+		return
+	}
 	if mac := ip_resolver.GetFirstVMMAC(vmName); mac != "" {
 		bridgeName := HookBridgeNameForSwitch(sw)
 		var ipAddr string
-		if sw.BridgeIPMode == "preset" && HookFindBridgeFreeIP != nil {
+		if HookFindBridgeFreeIP != nil {
 			var err error
 			ipAddr, err = HookFindBridgeFreeIP(sw)
 			if err != nil {

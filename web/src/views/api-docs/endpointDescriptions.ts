@@ -62,7 +62,7 @@ const publicIPBody = 'JSON: ip(IPv4/IPv6), cidr, gateway, uplink_if, supported_m
 const firewallPolicyBody =
   'JSON: policy 或完整防火墙策略对象，包含 default_action, rules, region_rules, port_forward_policy 等'
 const vpcSwitchBody =
-  'JSON: name, bridge_name, bridge_vlan_id, cidr, gateway_ip, dhcp_start, dhcp_end, username, ipv6_security_enabled, trusted_ipv6_prefixes, allow_promiscuous, allow_mac_change, allow_forged_transmits'
+  'JSON: name, username, uplink_mode(none/physical/system), uplink_if, uplink_gateway, dhcp_enabled, migrate_host_ip, bridge_vlan_id, cidr, gateway_ip, dhcp_start, dhcp_end, ipv6_security_enabled, trusted_ipv6_prefixes, allow_promiscuous, allow_mac_change, allow_forged_transmits'
 const securityGroupBody = 'JSON: name, remark, username'
 const securityRuleBody =
   'JSON: direction, address_family(ipv4/ipv6), protocol(tcp/udp/icmp/icmpv6/all), port_start, port_end, target_type(cidr/switch/security_group), target_value, action, remark'
@@ -614,6 +614,10 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   },
   'GET /network/public-ips': { summary: '列出公网 IP' },
   'POST /network/public-ips': { summary: '新增公网 IP', body: publicIPBody },
+  'POST /network/public-ips/batch': {
+    summary: '批量新增公网 IP',
+    body: 'JSON: ips(数组), cidr, gateway, uplink_if, supported_modes, status, remark；除 IP 外字段对整批共用，重复或已存在的自动跳过。',
+  },
 	'GET /network/public-ips/ipv6-prefixes': { summary: '检测上联网卡公网 IPv6 前缀', query: ['uplink_if'] },
 	'POST /network/public-ips/ipv6-prefixes/import': {
 	  summary: '批量导入公网 IPv6 /128 地址',
@@ -635,6 +639,12 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   'GET /vpc/switches': { summary: '列出 VPC 交换机', query: ['username(管理员可选)'] },
   'POST /vpc/switches': { summary: '创建 VPC 交换机', body: vpcSwitchBody },
   'PUT /vpc/switches/:id': { summary: '更新 VPC 交换机', body: vpcSwitchBody },
+  'POST /vpc/switches/:id/reconfigure': {
+    summary: '异步重配置交换机拓扑',
+    body: vpcSwitchBody,
+    response: 'data: task_id, status。',
+    notes: ['在线切换保留网口 MAC、型号、interface ID 和带宽配置；热插失败时任务恢复旧网络。'],
+  },
   'POST /vpc/switches/:id/traffic/reset': { summary: '重置交换机流量统计' },
   'DELETE /vpc/switches/:id': { summary: '删除 VPC 交换机' },
   'GET /vpc/switches/:id/vms': { summary: '获取交换机下的 VM 列表' },
@@ -698,6 +708,22 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   'POST /ovs/port-security/reconcile': { summary: '异步协调全部端口安全策略' },
   'POST /ovs/port-security/ports/:port/isolate': { summary: '异步手工隔离 OVS 端口' },
   'POST /ovs/port-security/ports/:port/release': { summary: '异步释放手工隔离的 OVS 端口' },
+  'GET /ovs/port-mirror/options': {
+    summary: '读取端口镜像源接口和目标空交换机选项',
+    response: 'data: sources[], targets[]。源接口会标注 NAT 前后位置与默认路由风险。',
+  },
+  'GET /ovs/port-mirror/status': {
+    summary: '读取端口镜像运行状态与实时计数',
+    response: 'data: enabled, healthy, source_interfaces[], targets[], sources[], target_stats[], ingress, egress, ovs_packets, issues。',
+  },
+  'POST /ovs/port-mirror/enable': {
+    summary: '异步启用或更新端口镜像',
+    body: 'JSON: source_interfaces[], target_switch_ids[], direction(ingress/egress/both)。',
+    notes: ['支持多来源和多目标的连接矩阵；只允许目标为空交换机；操作前建立 systemd 自动回滚看门狗并要求二次验证。'],
+  },
+  'POST /ovs/port-mirror/disable': {
+    summary: '异步停用端口镜像并清理运行态',
+  },
 
   // ==================== 存储池 ====================
   'GET /storage-pool/list': { summary: '获取存储池列表' },

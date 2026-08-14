@@ -15,8 +15,8 @@ import (
 func ListVPCSwitches(operator, role, requestedUsername string) ([]model.VPCSwitch, error) {
 	query := model.DB.Model(&model.VPCSwitch{})
 	if role != "admin" {
-		// 非管理员：自己的 NAT 交换机 + 系统基础网络交换机
-		query = query.Where("(username = ? AND (bridge_mode = '' OR bridge_mode = ? OR bridge_mode IS NULL)) OR is_system = ?", operator, BridgeModeNAT, true)
+		// 非管理员可以使用自己的空交换机，以及系统基础网络交换机。
+		query = query.Where("username = ? OR is_system = ?", operator, true)
 	} else if strings.TrimSpace(requestedUsername) != "" {
 		query = query.Where("username = ?", strings.TrimSpace(requestedUsername))
 	}
@@ -31,20 +31,13 @@ func ListVPCSwitches(operator, role, requestedUsername string) ([]model.VPCSwitc
 }
 
 func CreateVPCSwitch(operator, role string, req VPCSwitchRequest) (*model.VPCSwitch, error) {
+	vpcTopologyMutationMu.Lock()
+	defer vpcTopologyMutationMu.Unlock()
 	username, err := resolveVPCUsername(operator, role, req.Username)
 	if err != nil {
 		return nil, err
 	}
-	bridgeName, bridgeMode, err := resolveVPCSwitchBridge(role, req.BridgeName)
-	if err != nil {
-		return nil, err
-	}
-	if err := validateBridgeVLANID(bridgeMode, req.BridgeVLANID); err != nil {
-		return nil, err
-	}
-	if err := normalizeSwitchPortSecurityFields(&req, bridgeMode == BridgeModeDirect); err != nil {
-		return nil, err
-	}
+	normalizeCreateTopology(role, &req)
 	if _, err := EnsureDefaultSecurityGroup(username); err != nil {
 		return nil, err
 	}
@@ -65,13 +58,48 @@ func CreateVPCSwitch(operator, role string, req VPCSwitchRequest) (*model.VPCSwi
 	if err != nil {
 		return nil, err
 	}
+	// 兼容本地 BridgeIPMode：规范化 IP 分配模式
 	bridgeIPMode := normalizeBridgeIPMode(req.BridgeIPMode)
-	if err := validateBridgeIPMode(bridgeMode, bridgeIPMode, bridgeName); err != nil {
-		return nil, err
-	}
-	cidr, gateway, dhcpStart, dhcpEnd, err := resolveVPCSwitchSubnet(bridgeMode, bridgeIPMode, req, bridgeName)
+	// 上游拓扑模型：解析新网桥、上行链路与 ownsBridge
+	bridgeName, bridgeMode, ownsBridge, err := resolveNewVPCSwitchBridge(role, vlanID, &req)
 	if err != nil {
 		return nil, err
+	}
+	// 验证 BridgeIPMode 与桥接模式的兼容性
+	if err := validateBridgeIPMode(bridgeMode, bridgeIPMode, bridgeName, ownsBridge); err != nil {
+		return nil, err
+	}
+	if err := validateBridgeVLANID(bridgeMode, req.BridgeVLANID); err != nil {
+		return nil, err
+	}
+	if err := normalizeSwitchPortSecurityFields(&req, bridgeMode == BridgeModeDirect && strings.TrimSpace(req.UplinkIF) != ""); err != nil {
+		return nil, err
+	}
+	if req.UplinkMode == UplinkModePhysical && HookValidateSwitchUplink != nil {
+		if err := HookValidateSwitchUplink(req.UplinkIF, req.UplinkGateway, req.DHCPEnabled, 0, bridgeName, req.BridgeVLANID); err != nil {
+			return nil, err
+		}
+	}
+	if ownsBridge {
+		if err := validateHostIPMigrationSelection(req); err != nil {
+			return nil, err
+		}
+	}
+	if req.DHCPEnabled && req.UplinkMode != UplinkModePhysical {
+		return nil, fmt.Errorf("托管 DHCP/NAT 交换机需要选择物理上行链路")
+	}
+	// 解析网段：优先使用用户指定的 CIDR，否则自动分配
+	// 创建流中 req.BridgeName 可能为空，用本地解析的 bridgeName 补充
+	if req.BridgeName == "" {
+		req.BridgeName = bridgeName
+	}
+	cidr, gateway, dhcpStart, dhcpEnd, err := resolveVPCSwitchSubnet(req.DHCPEnabled, req)
+	if err != nil {
+		return nil, err
+	}
+	hostAddrs, hostGateway, hostMetric, hostDNS := "", "", "", ""
+	if ownsBridge && bridgeMode == BridgeModeDirect && req.MigrateHostIP && req.UplinkIF != "" && HookCaptureHostIPConfig != nil {
+		hostAddrs, hostGateway, hostMetric, hostDNS = HookCaptureHostIPConfig(req.UplinkIF)
 	}
 	sw := &model.VPCSwitch{
 		Username:             username,
@@ -79,11 +107,21 @@ func CreateVPCSwitch(operator, role string, req VPCSwitchRequest) (*model.VPCSwi
 		BridgeName:           bridgeName,
 		BridgeMode:           bridgeMode,
 		BridgeIPMode:         bridgeIPMode,
+		DHCPEnabled:          req.DHCPEnabled,
+		UplinkMode:           req.UplinkMode,
+		UplinkIF:             req.UplinkIF,
+		UplinkGateway:        strings.TrimSpace(req.UplinkGateway),
+		OwnsBridge:           ownsBridge,
+		MigrateHostIP:        ownsBridge && bridgeMode == BridgeModeDirect && req.MigrateHostIP,
+		HostAddrs:            hostAddrs,
+		HostGateway:          hostGateway,
+		HostMetric:           hostMetric,
+		HostDNS:              hostDNS,
 		BridgeVLANID:         normalizedBridgeVLANID(bridgeMode, req.BridgeVLANID),
-		AllowPromiscuous:     bridgeMode == BridgeModeDirect && req.AllowPromiscuous,
-		AllowMACChange:       bridgeMode == BridgeModeDirect && req.AllowMACChange,
-		AllowForgedTransmits: bridgeMode == BridgeModeDirect && req.AllowForgedTx,
-		IPv6SecurityEnabled:  bridgeMode == BridgeModeDirect && req.IPv6SecurityEnabled,
+		AllowPromiscuous:     bridgeMode == BridgeModeDirect && req.UplinkIF != "" && req.AllowPromiscuous,
+		AllowMACChange:       bridgeMode == BridgeModeDirect && req.UplinkIF != "" && req.AllowMACChange,
+		AllowForgedTransmits: bridgeMode == BridgeModeDirect && req.UplinkIF != "" && req.AllowForgedTx,
+		IPv6SecurityEnabled:  bridgeMode == BridgeModeDirect && req.UplinkIF != "" && req.IPv6SecurityEnabled,
 		TrustedIPv6Prefixes:  req.TrustedIPv6Prefixes,
 		VLANID:               vlanID,
 		CIDR:                 cidr,
@@ -99,8 +137,13 @@ func CreateVPCSwitch(operator, role string, req VPCSwitchRequest) (*model.VPCSwi
 	if err := model.DB.Create(sw).Error; err != nil {
 		return nil, fmt.Errorf("创建交换机失败: %w", err)
 	}
+	lock := switchOperationLock(sw.ID)
+	lock.Lock()
+	defer lock.Unlock()
 	if err := EnsureVPCSwitchRuntime(*sw); err != nil {
-		return sw, err
+		_ = removeVPCSwitchRuntime(*sw)
+		_ = model.DB.Delete(sw).Error
+		return nil, err
 	}
 	if HookTriggerPortSecurityReconcile != nil {
 		HookTriggerPortSecurityReconcile()
@@ -109,6 +152,9 @@ func CreateVPCSwitch(operator, role string, req VPCSwitchRequest) (*model.VPCSwi
 }
 
 func UpdateVPCSwitch(operator, role string, id uint, req VPCSwitchRequest) (*model.VPCSwitch, error) {
+	lock := switchOperationLock(id)
+	lock.Lock()
+	defer lock.Unlock()
 	var sw model.VPCSwitch
 	if err := model.DB.First(&sw, id).Error; err != nil {
 		return nil, fmt.Errorf("交换机不存在")
@@ -118,6 +164,9 @@ func UpdateVPCSwitch(operator, role string, id uint, req VPCSwitchRequest) (*mod
 	}
 	if role != "admin" && sw.Username != operator {
 		return nil, fmt.Errorf("无权操作此交换机")
+	}
+	if topologyRequestChanged(sw, req) {
+		return nil, fmt.Errorf("上行链路、内置 DHCP 或桥接 VLAN 的变化请通过交换机重配置任务提交")
 	}
 	// 支持管理员修改交换机所属用户
 	if role == "admin" {
@@ -136,24 +185,27 @@ func UpdateVPCSwitch(operator, role string, id uint, req VPCSwitchRequest) (*mod
 	if req.BridgeName != "" && req.BridgeName != sw.BridgeName {
 		return nil, fmt.Errorf("暂不支持修改交换机目标网桥")
 	}
+	// 兼容本地 BridgeIPMode：处理 IP 分配模式切换
 	if err := validateBridgeVLANID(HookBridgeModeForSwitch(sw), req.BridgeVLANID); err != nil {
 		return nil, err
 	}
 	if HookSwitchUsesDirectBridge(sw) {
 		newIPMode := normalizeBridgeIPMode(req.BridgeIPMode)
-		if err := validateBridgeIPMode(sw.BridgeMode, newIPMode, sw.BridgeName); err != nil {
+		// 自动直通桥（ownsBridge=true）可能没有 network_bridges 记录，校验时按自有网桥处理
+		if err := validateBridgeIPMode(sw.BridgeMode, newIPMode, sw.BridgeName, sw.OwnsBridge); err != nil {
 			return nil, err
 		}
 		if newIPMode != sw.BridgeIPMode {
 			if newIPMode == BridgeIPModePreset {
+				// 切换到预设模式：优先从网桥记录读取 DHCP 配置，找不到则保留用户提交的值
 				var bridge model.NetworkBridge
-				if err := model.DB.Where("name = ?", sw.BridgeName).First(&bridge).Error; err != nil {
-					return nil, fmt.Errorf("找不到桥接网桥 %s", sw.BridgeName)
+				if err := model.DB.Where("name = ?", sw.BridgeName).First(&bridge).Error; err == nil {
+					sw.CIDR = bridge.DHCPCIDR
+					sw.GatewayIP = bridge.DHCPGateway
+					sw.DHCPStart = bridge.DHCPStart
+					sw.DHCPEnd = bridge.DHCPEnd
 				}
-				sw.CIDR = bridge.DHCPCIDR
-				sw.GatewayIP = bridge.DHCPGateway
-				sw.DHCPStart = bridge.DHCPStart
-				sw.DHCPEnd = bridge.DHCPEnd
+				// 若网桥记录不存在，保留 req 中用户填写的 CIDR/DHCP 值（不覆盖）
 			} else {
 				sw.CIDR = ""
 				sw.GatewayIP = ""
@@ -162,6 +214,10 @@ func UpdateVPCSwitch(operator, role string, id uint, req VPCSwitchRequest) (*mod
 			}
 			sw.BridgeIPMode = newIPMode
 		}
+	}
+	// 上游拓扑变更检测：上行链路/DHCP/VLAN 变化需要通过重配置任务提交
+	if topologyRequestChanged(sw, req) {
+		return nil, fmt.Errorf("上行链路、内置 DHCP 或桥接 VLAN 的变化请通过交换机重配置任务提交")
 	}
 	if err := normalizeSwitchPortSecurityFields(&req, HookSwitchUsesDirectBridge(sw)); err != nil {
 		return nil, err
@@ -177,7 +233,6 @@ func UpdateVPCSwitch(operator, role string, id uint, req VPCSwitchRequest) (*mod
 	if req.Name = normalizeVPCName(req.Name); req.Name != "" {
 		sw.Name = req.Name
 	}
-	sw.BridgeVLANID = normalizedBridgeVLANID(HookBridgeModeForSwitch(sw), req.BridgeVLANID)
 	if HookSwitchUsesDirectBridge(sw) {
 		sw.AllowPromiscuous = req.AllowPromiscuous
 		sw.AllowMACChange = req.AllowMACChange
@@ -239,6 +294,83 @@ func resolveVPCSwitchBridge(role, requested string) (string, string, error) {
 		return requested, BridgeModeDirect, nil
 	}
 	return bridge.Name, BridgeModeDirect, nil
+}
+
+func resolveNewVPCSwitchBridge(role string, vlanID int, req *VPCSwitchRequest) (string, string, bool, error) {
+	if req == nil {
+		return "", "", false, fmt.Errorf("交换机拓扑参数为空")
+	}
+	if req.DHCPEnabled {
+		req.BridgeName = HookOvsBridgeName()
+		return HookOvsBridgeName(), BridgeModeNAT, false, nil
+	}
+	requestedBridge := strings.TrimSpace(req.BridgeName)
+	// 兼容历史 API：管理员仍可引用已经存在的宿主机桥接网桥。
+	if role == "admin" && requestedBridge != "" && requestedBridge != HookOvsBridgeName() && strings.TrimSpace(req.UplinkIF) == "" {
+		bridgeName, bridgeMode, err := resolveVPCSwitchBridge(role, requestedBridge)
+		if err != nil {
+			return "", "", false, err
+		}
+		if HookGetOVSBridgePhysicalUplink != nil {
+			req.UplinkIF = strings.TrimSpace(HookGetOVSBridgePhysicalUplink(bridgeName))
+		}
+		req.UplinkMode = normalizeUplinkMode(req.UplinkMode, req.UplinkIF, false)
+		return bridgeName, bridgeMode, false, nil
+	}
+	if strings.TrimSpace(req.UplinkIF) != "" {
+		shared, err := findSharedDirectSwitch(req.UplinkIF, req.BridgeVLANID, 0)
+		if err != nil {
+			return "", "", false, err
+		}
+		if shared != nil {
+			req.BridgeName = HookBridgeNameForSwitch(*shared)
+			req.UplinkMode = UplinkModePhysical
+			return req.BridgeName, BridgeModeDirect, false, nil
+		}
+	}
+	bridgeName := managedVPCBridgeName(vlanID)
+	req.BridgeName = bridgeName
+	req.UplinkMode = normalizeUplinkMode(req.UplinkMode, req.UplinkIF, false)
+	return bridgeName, BridgeModeDirect, true, nil
+}
+
+// findSharedDirectSwitch 查找同一物理上行上的直通交换机，并校验共享 VLAN 唯一性。
+// VLAN 0 表示不打标签，因此不能和其它逻辑交换机共享同一个物理上行。
+func findSharedDirectSwitch(uplink string, bridgeVLANID int, excludeSwitchID uint) (*model.VPCSwitch, error) {
+	uplink = strings.TrimSpace(uplink)
+	if uplink == "" || model.DB == nil {
+		return nil, nil
+	}
+	query := model.DB.Where("uplink_if = ? AND dhcp_enabled = ?", uplink, false)
+	if excludeSwitchID > 0 {
+		query = query.Where("id <> ?", excludeSwitchID)
+	}
+	var switches []model.VPCSwitch
+	if err := query.Order("owns_bridge DESC, id ASC").Find(&switches).Error; err != nil {
+		return nil, err
+	}
+	var shared *model.VPCSwitch
+	for index := range switches {
+		sw := switches[index]
+		if !HookSwitchUsesDirectBridge(sw) || strings.TrimSpace(sw.UplinkIF) == "" {
+			continue
+		}
+		if bridgeVLANID == 0 {
+			return nil, fmt.Errorf("物理网卡 %s 已有直通交换机；共享物理上行时 VLAN ID 必须为 1-4094", uplink)
+		}
+		if sw.BridgeVLANID == bridgeVLANID {
+			return nil, fmt.Errorf("物理网卡 %s 的桥接 VLAN ID %d 已被交换机「%s」使用", uplink, bridgeVLANID, sw.Name)
+		}
+		if shared == nil {
+			copy := sw
+			shared = &copy
+			continue
+		}
+		if !strings.EqualFold(HookBridgeNameForSwitch(*shared), HookBridgeNameForSwitch(sw)) {
+			return nil, fmt.Errorf("物理网卡 %s 存在多个不同的直通网桥，请先整理现有拓扑", uplink)
+		}
+	}
+	return shared, nil
 }
 
 func validateBridgeVLANID(bridgeMode string, vlanID int) error {
@@ -311,6 +443,11 @@ func GetVPCSwitchVMs(operator, role string, id uint) ([]VMSwitchInfo, error) {
 }
 
 func DeleteVPCSwitch(operator, role string, id uint, force bool) error {
+	vpcTopologyMutationMu.Lock()
+	defer vpcTopologyMutationMu.Unlock()
+	lock := switchOperationLock(id)
+	lock.Lock()
+	defer lock.Unlock()
 	var sw model.VPCSwitch
 	if err := model.DB.First(&sw, id).Error; err != nil {
 		return fmt.Errorf("交换机不存在")
@@ -341,10 +478,13 @@ func DeleteVPCSwitch(operator, role string, id uint, force bool) error {
 		}
 	}
 	_ = ApplyVPCACLRules()
+	if err := removeVPCSwitchRuntime(sw); err != nil {
+		return fmt.Errorf("清理交换机运行态失败: %w", err)
+	}
 	if err := model.DB.Delete(&sw).Error; err != nil {
+		_ = EnsureVPCSwitchRuntime(sw)
 		return err
 	}
-	_ = removeVPCSwitchRuntime(sw)
 	return nil
 }
 
@@ -385,7 +525,7 @@ func normalizeBridgeIPMode(mode string) string {
 	}
 }
 
-func validateBridgeIPMode(bridgeMode, bridgeIPMode, bridgeName string) error {
+func validateBridgeIPMode(bridgeMode, bridgeIPMode, bridgeName string, ownsBridge bool) error {
 	if bridgeMode != BridgeModeDirect {
 		if bridgeIPMode != BridgeIPModeUpstream {
 			return fmt.Errorf("仅桥接模式支持预设 IP 分配")
@@ -393,6 +533,10 @@ func validateBridgeIPMode(bridgeMode, bridgeIPMode, bridgeName string) error {
 		return nil
 	}
 	if bridgeIPMode == BridgeIPModePreset {
+		// 新建交换机（ownsBridge=true）：网桥尚未创建，跳过数据库检查
+		if ownsBridge {
+			return nil
+		}
 		var bridge model.NetworkBridge
 		if err := model.DB.Where("name = ?", bridgeName).First(&bridge).Error; err != nil {
 			return fmt.Errorf("预设 IP 模式需要配置了 DHCP 地址池的桥接网桥")
@@ -405,15 +549,24 @@ func validateBridgeIPMode(bridgeMode, bridgeIPMode, bridgeName string) error {
 }
 
 // resolveVPCSwitchSubnet 解析交换机子网：优先使用用户指定的 CIDR/网关，否则自动分配。
-// 对于桥接直通模式的上级路由分配，不需要 CIDR；对于预设 IP 模式，使用网桥的 DHCP 配置。
-func resolveVPCSwitchSubnet(bridgeMode, bridgeIPMode string, req VPCSwitchRequest, bridgeName string) (cidr, gateway, dhcpStart, dhcpEnd string, err error) {
-	if bridgeMode == BridgeModeDirect {
-		if bridgeIPMode == BridgeIPModePreset {
+// 对于桥接直通模式，不需要 CIDR（由上级路由器分配），直接返回空值。
+// 适配本地 BridgeIPMode=preset：从桥接网桥读取 DHCP 范围。
+func resolveVPCSwitchSubnet(dhcpEnabled bool, req VPCSwitchRequest) (cidr, gateway, dhcpStart, dhcpEnd string, err error) {
+	return resolveVPCSwitchSubnetExcept(dhcpEnabled, req, 0, false)
+}
+
+func resolveVPCSwitchSubnetExcept(dhcpEnabled bool, req VPCSwitchRequest, excludeSwitchID uint, skipConflictChecks bool) (cidr, gateway, dhcpStart, dhcpEnd string, err error) {
+	if !dhcpEnabled {
+		// 适配本地 BridgeIPMode=preset：优先从桥接网桥读取 DHCP 范围
+		if req.BridgeIPMode == BridgeIPModePreset && req.BridgeName != "" {
 			var bridge model.NetworkBridge
-			if err := model.DB.Where("name = ?", bridgeName).First(&bridge).Error; err != nil {
-				return "", "", "", "", fmt.Errorf("找不到桥接网桥 %s", bridgeName)
+			if err := model.DB.Where("name = ?", req.BridgeName).First(&bridge).Error; err == nil &&
+				bridge.DHCPCIDR != "" && bridge.DHCPStart != "" && bridge.DHCPEnd != "" {
+				return bridge.DHCPCIDR, bridge.DHCPGateway, bridge.DHCPStart, bridge.DHCPEnd, nil
 			}
-			return bridge.DHCPCIDR, bridge.DHCPGateway, bridge.DHCPStart, bridge.DHCPEnd, nil
+			// 网桥记录不存在或未配置 DHCP（新建交换机自动生成的直通桥）：
+			// 直通桥预设模式直接复用用户填写的物理网段，允许与宿主机网段重叠，跳过冲突检查。
+			return resolveVPCSwitchSubnetExcept(true, req, excludeSwitchID, true)
 		}
 		return "", "", "", "", nil
 	}
@@ -462,17 +615,25 @@ func resolveVPCSwitchSubnet(bridgeMode, bridgeIPMode string, req VPCSwitchReques
 	if gatewayAddr == prefix.Addr() || gatewayAddr == broadcastAddr(prefix) {
 		return "", "", "", "", fmt.Errorf("网关地址不能是网络地址或广播地址")
 	}
-	// 检查 CIDR 是否已被使用
-	var existing model.VPCSwitch
-	if err := model.DB.Where("cidr = ?", req.CIDR).First(&existing).Error; err == nil {
-		return "", "", "", "", fmt.Errorf("网段 %s 已被交换机「%s」使用", req.CIDR, existing.Name)
+	// 检查 CIDR 是否已被使用；直通桥预设模式共享物理网段，跳过此检查。
+	if !skipConflictChecks {
+		var existing model.VPCSwitch
+		existingQuery := model.DB.Where("cidr = ?", req.CIDR)
+		if excludeSwitchID > 0 {
+			existingQuery = existingQuery.Where("id <> ?", excludeSwitchID)
+		}
+		if err := existingQuery.First(&existing).Error; err == nil {
+			return "", "", "", "", fmt.Errorf("网段 %s 已被交换机「%s」使用", req.CIDR, existing.Name)
+		}
 	}
-	// 检查是否与宿主机网段冲突
-	hostCIDR := getHostNetworkCIDR()
-	if hostCIDR != "" {
-		hostPrefix, hostErr := netip.ParsePrefix(hostCIDR)
-		if hostErr == nil && (prefix.Contains(hostPrefix.Addr()) || hostPrefix.Contains(prefix.Addr())) {
-			return "", "", "", "", fmt.Errorf("网段 %s 与宿主机网段 %s 冲突，请使用其他网段", req.CIDR, hostCIDR)
+	// 检查是否与宿主机网段冲突；直通桥预设模式允许与宿主机网段重叠。
+	if !skipConflictChecks {
+		hostCIDR := getHostNetworkCIDR()
+		if hostCIDR != "" {
+			hostPrefix, hostErr := netip.ParsePrefix(hostCIDR)
+			if hostErr == nil && (prefix.Contains(hostPrefix.Addr()) || hostPrefix.Contains(prefix.Addr())) {
+				return "", "", "", "", fmt.Errorf("网段 %s 与宿主机网段 %s 冲突，请使用其他网段", req.CIDR, hostCIDR)
+			}
 		}
 	}
 	// DHCP 范围：优先使用用户指定，否则自动计算（.10 ~ .250 或根据子网大小调整）

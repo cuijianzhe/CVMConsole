@@ -26,6 +26,10 @@ func AddVMInterface(vmName string, req AddVMInterfaceRequest) (*VMInterfaceInfo,
 	if err := normalizeInterfacePortSecurityFields(&req, HookSwitchUsesDirectBridge(sw) && sw.IPv6SecurityEnabled); err != nil {
 		return nil, err
 	}
+	if SwitchIsTrustedIsolated(sw) {
+		req.AllowedIPv4Addresses = ""
+		req.AllowedIPv6Addresses = ""
+	}
 
 	// 系统交换机使用 VM 归属用户的默认安全组
 	switchOwner := sw.Username
@@ -59,7 +63,9 @@ func AddVMInterface(vmName string, req AddVMInterfaceRequest) (*VMInterfaceInfo,
 
 	// 安全组处理
 	securityGroupID := req.SecurityGroupID
-	if !HookSwitchUsesDirectBridge(sw) {
+	if HookSwitchUsesDirectBridge(sw) {
+		securityGroupID = 0
+	} else {
 		if securityGroupID == 0 {
 			if _, err := EnsureDefaultSecurityGroup(switchOwner); err != nil {
 				return nil, err
@@ -206,6 +212,7 @@ func UpdateVMInterface(vmName string, interfaceOrder int, req AddVMInterfaceRequ
 	}
 	previousBinding := binding
 	oldSwitchID := binding.SwitchID
+	var oldSwitch model.VPCSwitch
 
 	// 验证交换机存在
 	var sw model.VPCSwitch
@@ -214,6 +221,10 @@ func UpdateVMInterface(vmName string, interfaceOrder int, req AddVMInterfaceRequ
 	}
 	if err := normalizeInterfacePortSecurityFields(&req, HookSwitchUsesDirectBridge(sw) && sw.IPv6SecurityEnabled); err != nil {
 		return err
+	}
+	if SwitchIsTrustedIsolated(sw) {
+		req.AllowedIPv4Addresses = ""
+		req.AllowedIPv6Addresses = ""
 	}
 
 	// 系统交换机使用 VM 归属用户的默认安全组
@@ -240,7 +251,9 @@ func UpdateVMInterface(vmName string, interfaceOrder int, req AddVMInterfaceRequ
 
 	// 安全组处理
 	securityGroupID := req.SecurityGroupID
-	if !HookSwitchUsesDirectBridge(sw) {
+	if HookSwitchUsesDirectBridge(sw) {
+		securityGroupID = 0
+	} else {
 		if securityGroupID == 0 {
 			if _, err := EnsureDefaultSecurityGroup(switchOwner); err != nil {
 				return err
@@ -279,12 +292,46 @@ func UpdateVMInterface(vmName string, interfaceOrder int, req AddVMInterfaceRequ
 		}
 	}
 	restoreLink := func() {
-		if linkPort != "" {
-			_ = setVMInterfaceLink(vmName, linkPort, "up", false)
+		if linkPort == "" {
+			return
+		}
+		// 热拔插会重新创建 vnet 端口，不能继续使用切换前的端口名称。
+		currentPort := getVMVnetIFByOrder(vmName, interfaceOrder)
+		if currentPort != "" {
+			_ = setVMInterfaceLink(vmName, currentPort, "up", false)
 		}
 	}
 
-	// 更新绑定记录
+	// 交换机切换必须先更新实际网口。否则数据库已指向目标交换机，
+	// 但运行态和持久化 XML 仍保留旧交换机，面板与实际网络会不一致。
+	networkChanged := false
+	rollbackNetwork := func() error {
+		if !networkChanged {
+			return nil
+		}
+		if err := HookReconfigureVMInterfaceNetwork(vmName, interfaceOrder, oldSwitch); err != nil {
+			return err
+		}
+		networkChanged = false
+		return nil
+	}
+	if oldSwitchID != req.SwitchID {
+		if HookReconfigureVMInterfaceNetwork == nil {
+			restoreLink()
+			return fmt.Errorf("网口网络重配置服务尚未初始化")
+		}
+		if err := model.DB.First(&oldSwitch, oldSwitchID).Error; err != nil {
+			restoreLink()
+			return fmt.Errorf("读取原交换机失败，已保持原配置: %w", err)
+		}
+		if err := HookReconfigureVMInterfaceNetwork(vmName, interfaceOrder, sw); err != nil {
+			restoreLink()
+			return fmt.Errorf("切换第 %d 个网口的交换机失败，已保持原配置: %w", interfaceOrder+1, err)
+		}
+		networkChanged = true
+	}
+
+	// 实际网口切换成功后再更新绑定记录。
 	binding.Username = sw.Username
 	binding.SwitchID = req.SwitchID
 	binding.SecurityGroupID = securityGroupID
@@ -294,6 +341,10 @@ func UpdateVMInterface(vmName string, interfaceOrder int, req AddVMInterfaceRequ
 	binding.AllowedIPv4Addresses = req.AllowedIPv4Addresses
 	binding.AllowedIPv6Addresses = req.AllowedIPv6Addresses
 	if err := model.DB.Save(&binding).Error; err != nil {
+		if rollbackErr := rollbackNetwork(); rollbackErr != nil {
+			restoreLink()
+			return fmt.Errorf("更新网口绑定记录失败，且恢复原网口失败: %v；%w", rollbackErr, err)
+		}
 		restoreLink()
 		return fmt.Errorf("更新网口绑定记录失败: %w", err)
 	}
@@ -310,33 +361,8 @@ func UpdateVMInterface(vmName string, interfaceOrder int, req AddVMInterfaceRequ
 		}
 	}
 
-	// 如果交换机改变了，需要更新 VM 的 XML 配置（仅主网口 interface_order==0 支持）
+	// 实际网口已在保存绑定前完成重配置；此处只清理旧交换机 DHCP 租约。
 	if oldSwitchID != req.SwitchID {
-		if vmState != "running" {
-			// 关机态：更新 inactive XML，确保下次开机时使用正确配置
-			if interfaceOrder == 0 {
-				if HookSwitchUsesDirectBridge(sw) {
-					if err := ensureVMBridgeInterfaceConfig(vmName, HookBridgeNameForSwitch(sw), sw.BridgeVLANID); err != nil {
-						logger.App.Warn("更新桥接直通 XML 失败", "vm", vmName, "error", err)
-					}
-				} else {
-					if err := ensureVMVPCInterfaceConfig(vmName, sw.VLANID); err != nil {
-						logger.App.Warn("更新 VPC VLAN XML 失败", "vm", vmName, "error", err)
-					}
-				}
-			} else {
-				// TODO: 非主网口需要 detach-device + attach-device 或完整 XML 重写
-				logger.App.Warn("非主网口交换机变更后需重启虚拟机生效", "vm", vmName, "order", interfaceOrder)
-			}
-		} else {
-			// 运行态：尝试热更新 VLAN tag
-			vnetIF := getVMVnetIFByOrder(vmName, interfaceOrder)
-			if vnetIF != "" && !HookSwitchUsesDirectBridge(sw) && sw.VLANID > 0 {
-				targetTag := strconv.Itoa(sw.VLANID)
-				_ = utils.ExecCommand("ovs-vsctl", "set", "Port", vnetIF, "tag="+targetTag)
-			}
-		}
-		// 清理旧交换机 DHCP 租约
 		if mac := HookGetVMMACByOrder(vmName, interfaceOrder); mac != "" {
 			HookCleanOVSDHCPLease(mac, "")
 		}
@@ -357,13 +383,24 @@ func UpdateVMInterface(vmName string, interfaceOrder int, req AddVMInterfaceRequ
 	}
 	if portSecurityEnabled && HookReconcileVMPortSecurity != nil {
 		if err := HookReconcileVMPortSecurity(vmName); err != nil {
-			_ = model.DB.Save(&previousBinding).Error
+			if rollbackErr := rollbackNetwork(); rollbackErr != nil {
+				restoreLink()
+				return fmt.Errorf("更新端口安全策略失败，且恢复原网口失败，当前绑定保留目标交换机: %v；%w", rollbackErr, err)
+			}
+			if rollbackErr := model.DB.Save(&previousBinding).Error; rollbackErr != nil {
+				restoreLink()
+				return fmt.Errorf("更新端口安全策略失败，且恢复原绑定失败: %v；%w", rollbackErr, err)
+			}
 			_ = HookReconcileVMPortSecurity(vmName)
 			restoreLink()
 			return fmt.Errorf("更新端口安全策略失败，已恢复原绑定: %w", err)
 		}
 		if linkPort != "" {
-			if err := setVMInterfaceLink(vmName, linkPort, "up", false); err != nil {
+			currentPort := getVMVnetIFByOrder(vmName, interfaceOrder)
+			if currentPort == "" {
+				return fmt.Errorf("策略已更新，但未找到切换后的运行态网口")
+			}
+			if err := setVMInterfaceLink(vmName, currentPort, "up", false); err != nil {
 				return fmt.Errorf("策略已更新，但恢复网口链路失败: %w", err)
 			}
 		}
@@ -414,7 +451,7 @@ func RemoveVMInterface(vmName string, interfaceOrder int) error {
 		return fmt.Errorf("删除网口绑定记录失败: %w", err)
 	}
 
-	if HookSwitchUsesDirectBridge(sw) && mac != "" {
+	if HookSwitchUsesDirectBridge(sw) && sw.BridgeIPMode == "preset" && mac != "" {
 		bridgeName := HookBridgeNameForSwitch(sw)
 		if HookRemoveBridgeStaticHost != nil {
 			if _, err := HookRemoveBridgeStaticHost(bridgeName, vmName, mac); err != nil {
@@ -502,6 +539,22 @@ func applyNewInterfaceRuntime(vmName string, sw model.VPCSwitch, interfaceOrder 
 		}
 	}
 
+	targetVLAN := sw.VLANID
+	if HookSwitchUsesDirectBridge(sw) {
+		targetVLAN = sw.BridgeVLANID
+	}
+	if targetVLAN > 0 {
+		// 检查端口是否实际存在于 OVS
+		if !ovsPortExists(vnetIF) {
+			logger.App.Warn("OVS 端口不存在，跳过新网口 VLAN tag 设置", "port", vnetIF)
+		} else {
+			targetTag := strconv.Itoa(targetVLAN)
+			result := utils.ExecCommand("ovs-vsctl", "set", "Port", vnetIF, "tag="+targetTag)
+			if result.Error != nil {
+				return fmt.Errorf("设置新网口 OVS VLAN tag 失败: %s", result.Stderr)
+			}
+		}
+	}
 	// DHCP 静态绑定：无论 VM 运行/关机都需要执行
 	// 使用 HookGetVMMACByOrder，已支持关机状态通过 XML 获取 MAC
 	mac := HookGetVMMACByOrder(vmName, interfaceOrder)
@@ -514,25 +567,14 @@ func applyNewInterfaceRuntime(vmName string, sw model.VPCSwitch, interfaceOrder 
 		HookCleanOVSDHCPLease(mac, "")
 	}
 
-	if HookSwitchUsesDirectBridge(sw) {
+	if HookSwitchUsesDirectBridge(sw) && sw.BridgeIPMode == "preset" {
 		bridgeName := HookBridgeNameForSwitch(sw)
 		var ipAddr string
-		if sw.BridgeIPMode == "preset" && HookFindBridgeFreeIP != nil {
+		if HookFindBridgeFreeIP != nil {
 			var err error
 			ipAddr, err = HookFindBridgeFreeIP(sw)
 			if err != nil {
 				logger.App.Warn("查找桥接模式可用 IP 失败", "vm", vmName, "error", err)
-			}
-		} else {
-			if HookListBridgeDHCPLeases != nil {
-				if leases, err := HookListBridgeDHCPLeases(bridgeName); err == nil {
-					for _, lease := range leases {
-						if strings.EqualFold(lease.MAC, mac) && strings.TrimSpace(lease.IP) != "" {
-							ipAddr = lease.IP
-							break
-						}
-					}
-				}
 			}
 		}
 		if HookUpsertBridgeStaticHost != nil {
@@ -568,6 +610,28 @@ func getVMVnetIFByOrder(vmName string, order int) string {
 			}
 		}
 		idx++
+	}
+	return ""
+}
+
+// getVMVnetIFByMAC 在热拔插可能改变网口排列时按 MAC 精确定位运行态 vnet。
+func getVMVnetIFByMAC(vmName, mac string) string {
+	mac = strings.TrimSpace(mac)
+	if mac == "" {
+		return ""
+	}
+	result := utils.ExecCommand("virsh", "domiflist", vmName)
+	if result.Error != nil {
+		return ""
+	}
+	for index, line := range strings.Split(strings.TrimSpace(result.Stdout), "\n") {
+		if index < 2 || strings.TrimSpace(line) == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) >= 5 && strings.EqualFold(fields[4], mac) {
+			return fields[0]
+		}
 	}
 	return ""
 }

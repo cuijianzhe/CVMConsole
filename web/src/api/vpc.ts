@@ -16,6 +16,13 @@ export interface VpcSwitch {
   bridge_name: string
   bridge_mode: string // nat / bridge
   bridge_ip_mode: string // upstream: 上级路由分配 / preset: 预设 IP 段分配
+  dhcp_enabled: boolean
+  uplink_mode: 'none' | 'physical' | 'system'
+  uplink_if: string
+  uplink_gateway: string
+  owns_bridge: boolean
+  migrate_host_ip: boolean
+  legacy_migration_required: boolean
   bridge_vlan_id: number
   allow_promiscuous?: boolean
   allow_mac_change?: boolean
@@ -46,6 +53,11 @@ export interface VpcSwitch {
 export interface VpcSwitchPayload {
   username?: string
   name: string
+  dhcp_enabled?: boolean
+  uplink_mode?: 'none' | 'physical' | 'system'
+  uplink_if?: string
+  uplink_gateway?: string
+  migrate_host_ip?: boolean
   bridge_name?: string
   bridge_ip_mode?: string // upstream / preset（仅桥接模式生效）
   bridge_vlan_id?: number
@@ -63,6 +75,30 @@ export interface VpcSwitchPayload {
   bandwidth_mbps?: number
   bandwidth_down_mbps?: number
   bandwidth_up_mbps?: number
+}
+
+/** 交换机是否由面板提供 DHCP/NAT。 */
+export function isVpcSwitchManaged(item?: VpcSwitch | null): boolean {
+  return !!item && (!!item.is_system || !!item.dhcp_enabled)
+}
+
+/** 交换机运行模式标签。 */
+export function vpcSwitchModeLabel(item?: VpcSwitch | null): string {
+  if (!item) return '-'
+  if (item.is_system) return '系统基础网络'
+  if (item.dhcp_enabled) return '内置 DHCP/NAT'
+  if (item.uplink_if) return '物理直通'
+  return '空交换机'
+}
+
+/** 交换机下拉选项中的模式详情。 */
+export function vpcSwitchModeDetail(item: VpcSwitch): string {
+  if (item.is_system || item.dhcp_enabled) return `${vpcSwitchModeLabel(item)}：${item.cidr || '系统配置'}`
+  if (item.uplink_if) {
+    const vlan = item.bridge_vlan_id > 0 ? ` / VLAN ${item.bridge_vlan_id}` : ''
+    return `${vpcSwitchModeLabel(item)}：${item.uplink_if}${vlan}`
+  }
+  return '空交换机：独立纯二层'
 }
 
 /** VPC 流量/带宽配额 */
@@ -188,6 +224,14 @@ export function createVPCSwitch(data: VpcSwitchPayload) {
 /** 更新交换机 */
 export function updateVPCSwitch(id: number, data: VpcSwitchPayload) {
   return service.put<unknown, ApiResponse<unknown>>(`/vpc/switches/${id}`, data)
+}
+
+/** 异步重配置交换机上行链路和 DHCP/NAT 拓扑 */
+export function reconfigureVPCSwitch(id: number, data: VpcSwitchPayload) {
+  return service.post<unknown, ApiResponse<{ task_id: number; status: string }>>(
+    `/vpc/switches/${id}/reconfigure`,
+    data,
+  )
 }
 
 /** 删除交换机（force=true 时强制移除绑定 VM 的网卡） */

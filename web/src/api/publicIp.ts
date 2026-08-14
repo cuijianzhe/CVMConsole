@@ -78,6 +78,33 @@ export interface PublicIpPayload {
   remark?: string
 }
 
+/** 批量新增公网 IP 请求，共用除 IP 外的字段 */
+export interface PublicIpBatchPayload {
+  ips: string[]
+  cidr?: string
+  gateway?: string
+  uplink_if?: string
+  supported_modes?: string
+  status?: string
+  remark?: string
+}
+
+/** 批量新增中单条 IP 的处理结果 */
+export interface PublicIpBatchItemResult {
+  ip: string
+  status: 'created' | 'skipped' | 'failed'
+  reason?: string
+  row?: PublicIpItem
+}
+
+/** 批量新增公网 IP 的汇总结果 */
+export interface PublicIpBatchResult {
+  created: number
+  skipped: number
+  failed: number
+  items: PublicIpBatchItemResult[]
+}
+
 /** 绑定/迁移请求 */
 export interface PublicIpBindPayload {
   username?: string
@@ -111,6 +138,14 @@ export function getPublicIPs() {
 /** 新增公网 IP */
 export function createPublicIP(data: PublicIpPayload) {
   return service.post<unknown, ApiResponse<PublicIpItem>>('/network/public-ips', data)
+}
+
+/** 批量新增公网 IP（共用除 IP 外的字段，一行一个） */
+export function batchCreatePublicIPs(data: PublicIpBatchPayload) {
+  return service.post<unknown, ApiResponse<PublicIpBatchResult>>(
+    '/network/public-ips/batch',
+    data,
+  )
 }
 
 /** 检测上联网卡当前通过 RA 获取的公网 IPv6 前缀 */
@@ -173,4 +208,54 @@ export function migratePublicIP(id: number, data: PublicIpBindPayload) {
 /** 重载全部公网 IP 规则（高风险，任务队列） */
 export function applyPublicIPRules() {
   return service.post<unknown, ApiResponse<PublicIpTaskResult>>('/network/public-ips/apply')
+}
+
+/** 批量操作单条结果 */
+export interface PublicIpBatchOpResult {
+  id: number
+  ip: string
+  status: 'success' | 'failed' | 'skipped'
+  reason?: string
+}
+
+/** 批量操作汇总 */
+export interface PublicIpBatchOpSummary {
+  success: number
+  failed: number
+  skipped: number
+  items: PublicIpBatchOpResult[]
+}
+
+/** 批量绑定单条参数 */
+export interface PublicIpBatchBindItem {
+  id: number
+  payload: PublicIpBindPayload
+}
+
+/** 批量删除公网 IP（高风险，已绑定的自动跳过） */
+export function batchDeletePublicIPs(ids: number[]) {
+  return service.delete<unknown, ApiResponse<PublicIpBatchOpSummary>>('/network/public-ips/batch', {
+    data: { ids },
+  })
+}
+
+/** 批量解绑公网 IP（高风险，任务队列） */
+export function batchUnbindPublicIPs(ids: number[]) {
+  return service.post<unknown, ApiResponse<PublicIpTaskResult>>(
+    '/network/public-ips/batch/unbind',
+    { ids },
+  )
+}
+
+/** 批量绑定公网 IP（高风险，任务队列） */
+export function batchBindPublicIPs(items: PublicIpBatchBindItem[]) {
+  return service.post<unknown, ApiResponse<PublicIpTaskResult>>(
+    '/network/public-ips/batch/bind',
+    {
+      items: items.map((item) => ({
+        public_ip_id: item.id,
+        bind_request: item.payload,
+      })),
+    },
+  )
 }

@@ -58,17 +58,14 @@ func bindVMToVPCWithSecurityGroupOwner(username, vmName string, switchID, securi
 		return err
 	}
 	if HookSwitchUsesDirectBridge(sw) {
-		if securityGroupID != 0 {
+		// 直通桥接模式下，系统交换机仍可绑定安全组，非系统交换机跳过安全组
+		if sw.IsSystem && securityGroupID != 0 {
 			var sg model.VPCSecurityGroup
-			var err error
-			if sw.IsSystem {
-				err = model.DB.Where("id = ? AND (username = ? OR username = ?)", securityGroupID, securityGroupOwner, sw.Username).First(&sg).Error
-			} else {
-				err = model.DB.Where("id = ? AND username = ?", securityGroupID, securityGroupOwner).First(&sg).Error
-			}
-			if err != nil {
+			if err := model.DB.Where("id = ? AND (username = ? OR username = ?)", securityGroupID, securityGroupOwner, sw.Username).First(&sg).Error; err != nil {
 				return fmt.Errorf("安全组不存在或不属于该用户")
 			}
+		} else if !sw.IsSystem {
+			securityGroupID = 0
 		}
 	} else {
 		var sg model.VPCSecurityGroup
@@ -139,35 +136,27 @@ func bindVMToVPCWithSecurityGroupOwner(username, vmName string, switchID, securi
 		logger.App.Warn("清理 VM 单机速率限制失败", "vm", vmName, "error", err)
 	}
 	if HookSwitchUsesDirectBridge(sw) {
-		if mac := ip_resolver.GetFirstVMMAC(vmName); mac != "" {
-			bridgeName := HookBridgeNameForSwitch(sw)
-			var ipAddr string
-			if sw.BridgeIPMode == "preset" && HookFindBridgeFreeIP != nil {
-				var err error
-				ipAddr, err = HookFindBridgeFreeIP(sw)
-				if err != nil {
-					logger.App.Warn("查找桥接模式可用 IP 失败", "vm", vmName, "error", err)
-				}
-			} else {
-				if HookListBridgeDHCPLeases != nil {
-					if leases, err := HookListBridgeDHCPLeases(bridgeName); err == nil {
-						for _, lease := range leases {
-							if strings.EqualFold(lease.MAC, mac) && strings.TrimSpace(lease.IP) != "" {
-								ipAddr = lease.IP
-								break
-							}
-						}
+		// 预设模式：从桥接网桥 DHCP 池分配 IP 并注册 dhcp-host
+		if sw.BridgeIPMode == "preset" {
+			if mac := ip_resolver.GetFirstVMMAC(vmName); mac != "" {
+				bridgeName := HookBridgeNameForSwitch(sw)
+				var ipAddr string
+				if HookFindBridgeFreeIP != nil {
+					var err error
+					ipAddr, err = HookFindBridgeFreeIP(sw)
+					if err != nil {
+						logger.App.Warn("查找桥接模式可用 IP 失败", "vm", vmName, "error", err)
 					}
 				}
-			}
-			if HookUpsertBridgeStaticHost != nil {
-				if err := HookUpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr); err != nil {
-					logger.App.Warn("桥接模式注册 MAC 地址失败", "vm", vmName, "error", err)
+				if HookUpsertBridgeStaticHost != nil {
+					if err := HookUpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr); err != nil {
+						logger.App.Warn("桥接模式注册 MAC 地址失败", "vm", vmName, "error", err)
+					}
 				}
-			}
-			if HookReloadBridgeDNSMasq != nil {
-				if err := HookReloadBridgeDNSMasq(bridgeName); err != nil {
-					logger.App.Warn("重新加载桥接模式 DHCP 服务失败", "bridge", bridgeName, "error", err)
+				if HookReloadBridgeDNSMasq != nil {
+					if err := HookReloadBridgeDNSMasq(bridgeName); err != nil {
+						logger.App.Warn("重新加载桥接模式 DHCP 服务失败", "bridge", bridgeName, "error", err)
+					}
 				}
 			}
 		}
@@ -472,7 +461,7 @@ func GetVPCBindingInfo(operator, role, vmName string) (*VPCBindingInfo, error) {
 		model.DB.Order("username ASC, id ASC").Find(&info.Switches)
 		model.DB.Order("username ASC, is_default DESC, id ASC").Find(&info.Groups)
 	} else if username != "" {
-		model.DB.Where("username = ? AND (bridge_mode = '' OR bridge_mode = ? OR bridge_mode IS NULL)", username, BridgeModeNAT).Order("id ASC").Find(&info.Switches)
+		model.DB.Where("username = ? OR is_system = ?", username, true).Order("is_system DESC, id ASC").Find(&info.Switches)
 		model.DB.Where("username = ?", username).Order("is_default DESC, id ASC").Find(&info.Groups)
 	}
 	for i := range info.Switches {

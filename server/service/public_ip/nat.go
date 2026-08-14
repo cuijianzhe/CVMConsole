@@ -88,10 +88,7 @@ func BuildPublicIPRulesScript() (string, error) {
 	b.WriteString("sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true\n\n")
 	for _, binding := range bindings {
 		if ipRow, ok := ipRows[binding.PublicIPID]; ok && publicIPIsIPv6(ipRow.IP) {
-			uplink := strings.TrimSpace(ipRow.UplinkIF)
-			if uplink == "" {
-				uplink = detectDefaultIPv6Uplink()
-			}
+			uplink := effectivePublicIPUplink(ipRow.UplinkIF, true)
 			if uplink != "" {
 				b.WriteString(fmt.Sprintf("sysctl -w net.ipv6.conf.%s.accept_ra=2 >/dev/null 2>&1 || true\n", uplink))
 				b.WriteString(fmt.Sprintf("sysctl -w net.ipv6.conf.%s.proxy_ndp=1 >/dev/null 2>&1 || true\n", uplink))
@@ -145,10 +142,7 @@ func buildPublicIPCommands(ipRow model.PublicIP, req PublicIPBindRequest) ([]str
 func buildPublicIPNATCommands(ipRow model.PublicIP, req PublicIPBindRequest) []string {
 	publicIP := strings.TrimSpace(ipRow.IP)
 	privateIP := strings.TrimSpace(req.VMPrivateIP)
-	uplink := strings.TrimSpace(ipRow.UplinkIF)
-	if uplink == "" {
-		uplink = HookOvsUplink()
-	}
+	uplink := effectivePublicIPUplink(ipRow.UplinkIF, false)
 	comment := publicIPRuleComment + ":" + publicIP
 	var cmds []string
 	if addr := publicIPAddrForHost(ipRow); addr != "" && uplink != "" {
@@ -183,6 +177,10 @@ func buildPublicIPClassicRouteCommands(ipRow model.PublicIP, req PublicIPBindReq
 		bridge = HookOvsBridgeName()
 	}
 	var cmds []string
+	uplink := effectivePublicIPUplink(ipRow.UplinkIF, false)
+	if uplink != "" {
+		cmds = append(cmds, fmt.Sprintf("sysctl -w net.ipv4.conf.%s.proxy_arp=1 >/dev/null 2>&1 || true", uplink))
+	}
 	if strings.TrimSpace(req.VMPrivateIP) != "" {
 		cmds = append(cmds, fmt.Sprintf("ip route replace %s/32 via %s dev %s || true",
 			utils.ShellSingleQuote(ipRow.IP), utils.ShellSingleQuote(req.VMPrivateIP), utils.ShellSingleQuote(bridge)))
@@ -195,10 +193,7 @@ func buildPublicIPClassicRouteCommands(ipRow model.PublicIP, req PublicIPBindReq
 
 func buildPublicIPv6RouteCommands(ipRow model.PublicIP, req PublicIPBindRequest) []string {
 	publicIP := strings.TrimSpace(ipRow.IP)
-	uplink := strings.TrimSpace(ipRow.UplinkIF)
-	if uplink == "" {
-		uplink = detectDefaultIPv6Uplink()
-	}
+	uplink := effectivePublicIPUplink(ipRow.UplinkIF, true)
 	routeIF := publicIPVMRouteInterface(req.VMName)
 	if routeIF == "" {
 		routeIF = HookOvsBridgeName()
@@ -253,13 +248,25 @@ func buildPublicIPAntiSpoofCommands(ipRow model.PublicIP, req PublicIPBindReques
 			fmt.Sprintf("ovs-ofctl -O OpenFlow13 add-flow %s %s", utils.ShellSingleQuote(bridge), utils.ShellSingleQuote(fmt.Sprintf("cookie=%s,priority=230,in_port=%s,ipv6,actions=drop", cookie, ofport))),
 		}
 	}
-	return []string{
+	commands := []string{
 		fmt.Sprintf("ovs-ofctl -O OpenFlow13 del-flows %s %s || true", utils.ShellSingleQuote(bridge), utils.ShellSingleQuote("cookie="+cookie+"/-1")),
+	}
+	// 路由模式以 VM 私网地址作为宿主机下一跳，需保留其 ARP 应答；
+	// 同时仅允许该地址和已绑定公网地址从对应端口发出。
+	privateIP := net.ParseIP(strings.TrimSpace(req.VMPrivateIP))
+	if NormalizePublicIPMode(req.Mode) == PublicIPModeClassicRoute && privateIP != nil && privateIP.To4() != nil {
+		commands = append(commands,
+			fmt.Sprintf("ovs-ofctl -O OpenFlow13 add-flow %s %s", utils.ShellSingleQuote(bridge), utils.ShellSingleQuote(fmt.Sprintf("cookie=%s,priority=240,in_port=%s,ip,nw_src=%s,actions=NORMAL", cookie, ofport, req.VMPrivateIP))),
+			fmt.Sprintf("ovs-ofctl -O OpenFlow13 add-flow %s %s", utils.ShellSingleQuote(bridge), utils.ShellSingleQuote(fmt.Sprintf("cookie=%s,priority=240,in_port=%s,arp,arp_spa=%s,actions=NORMAL", cookie, ofport, req.VMPrivateIP))),
+		)
+	}
+	commands = append(commands,
 		fmt.Sprintf("ovs-ofctl -O OpenFlow13 add-flow %s %s", utils.ShellSingleQuote(bridge), utils.ShellSingleQuote(fmt.Sprintf("cookie=%s,priority=240,in_port=%s,ip,nw_src=%s,actions=NORMAL", cookie, ofport, ipRow.IP))),
 		fmt.Sprintf("ovs-ofctl -O OpenFlow13 add-flow %s %s", utils.ShellSingleQuote(bridge), utils.ShellSingleQuote(fmt.Sprintf("cookie=%s,priority=240,in_port=%s,arp,arp_spa=%s,actions=NORMAL", cookie, ofport, ipRow.IP))),
 		fmt.Sprintf("ovs-ofctl -O OpenFlow13 add-flow %s %s", utils.ShellSingleQuote(bridge), utils.ShellSingleQuote(fmt.Sprintf("cookie=%s,priority=230,in_port=%s,ip,actions=drop", cookie, ofport))),
 		fmt.Sprintf("ovs-ofctl -O OpenFlow13 add-flow %s %s", utils.ShellSingleQuote(bridge), utils.ShellSingleQuote(fmt.Sprintf("cookie=%s,priority=230,in_port=%s,arp,actions=drop", cookie, ofport))),
-	}
+	)
+	return commands
 }
 
 func cleanupPublicIPRulesShell() string {
@@ -270,7 +277,7 @@ func cleanupPublicIPRulesShell() string {
   iptables_cmd=(iptables)
   [ "$table" = "nat" ] && iptables_cmd=(iptables -t nat)
   while true; do
-    line="$("${iptables_cmd[@]}" -L "$chain" --line-numbers 2>/dev/null | awk '/kvm-console:public-ip/ {print $1}' | sort -rn | head -n1)"
+    line="$("${iptables_cmd[@]}" -nL "$chain" --line-numbers 2>/dev/null | awk '/kvm-console:public-ip/ {print $1}' | sort -rn | head -n1)"
     [ -n "$line" ] || break
     "${iptables_cmd[@]}" -D "$chain" "$line" 2>/dev/null || break
   done
@@ -283,7 +290,7 @@ cleanup_iptables_comments filter FORWARD
 cleanup_ip6tables_comments() {
   chain="$1"
   while true; do
-    line="$(ip6tables -L "$chain" --line-numbers 2>/dev/null | awk '/kvm-console:public-ip/ {print $1}' | sort -rn | head -n1)"
+    line="$(ip6tables -nL "$chain" --line-numbers 2>/dev/null | awk '/kvm-console:public-ip/ {print $1}' | sort -rn | head -n1)"
     [ -n "$line" ] || break
     ip6tables -D "$chain" "$line" 2>/dev/null || break
   done
@@ -305,11 +312,7 @@ func cleanupPublicIPv6StateShell(ipRows []model.PublicIP) string {
 		if !publicIPIsIPv6(ipRow.IP) {
 			continue
 		}
-		uplink := strings.TrimSpace(ipRow.UplinkIF)
-		if uplink == "" {
-			uplink = detectDefaultIPv6Uplink()
-		}
-		if uplink != "" {
+		for _, uplink := range publicIPUplinkCandidates(ipRow.UplinkIF, true) {
 			b.WriteString(fmt.Sprintf("ip -6 neigh del proxy %s dev %s 2>/dev/null || true\n", utils.ShellSingleQuote(ipRow.IP), utils.ShellSingleQuote(uplink)))
 		}
 		b.WriteString(fmt.Sprintf("ip -6 route del %s/128 2>/dev/null || true\n", utils.ShellSingleQuote(ipRow.IP)))
@@ -328,10 +331,7 @@ func cleanupPublicIPHostAddressesShell(ipRows []model.PublicIP) string {
 		if strings.TrimSpace(ipRow.IP) == "" || net.ParseIP(strings.TrimSpace(ipRow.IP)) == nil {
 			continue
 		}
-		uplink := strings.TrimSpace(ipRow.UplinkIF)
-		if uplink == "" {
-			uplink = HookOvsUplink()
-		}
+		uplink := effectivePublicIPUplink(ipRow.UplinkIF, publicIPIsIPv6(ipRow.IP))
 		if uplink == "" {
 			continue
 		}
