@@ -18,7 +18,7 @@ func SwitchIsTrustedIsolated(sw model.VPCSwitch) bool {
 }
 
 func managedVPCBridgeName(vlanID int) string {
-	return fmt.Sprintf("qvsw%d", vlanID)
+	return fmt.Sprintf("cvsw%d", vlanID)
 }
 
 func normalizeUplinkMode(value, uplink string, managed bool) string {
