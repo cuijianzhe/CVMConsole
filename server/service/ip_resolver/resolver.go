@@ -53,9 +53,9 @@ func GetVMIP(name string, isRunning bool) string {
 				return ip
 			}
 			if isRunning {
-				// 优先使用 Guest Agent
+				// 优先使用 Guest Agent（直通桥接模式 CIDR 为空时跳过子网校验）
 				if mac := GetFirstVMMAC(name); mac != "" {
-					if ip, ok := guest_agent.GetVMIPByMACFromAgent(name, mac); ok && IPInCIDR(ip, sw.CIDR) {
+					if ip, ok := guest_agent.GetVMIPByMACFromAgent(name, mac); ok && (sw.CIDR == "" || IPInCIDR(ip, sw.CIDR)) {
 						return ip
 					}
 				}
@@ -64,7 +64,7 @@ func GetVMIP(name string, isRunning bool) string {
 				}
 				if mac := GetFirstVMMAC(name); mac != "" {
 					if vpcCallbacks.GetOVSLeaseIPByMAC != nil {
-						if ip := vpcCallbacks.GetOVSLeaseIPByMAC(mac); ip != "" && IPInCIDR(ip, sw.CIDR) {
+						if ip := vpcCallbacks.GetOVSLeaseIPByMAC(mac); ip != "" && (sw.CIDR == "" || IPInCIDR(ip, sw.CIDR)) {
 							return ip
 						}
 					}

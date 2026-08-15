@@ -348,6 +348,8 @@ func UpdateVMInterface(vmName string, interfaceOrder int, req AddVMInterfaceRequ
 		restoreLink()
 		return fmt.Errorf("更新网口绑定记录失败: %w", err)
 	}
+	// 直通桥接模式：将允许的 IPv4 地址同步为桥接 dnsmasq 静态绑定
+	syncDirectBridgeStaticIPFromAllowed(&sw, &binding)
 
 	// 应用带宽设置到该网口
 	if req.BandwidthInboundAvg > 0 || req.BandwidthOutboundAvg > 0 {

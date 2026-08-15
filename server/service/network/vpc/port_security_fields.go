@@ -7,7 +7,9 @@ import (
 	"strings"
 
 	"kvm_console/config"
+	"kvm_console/logger"
 	"kvm_console/model"
+	"kvm_console/service/ip_resolver"
 )
 
 func normalizeAddressField(value string, ipv6 bool) (string, error) {
@@ -53,6 +55,9 @@ func UpdateVMInterfaceAllowedAddresses(vmName string, interfaceOrder int, allowe
 	if err := model.DB.Save(&binding).Error; err != nil {
 		return fmt.Errorf("保存网卡可信地址失败: %w", err)
 	}
+	// 直通桥接模式：将允许的 IPv4 地址同步为桥接 dnsmasq 静态绑定，
+	// 使 VM 通过 DHCP 获取指定的 IP 而非上级路由器分配的地址
+	syncDirectBridgeStaticIPFromAllowed(&sw, &binding)
 	if HookTriggerPortSecurityReconcile != nil {
 		HookTriggerPortSecurityReconcile()
 	}
@@ -78,6 +83,71 @@ func normalizeIPv6PrefixField(value string) (string, error) {
 	}
 	sort.Strings(result)
 	return strings.Join(result, "\n"), nil
+}
+
+// syncDirectBridgeStaticIPFromAllowed 直通桥接交换机将允许的 IPv4 首地址同步为桥接 dnsmasq 静态绑定。
+// 使 VM 的 DHCP 请求从面板 dnsmasq 获取指定 IP，而非上级路由器自动分配。
+// 仅在桥接网桥配置了 DHCP 地址池时生效（预设模式由 binding.go 单独处理）。
+func syncDirectBridgeStaticIPFromAllowed(sw *model.VPCSwitch, binding *model.VPCVMBinding) {
+	if !HookSwitchUsesDirectBridge(*sw) {
+		return
+	}
+	// 预设模式由 binding.go 的 BindVMToVPC 处理，此处不重复
+	if sw.BridgeIPMode == "preset" {
+		return
+	}
+	bridgeName := HookBridgeNameForSwitch(*sw)
+	if bridgeName == "" {
+		return
+	}
+	// 检查桥接网桥是否配置了 DHCP 地址池
+	var bridge model.NetworkBridge
+	if model.DB == nil || model.DB.Where("name = ?", bridgeName).First(&bridge).Error != nil {
+		return
+	}
+	if bridge.DHCPCIDR == "" || bridge.DHCPStart == "" || bridge.DHCPEnd == "" {
+		return
+	}
+	// 获取 VM MAC 地址（优先绑定记录，回退实时查询）
+	mac := binding.MACAddress
+	if mac == "" {
+		mac = ip_resolver.GetFirstVMMAC(binding.VMName)
+	}
+	if mac == "" {
+		return
+	}
+	// 取第一个允许的 IPv4 地址作为静态绑定
+	firstIPv4 := ""
+	if binding.AllowedIPv4Addresses != "" {
+		for _, line := range strings.FieldsFunc(binding.AllowedIPv4Addresses, func(r rune) bool {
+			return r == ',' || r == ';' || r == '\n' || r == '\r' || r == ' '
+		}) {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				firstIPv4 = line
+				break
+			}
+		}
+	}
+	if firstIPv4 != "" {
+		// 有允许的 IPv4 地址：创建/更新 MAC→IP 静态绑定
+		if HookUpsertBridgeStaticHost != nil {
+			if err := HookUpsertBridgeStaticHost(bridgeName, binding.VMName, mac, firstIPv4); err != nil {
+				logger.App.Warn("直通桥同步静态绑定失败", "vm", binding.VMName, "bridge", bridgeName, "error", err)
+			}
+		}
+	} else {
+		// 无允许的 IPv4 地址：清除已有静态绑定，避免残留
+		if HookRemoveBridgeStaticHost != nil {
+			HookRemoveBridgeStaticHost(bridgeName, binding.VMName, mac)
+		}
+	}
+	// 重载 dnsmasq 使配置生效
+	if HookReloadBridgeDNSMasq != nil {
+		if err := HookReloadBridgeDNSMasq(bridgeName); err != nil {
+			logger.App.Warn("重载桥接 DHCP 服务失败", "bridge", bridgeName, "error", err)
+		}
+	}
 }
 
 func normalizeSwitchPortSecurityFields(req *VPCSwitchRequest, direct bool) error {
