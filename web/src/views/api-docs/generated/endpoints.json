@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-15T09:10:23.095Z",
-  "count": 353,
+  "generated_at": "2026-08-24T06:27:36.613Z",
+  "count": 356,
   "endpoints": [
     {
       "method": "POST",
@@ -914,6 +914,17 @@
       "vmAccess": false,
       "highRisk": "",
       "comment": ""
+    },
+    {
+      "method": "GET",
+      "path": "/network/client-ip",
+      "handler": "GetMyIP",
+      "auth": "jwt",
+      "admin": false,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": "获取当前访问面板的客户端 IP（端口转发入站 IP 白名单快速填充）"
     },
     {
       "method": "GET",
@@ -2047,6 +2058,17 @@
       "vmAccess": false,
       "highRisk": "",
       "comment": ""
+    },
+    {
+      "method": "GET",
+      "path": "/settings/log/read",
+      "handler": "ReadLogFile",
+      "auth": "jwt-only",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": "读取日志文件内容（在线预览，向前分页）"
     },
     {
       "method": "GET",
@@ -3807,6 +3829,17 @@
       "vmAccess": false,
       "highRisk": "",
       "comment": ""
+    },
+    {
+      "method": "PUT",
+      "path": "/vpc/security-groups/rules/:id",
+      "handler": "UpdateVPCSecurityGroupRule",
+      "auth": "jwt",
+      "admin": false,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": "编辑安全组规则（保存后重建 VPC ACL）"
     },
     {
       "method": "GET",

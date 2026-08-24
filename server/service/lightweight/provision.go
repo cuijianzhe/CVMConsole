@@ -10,7 +10,6 @@ import (
 	"kvm_console/logger"
 	"kvm_console/model"
 	clonepkg "kvm_console/service/clone"
-	"kvm_console/service/vm/memory"
 	"kvm_console/service/vm_xml"
 	"kvm_console/utils"
 )
@@ -101,13 +100,6 @@ func ProvisionLightweightVMRegistration(ctx context.Context, params *Lightweight
 			return fail(fmt.Errorf("读取 SMBIOS 配置失败: %w", err))
 		}
 	}
-	var memoryDynamic *memory.VMMemoryDynamicRequest
-	if strings.TrimSpace(reg.MemoryDynamicJSON) != "" {
-		memoryDynamic = &memory.VMMemoryDynamicRequest{}
-		if err := parseJSONText(reg.MemoryDynamicJSON, memoryDynamic); err != nil {
-			return fail(fmt.Errorf("读取动态内存配置失败: %w", err))
-		}
-	}
 	meta := HookGetTemplateMeta(reg.Template)
 	cloneParams := &clonepkg.CloneParams{
 		Name:                 reg.VMName,
@@ -136,7 +128,6 @@ func ProvisionLightweightVMRegistration(ctx context.Context, params *Lightweight
 		CPULimitPercent:      reg.CPULimitPercent,
 		CPUAffinity:          reg.CPUAffinity,
 		FirstBootRebootMode:  reg.FirstBootRebootMode,
-		MemoryDynamic:        memoryDynamic,
 		SwitchID:             user.DedicatedVPCSwitchID,
 		StoragePoolID:        reg.StoragePoolID,
 		PreserveFnOSDeviceID: reg.PreserveFnOSDeviceID,

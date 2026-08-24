@@ -34,6 +34,9 @@ func SetDiskIOPSTune(vmName, dev string, iops *DiskIOPSTune) error {
 		readIops = iops.ReadIopsSec
 		writeIops = iops.WriteIopsSec
 	}
+	if totalIops < 0 || readIops < 0 || writeIops < 0 {
+		return fmt.Errorf("IOPS 限制不能为负数")
+	}
 
 	// build TypedParam list
 	// libvirt does not allow total_iops_sec and read/write_iops_sec to be set simultaneously

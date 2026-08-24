@@ -250,6 +250,25 @@ export function getLogStatus() {
   return service.get<unknown, ApiResponse<LogStatus>>('/settings/log/status', { silent: true })
 }
 
+/** 日志文件内容（在线预览，向前分页） */
+export interface LogFileContent {
+  name: string
+  content: string
+  lines: number
+  /** 本次内容起点之前的字节偏移，加载更早的记录时回传 */
+  prev_offset: number
+  /** 是否已到文件头 */
+  eof: boolean
+}
+
+/** 读取日志文件内容（仅 .log，向前分页；.log.gz 不支持在线预览） */
+export function readLogFile(params: { file: string; lines?: number; offset?: number }) {
+  return service.get<unknown, ApiResponse<LogFileContent>>('/settings/log/read', {
+    silent: true,
+    params,
+  })
+}
+
 /** 删除日志文件 */
 export function deleteLogs(data: { files: string[] }) {
   return service.post<unknown, ApiResponse>('/settings/log/delete', data)
@@ -292,17 +311,25 @@ export function exportDiagnostics(data: { categories: string[] }) {
 
 /** 存储回收结果 */
 export interface TrimStorageResult {
+  image_path: string
+  mount_point: string
   before_blocks: number
   after_blocks: number
   trimmed_bytes: number
   trimmed_human: string
 }
 
+export interface TrimStorageTask {
+  id: number
+  status: string
+}
+
 /** 执行用户存储回收（fstrim + fallocate --dig-holes） */
 export function trimUserStorage() {
-  return service.post<unknown, ApiResponse<TrimStorageResult>>('/settings/storage/trim', {}, {
-    timeout: 120000,
-  })
+  return service.post<unknown, ApiResponse<{ task: TrimStorageTask; reused: boolean }>>(
+    '/settings/storage/trim',
+    {},
+  )
 }
 
 /** 宿主机公开信息（架构 / SPICE 支持等） */

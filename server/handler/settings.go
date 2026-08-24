@@ -17,7 +17,6 @@ import (
 	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/service"
-	"kvm_console/service/storage/quota"
 	"kvm_console/taskqueue"
 	"kvm_console/utils"
 )
@@ -34,6 +33,7 @@ type SettingsResponse struct {
 	NetworkBackend                        string `json:"network_backend"`
 	OVSBridge                             string `json:"ovs_bridge"`
 	OVSUplink                             string `json:"ovs_uplink"`
+	ElasticCloudUplink                    string `json:"elastic_cloud_uplink"`
 	OVSDHCPStart                          string `json:"ovs_dhcp_start"`
 	OVSDHCPEnd                            string `json:"ovs_dhcp_end"`
 	SubnetPrefix                          string `json:"subnet_prefix"`
@@ -79,15 +79,7 @@ type SettingsResponse struct {
 	SMTPTimeoutSeconds                    int    `json:"smtp_timeout_seconds"`
 	SMTPPasswordConfigured                bool   `json:"smtp_password_configured"`
 	SMTPConfigured                        bool   `json:"smtp_configured"`
-	DynamicMemorySchedulerEnabled         bool   `json:"dynamic_memory_scheduler_enabled"`
-	DynamicMemoryIntervalSeconds          int    `json:"dynamic_memory_interval_seconds"`
-	DynamicMemoryHostReserveMB            int    `json:"dynamic_memory_host_reserve_mb"`
-	DynamicMemoryHostReservePercent       int    `json:"dynamic_memory_host_reserve_percent"`
-	DynamicMemoryIncreaseThresholdPercent int    `json:"dynamic_memory_increase_threshold_percent"`
-	DynamicMemoryReclaimThresholdPercent  int    `json:"dynamic_memory_reclaim_threshold_percent"`
-	DynamicMemoryCooldownSeconds          int    `json:"dynamic_memory_cooldown_seconds"`
-	DynamicMemoryObservationHours         int    `json:"dynamic_memory_observation_hours"`
-	SchedulerEventRetentionHours          int    `json:"scheduler_event_retention_hours"`
+	SchedulerEventRetentionHours int `json:"scheduler_event_retention_hours"`
 	// 虚拟机磁盘 IOPS 默认限制
 	DefaultDiskIOPSTotal int `json:"default_disk_iops_total"` // 默认总 IOPS 限制（0 表示不限制）
 	DefaultDiskIOPSRead  int `json:"default_disk_iops_read"`  // 默认读 IOPS 限制（0 表示不限制）
@@ -99,6 +91,10 @@ type SettingsResponse struct {
 	JWTSecretLastRotated string `json:"jwt_secret_last_rotated"`
 	// 日志管理
 	LogMaxBackups int `json:"log_max_backups"`
+	// 请求日志详情记录开关（默认开启，记录脱敏后的响应体 JSON）
+	RequestDetailLogEnabled bool `json:"request_detail_log_enabled"`
+	// 请求日志响应体捕获上限（字节，仅环境变量可调）
+	RequestLogMaxBodyBytes int `json:"request_log_max_body_bytes"`
 	// 网络等待就绪检测
 	NetworkWaitOnlineDisabled bool   `json:"network_wait_online_disabled"`
 	NetworkWaitOnlineSummary  string `json:"network_wait_online_summary"`
@@ -107,6 +103,8 @@ type SettingsResponse struct {
 	RequestFilterEnabled                bool `json:"request_filter_enabled"`
 	PasswordBreachCheckEnabled          bool `json:"password_breach_check_enabled"`
 	ScheduledPasswordBreachCheckEnabled bool `json:"scheduled_password_breach_check_enabled"`
+	// 用户存储自动定时回收（默认开启，每天凌晨 2:00 执行）
+	ScheduledStorageTrimEnabled bool `json:"scheduled_storage_trim_enabled"`
 	// 硬件直通
 	HardwarePassthroughEnabled bool `json:"hardware_passthrough_enabled"`
 	// 安全组默认全放通（默认关闭，开启后新建安全组自动添加 IPv4/IPv6 全放通入站规则）
@@ -124,6 +122,7 @@ type UpdateSettingsRequest struct {
 	NetworkBackend                        *string `json:"network_backend"`
 	OVSBridge                             *string `json:"ovs_bridge"`
 	OVSUplink                             *string `json:"ovs_uplink"`
+	ElasticCloudUplink                    *string `json:"elastic_cloud_uplink"`
 	OVSDHCPStart                          *string `json:"ovs_dhcp_start"`
 	OVSDHCPEnd                            *string `json:"ovs_dhcp_end"`
 	SubnetPrefix                          *string `json:"subnet_prefix"`
@@ -166,14 +165,6 @@ type UpdateSettingsRequest struct {
 	SMTPFromAddress                       *string `json:"smtp_from_address"`
 	SMTPSecurity                          *string `json:"smtp_security"`
 	SMTPTimeoutSeconds                    *int    `json:"smtp_timeout_seconds"`
-	DynamicMemorySchedulerEnabled         *bool   `json:"dynamic_memory_scheduler_enabled"`
-	DynamicMemoryIntervalSeconds          *int    `json:"dynamic_memory_interval_seconds"`
-	DynamicMemoryHostReserveMB            *int    `json:"dynamic_memory_host_reserve_mb"`
-	DynamicMemoryHostReservePercent       *int    `json:"dynamic_memory_host_reserve_percent"`
-	DynamicMemoryIncreaseThresholdPercent *int    `json:"dynamic_memory_increase_threshold_percent"`
-	DynamicMemoryReclaimThresholdPercent  *int    `json:"dynamic_memory_reclaim_threshold_percent"`
-	DynamicMemoryCooldownSeconds          *int    `json:"dynamic_memory_cooldown_seconds"`
-	DynamicMemoryObservationHours         *int    `json:"dynamic_memory_observation_hours"`
 	SchedulerEventRetentionHours          *int    `json:"scheduler_event_retention_hours"`
 	// 虚拟机磁盘 IOPS 默认限制
 	DefaultDiskIOPSTotal *int `json:"default_disk_iops_total"` // 默认总 IOPS 限制（0 表示不限制）
@@ -185,6 +176,10 @@ type UpdateSettingsRequest struct {
 	JWTSecretRotateHours *int `json:"jwt_secret_rotate_hours"`
 	// 日志最大备份数
 	LogMaxBackups *int `json:"log_max_backups"`
+	// 请求日志详情记录开关
+	RequestDetailLogEnabled *bool `json:"request_detail_log_enabled"`
+	// 请求日志响应体捕获上限（字节）
+	RequestLogMaxBodyBytes *int `json:"request_log_max_body_bytes"`
 	// 网络等待就绪检测
 	NetworkWaitOnlineDisabled *bool `json:"network_wait_online_disabled"`
 	// 安全防护
@@ -192,6 +187,8 @@ type UpdateSettingsRequest struct {
 	RequestFilterEnabled                *bool `json:"request_filter_enabled"`
 	PasswordBreachCheckEnabled          *bool `json:"password_breach_check_enabled"`
 	ScheduledPasswordBreachCheckEnabled *bool `json:"scheduled_password_breach_check_enabled"`
+	// 用户存储自动定时回收
+	ScheduledStorageTrimEnabled *bool `json:"scheduled_storage_trim_enabled"`
 	// 硬件直通
 	HardwarePassthroughEnabled *bool `json:"hardware_passthrough_enabled"`
 	// 安全组默认全放通
@@ -278,6 +275,7 @@ func GetSettings(c *gin.Context) {
 			NetworkBackend:                        cfg.NetworkBackend,
 			OVSBridge:                             cfg.OVSBridge,
 			OVSUplink:                             cfg.OVSUplink,
+			ElasticCloudUplink:                    cfg.ElasticCloudUplink,
 			OVSDHCPStart:                          cfg.OVSDHCPStart,
 			OVSDHCPEnd:                            cfg.OVSDHCPEnd,
 			SubnetPrefix:                          cfg.SubnetPrefix,
@@ -323,14 +321,6 @@ func GetSettings(c *gin.Context) {
 			SMTPTimeoutSeconds:                    smtpView.TimeoutSeconds,
 			SMTPPasswordConfigured:                smtpView.PasswordConfigured,
 			SMTPConfigured:                        smtpView.Configured,
-			DynamicMemorySchedulerEnabled:         cfg.DynamicMemorySchedulerEnabled,
-			DynamicMemoryIntervalSeconds:          cfg.DynamicMemoryIntervalSeconds,
-			DynamicMemoryHostReserveMB:            cfg.DynamicMemoryHostReserveMB,
-			DynamicMemoryHostReservePercent:       cfg.DynamicMemoryHostReservePercent,
-			DynamicMemoryIncreaseThresholdPercent: cfg.DynamicMemoryIncreaseThresholdPercent,
-			DynamicMemoryReclaimThresholdPercent:  cfg.DynamicMemoryReclaimThresholdPercent,
-			DynamicMemoryCooldownSeconds:          cfg.DynamicMemoryCooldownSeconds,
-			DynamicMemoryObservationHours:         cfg.DynamicMemoryObservationHours,
 			SchedulerEventRetentionHours:          cfg.SchedulerEventRetentionHours,
 			DefaultDiskIOPSTotal:                  cfg.DefaultDiskIOPSTotal,
 			DefaultDiskIOPSRead:                   cfg.DefaultDiskIOPSRead,
@@ -339,12 +329,15 @@ func GetSettings(c *gin.Context) {
 			JWTSecretRotateHours:                  cfg.JWTSecretRotateHours,
 			JWTSecretLastRotated:                  jwtLastRotated,
 			LogMaxBackups:                         cfg.LogMaxBackups,
+			RequestDetailLogEnabled:               cfg.RequestDetailLogEnabled,
+			RequestLogMaxBodyBytes:                cfg.RequestLogMaxBodyBytes,
 			NetworkWaitOnlineDisabled:             cfg.NetworkWaitOnlineDisabled,
 			NetworkWaitOnlineSummary:              networkWaitOnlineSummary(cfg.NetworkWaitOnlineDisabled),
 			SessionFingerprintEnabled:             cfg.SessionFingerprintEnabled,
 			RequestFilterEnabled:                  cfg.RequestFilterEnabled,
 			PasswordBreachCheckEnabled:            cfg.PasswordBreachCheckEnabled,
 			ScheduledPasswordBreachCheckEnabled:   cfg.ScheduledPasswordBreachCheckEnabled,
+			ScheduledStorageTrimEnabled:           cfg.ScheduledStorageTrimEnabled,
 			HardwarePassthroughEnabled:            cfg.HardwarePassthroughEnabled,
 			SecurityGroupDefaultAllowAll:          cfg.SecurityGroupDefaultAllowAll,
 		},
@@ -365,6 +358,27 @@ func UpdateSettings(c *gin.Context) {
 		req.PortSecurityNeighborPPS != nil || req.PortSecurityNeighborBurstPackets != nil ||
 		req.PortSecurityBroadcastPPS != nil || req.PortSecurityBroadcastBurstPackets != nil ||
 		req.PortSecurityReconcileIntervalSeconds != nil
+	if req.ElasticCloudUplink != nil {
+		uplink := strings.TrimSpace(*req.ElasticCloudUplink)
+		if uplink != "" {
+			interfaces, err := service.ListHostPhysicalInterfaces()
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "读取宿主机物理网卡失败: " + err.Error()})
+				return
+			}
+			valid := false
+			for _, item := range interfaces {
+				if item.Name == uplink && item.Physical && item.CanUseNAT {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "所选网卡当前不可作为弹性云互联网出口"})
+				return
+			}
+		}
+	}
 
 	// 统一校验敏感设置项（仅系统设置保留二次验证）
 	if !verifySensitiveSettings(c, cfg, &req) {
@@ -410,6 +424,9 @@ func UpdateSettings(c *gin.Context) {
 	}
 	if req.OVSUplink != nil {
 		cfg.OVSUplink = strings.TrimSpace(*req.OVSUplink)
+	}
+	if req.ElasticCloudUplink != nil {
+		cfg.ElasticCloudUplink = strings.TrimSpace(*req.ElasticCloudUplink)
 	}
 	if req.OVSDHCPStart != nil {
 		cfg.OVSDHCPStart = strings.TrimSpace(*req.OVSDHCPStart)
@@ -619,58 +636,6 @@ func UpdateSettings(c *gin.Context) {
 			return
 		}
 	}
-	if req.DynamicMemorySchedulerEnabled != nil {
-		cfg.DynamicMemorySchedulerEnabled = *req.DynamicMemorySchedulerEnabled
-	}
-	if req.DynamicMemoryIntervalSeconds != nil {
-		if *req.DynamicMemoryIntervalSeconds < 10 {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "动态内存调度间隔不能小于 10 秒"})
-			return
-		}
-		cfg.DynamicMemoryIntervalSeconds = *req.DynamicMemoryIntervalSeconds
-	}
-	if req.DynamicMemoryHostReserveMB != nil {
-		if *req.DynamicMemoryHostReserveMB < 512 {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "宿主机保留内存不能小于 512MB"})
-			return
-		}
-		cfg.DynamicMemoryHostReserveMB = *req.DynamicMemoryHostReserveMB
-	}
-	if req.DynamicMemoryHostReservePercent != nil {
-		if *req.DynamicMemoryHostReservePercent < 5 || *req.DynamicMemoryHostReservePercent > 80 {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "宿主机保留比例需在 5% - 80% 之间"})
-			return
-		}
-		cfg.DynamicMemoryHostReservePercent = *req.DynamicMemoryHostReservePercent
-	}
-	if req.DynamicMemoryIncreaseThresholdPercent != nil {
-		if *req.DynamicMemoryIncreaseThresholdPercent < 5 || *req.DynamicMemoryIncreaseThresholdPercent > 50 {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "增长触发阈值需在 5% - 50% 之间"})
-			return
-		}
-		cfg.DynamicMemoryIncreaseThresholdPercent = *req.DynamicMemoryIncreaseThresholdPercent
-	}
-	if req.DynamicMemoryReclaimThresholdPercent != nil {
-		if *req.DynamicMemoryReclaimThresholdPercent < 10 || *req.DynamicMemoryReclaimThresholdPercent > 90 {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "回收触发阈值需在 10% - 90% 之间"})
-			return
-		}
-		cfg.DynamicMemoryReclaimThresholdPercent = *req.DynamicMemoryReclaimThresholdPercent
-	}
-	if req.DynamicMemoryCooldownSeconds != nil {
-		if *req.DynamicMemoryCooldownSeconds < 30 {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "动态内存冷却时间不能小于 30 秒"})
-			return
-		}
-		cfg.DynamicMemoryCooldownSeconds = *req.DynamicMemoryCooldownSeconds
-	}
-	if req.DynamicMemoryObservationHours != nil {
-		if *req.DynamicMemoryObservationHours < 0 || *req.DynamicMemoryObservationHours > 168 {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "观察期需在 0 - 168 小时之间"})
-			return
-		}
-		cfg.DynamicMemoryObservationHours = *req.DynamicMemoryObservationHours
-	}
 	if req.SchedulerEventRetentionHours != nil {
 		if *req.SchedulerEventRetentionHours < 1 || *req.SchedulerEventRetentionHours > 2160 {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "调度事件保留时长需在 1 - 2160 小时之间"})
@@ -720,6 +685,16 @@ func UpdateSettings(c *gin.Context) {
 		}
 		cfg.LogMaxBackups = *req.LogMaxBackups
 	}
+	if req.RequestDetailLogEnabled != nil {
+		cfg.RequestDetailLogEnabled = *req.RequestDetailLogEnabled
+	}
+	if req.RequestLogMaxBodyBytes != nil {
+		if *req.RequestLogMaxBodyBytes < 256 || *req.RequestLogMaxBodyBytes > 1024*1024 {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "请求日志响应体捕获上限需在 256 - 1048576 字节之间"})
+			return
+		}
+		cfg.RequestLogMaxBodyBytes = *req.RequestLogMaxBodyBytes
+	}
 	networkWaitOnlineChanged := false
 	if req.NetworkWaitOnlineDisabled != nil {
 		networkWaitOnlineChanged = *req.NetworkWaitOnlineDisabled != cfg.NetworkWaitOnlineDisabled
@@ -736,6 +711,9 @@ func UpdateSettings(c *gin.Context) {
 	}
 	if req.ScheduledPasswordBreachCheckEnabled != nil {
 		cfg.ScheduledPasswordBreachCheckEnabled = *req.ScheduledPasswordBreachCheckEnabled
+	}
+	if req.ScheduledStorageTrimEnabled != nil {
+		cfg.ScheduledStorageTrimEnabled = *req.ScheduledStorageTrimEnabled
 	}
 	if req.HardwarePassthroughEnabled != nil {
 		cfg.HardwarePassthroughEnabled = *req.HardwarePassthroughEnabled
@@ -940,7 +918,7 @@ func persistSettings(cfg *config.Config) []string {
 	settingsMap := cfg.ToSettingsMap()
 	var persistErrors []string
 	for key, value := range settingsMap {
-		if value == "" || (value == "0" && key != "dynamic_memory_observation_hours" && key != "spice_enabled_by_default") {
+		if value == "" || (value == "0" && key != "spice_enabled_by_default") {
 			_ = model.DeleteSetting(key)
 			continue
 		}
@@ -1242,16 +1220,23 @@ func ExportLogs(c *gin.Context) {
 
 // TrimUserStorage 执行用户存储回收（fstrim + fallocate --dig-holes）
 func TrimUserStorage(c *gin.Context) {
-	result, err := quota.TrimStorage()
+	createdBy := c.GetString("username")
+	if createdBy == "" {
+		createdBy = "admin"
+	}
+	task, reused, err := service.SubmitStorageTrim(createdBy, "管理员手动执行")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "存储回收失败: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "提交存储回收任务失败: " + err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "存储回收完成",
-		"data":    result,
+	message := "存储回收任务已提交"
+	if reused {
+		message = "已有存储回收任务正在执行，已返回现有任务"
+	}
+	c.JSON(http.StatusAccepted, gin.H{
+		"code": 202, "message": message,
+		"data": gin.H{"task": task, "reused": reused},
 	})
 }
 

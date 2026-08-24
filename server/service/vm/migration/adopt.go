@@ -61,7 +61,7 @@ func AdoptMigratedVM(req MigrationAdoptRequest) (*MigrationAdoptResult, error) {
 		}
 		if switchID > 0 {
 			if err := service.BindVMToVPCAsAdmin(req.VMName, switchID, securityGroupID); err != nil {
-				return nil, fmt.Errorf("绑定目标 VPC 失败: %w", err)
+				return nil, fmt.Errorf("绑定目标交换机失败: %w", err)
 			}
 		}
 	}
@@ -111,6 +111,7 @@ func AdoptMigratedVM(req MigrationAdoptRequest) (*MigrationAdoptResult, error) {
 			HostPort:       hostPort,
 			VMPort:         rule.VMPort,
 			Protocol:       rule.Protocol,
+			SourceIP:       rule.SourceIP,
 			Comment:        req.VMName,
 			CreatedBy:      "migration",
 			CreatedByAdmin: true,
@@ -119,7 +120,7 @@ func AdoptMigratedVM(req MigrationAdoptRequest) (*MigrationAdoptResult, error) {
 			continue
 		}
 		result.PortForwards = append(result.PortForwards, applied)
-		_ = service.EnsureSecurityGroupAllowsPortForward(req.VMName, rule.Protocol, rule.VMPort)
+		_ = service.EnsureSecurityGroupAllowsPortForward(req.VMName, rule.Protocol, rule.VMPort, rule.SourceIP)
 	}
 	return result, nil
 }

@@ -10,7 +10,6 @@ import (
 	"kvm_console/service/network/vpc"
 	"kvm_console/service/storage/disk"
 	"kvm_console/service/storage/pool"
-	"kvm_console/service/vm/memory"
 	"kvm_console/service/vm_xml"
 )
 
@@ -103,6 +102,8 @@ type Deps struct {
 
 	// ---- Host (additional) ----
 	CollectHostDiskIOBytes func() (int64, int64, error)
+	CollectHostNetDevices  func() ([]model.HostNetDeviceStat, error)
+	CollectHostDiskDevices func() ([]model.HostDiskDeviceStat, error)
 
 	// ---- Bandwidth (additional) ----
 	RebalanceUserBandwidth func(username string) error
@@ -205,9 +206,6 @@ type (
 
 	// VPC types
 	AddVMInterfaceRequest = vpc.AddVMInterfaceRequest
-
-	// Memory types
-	VMMemoryDynamicRequest = memory.VMMemoryDynamicRequest
 
 	// vm_xml types
 	VMGuestAgentConfig = vm_xml.VMGuestAgentConfig

@@ -46,6 +46,9 @@ func DeleteVPCSwitch(operator, role string, id uint, force bool) error {
 func GetVPCSwitchVMs(operator, role string, id uint) ([]vpcpkg.VMSwitchInfo, error) {
 	return vpcpkg.GetVPCSwitchVMs(operator, role, id)
 }
+func IsSystemVPCSwitch(id uint) bool {
+	return vpcpkg.IsSystemVPCSwitch(id)
+}
 func ResetVPCSwitchTraffic(operator, role string, id uint) error {
 	return vpcpkg.ResetVPCSwitchTraffic(operator, role, id)
 }
@@ -94,6 +97,9 @@ func DeleteVPCSecurityGroup(operator, role string, id uint) error {
 }
 func AddVPCSecurityGroupRule(operator, role string, groupID uint, req VPCSecurityGroupRuleRequest) (*model.VPCSecurityGroupRule, error) {
 	return vpcpkg.AddVPCSecurityGroupRule(operator, role, groupID, req)
+}
+func UpdateVPCSecurityGroupRule(operator, role string, ruleID uint, req VPCSecurityGroupRuleRequest) (*model.VPCSecurityGroupRule, error) {
+	return vpcpkg.UpdateVPCSecurityGroupRule(operator, role, ruleID, req)
 }
 func DeleteVPCSecurityGroupRule(operator, role string, ruleID uint) error {
 	return vpcpkg.DeleteVPCSecurityGroupRule(operator, role, ruleID)
@@ -147,6 +153,20 @@ func ListVMInterfaces(vmName string) ([]VMInterfaceInfo, error) {
 	return vpcpkg.ListVMInterfaces(vmName)
 }
 
+// Interface management（普通用户自助：仅限本人虚拟机与本人交换机）
+func ValidateExtraNicsForUser(operator string, extraNics []AddVMInterfaceRequest) error {
+	return vpcpkg.ValidateExtraNicsForUser(operator, extraNics)
+}
+func AddVMInterfaceAsUser(operator, vmName string, req AddVMInterfaceRequest) (*VMInterfaceInfo, error) {
+	return vpcpkg.AddVMInterfaceAsUser(operator, vmName, req)
+}
+func UpdateVMInterfaceAsUser(operator, vmName string, interfaceOrder int, req AddVMInterfaceRequest) error {
+	return vpcpkg.UpdateVMInterfaceAsUser(operator, vmName, interfaceOrder, req)
+}
+func RemoveVMInterfaceAsUser(operator, vmName string, interfaceOrder int) error {
+	return vpcpkg.RemoveVMInterfaceAsUser(operator, vmName, interfaceOrder)
+}
+
 // Helpers
 func EnsureDefaultSecurityGroup(username string) (*model.VPCSecurityGroup, error) {
 	return vpcpkg.EnsureDefaultSecurityGroup(username)
@@ -188,11 +208,12 @@ func EnsureVPCForVMCreate(username string, switchID, securityGroupID uint) error
 func ResolveVPCForVMCreate(username string, switchID, securityGroupID uint) (uint, uint, error) {
 	return vpcpkg.ResolveVPCForVMCreate(username, switchID, securityGroupID)
 }
-func EnsureSecurityGroupAllowsPortForward(vmName, protocol, portText string) error {
-	return vpcpkg.EnsureSecurityGroupAllowsPortForward(vmName, protocol, portText)
+// EnsureSecurityGroupAllowsPortForward 为 VPC 虚拟机补安全组放行规则（sourceIP 为端口转发入站 IP 白名单）
+func EnsureSecurityGroupAllowsPortForward(vmName, protocol, portText, sourceIP string) error {
+	return vpcpkg.EnsureSecurityGroupAllowsPortForward(vmName, protocol, portText, sourceIP)
 }
-func RemoveSecurityGroupAllowsPortForwardIfUnused(destIP, protocol, portText string) error {
-	return vpcpkg.RemoveSecurityGroupAllowsPortForwardIfUnused(destIP, protocol, portText)
+func RemoveSecurityGroupAllowsPortForwardIfUnused(destIP, protocol, portText, sourceIP string) error {
+	return vpcpkg.RemoveSecurityGroupAllowsPortForwardIfUnused(destIP, protocol, portText, sourceIP)
 }
 
 // Traffic
@@ -418,6 +439,7 @@ func init() {
 				DestIP:   r.DestIP,
 				Protocol: r.Protocol,
 				DestPort: r.DestPort,
+				SourceIP: r.SourceIP,
 			}
 		}
 		return result, nil

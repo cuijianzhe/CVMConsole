@@ -237,17 +237,6 @@ export interface Smbios1Payload {
   version: string
 }
 
-/** 动态内存配置 */
-export interface MemoryDynamicPayload {
-  dynamic_enabled: boolean
-  memory_backend: string // balloon / virtio_mem
-  memory_initial: number // GB
-  memory_min?: number // GB
-  memory_max?: number // GB
-  memory_auto_balloon?: boolean
-  memory_current?: number // GB，0 表示不手动调整
-}
-
 /** 直接内核引导配置 */
 export interface DirectBootPayload {
   enabled: boolean
@@ -298,7 +287,6 @@ export interface UpdateVmPayload {
   nic_model?: string
   boot_type?: string
   video_model?: string
-  memory_dynamic?: MemoryDynamicPayload
   add_disks?: AddDiskPayload[]
 }
 
@@ -447,8 +435,6 @@ export interface VmDetailInfo {
   cpu_affinity: string
   cpu_percent?: number
   mem_percent?: number
-  memory_dynamic_enabled: boolean
-  memory_backend: string // balloon / virtio_mem
   created_at: string
   bandwidth_in?: number
   bandwidth_out?: number
@@ -482,15 +468,6 @@ export interface VmDetailInfo {
   direct_boot?: DirectBootPayload | null
   guest_agent?: GuestAgentPayload | null
   smbios1?: Partial<Smbios1Payload> | null
-  memory_initial?: number // MB
-  memory_min?: number // MB
-  memory_max_dynamic?: number // MB
-  memory_auto_balloon?: boolean
-  memory_pending_apply?: boolean
-  memory_compat_mode?: string // legacy_static / dynamic / pending_apply
-  memory_balloon_supported?: boolean
-  memory_balloon_status?: string // ok / no_stats / not_running / missing_balloon / pending_apply
-  memory_virtio_mem_current?: number // MB
   boot_order?: string[]
   boot_devices?: VmBootDevice[]
 }
@@ -997,7 +974,6 @@ export interface CreateVmPayload {
   nested_virt?: boolean
   cpu_limit_percent?: number
   cpu_affinity?: string
-  memory_dynamic?: MemoryDynamicPayload
 }
 
 /** 管理员：创建虚拟机（ISO 安装） */
@@ -1056,7 +1032,6 @@ export interface CloneVmPayload {
   nested_virt?: boolean
   cpu_limit_percent?: number
   cpu_affinity?: string
-  memory_dynamic?: MemoryDynamicPayload
 }
 
 /** 管理员：模板克隆虚拟机 */
@@ -1178,7 +1153,6 @@ export interface ImportVmPayload {
   nested_virt?: boolean
   cpu_limit_percent?: number
   cpu_affinity?: string
-  memory_dynamic?: MemoryDynamicPayload
 }
 
 /** 管理员：绝对路径导入磁盘创建虚拟机 */

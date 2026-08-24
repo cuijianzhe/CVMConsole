@@ -107,6 +107,7 @@ func Setup() *gin.Engine {
 			settings.PUT("/cpu-affinity-presets", handler.SaveCPUAffinityPresets)
 			settings.POST("/jwt-secret/rotate", handler.RotateJWTSecret)
 			settings.GET("/log/status", handler.GetLogStatus)
+			settings.GET("/log/read", handler.ReadLogFile) // 读取日志文件内容（在线预览，向前分页）
 			settings.POST("/log/delete", handler.DeleteLogs)
 			settings.POST("/log/export", handler.ExportLogs)
 			settings.GET("/diagnostics/categories", handler.GetDiagnosticCategories)
@@ -154,8 +155,8 @@ func Setup() *gin.Engine {
 				vm.POST("/:name/migration/preview", middleware.AdminMiddleware(), handler.PreviewVMMigration)
 				vm.POST("/:name/migrate", middleware.AdminMiddleware(), handler.MigrateVM)
 				vm.PUT("/:name/security-group", handler.SwitchVMSecurityGroup)
-				// 多网口管理（仅管理员）
-				vm.GET("/:name/interfaces", handler.ListVMInterfaces)
+			// 多网口管理（管理员全量；弹性云用户可自助管理本人虚拟机的附加网口）
+			vm.GET("/:name/interfaces", handler.ListVMInterfaces)
 				vm.POST("/:name/interfaces", handler.AddVMInterface)
 				vm.PUT("/:name/interfaces/:order", handler.UpdateVMInterface)
 				vm.DELETE("/:name/interfaces/:order", handler.RemoveVMInterface)
@@ -285,6 +286,7 @@ func Setup() *gin.Engine {
 				network.POST("/static-ip/unbind", middleware.ElasticCloudOnlyMiddleware(), handler.UnbindStaticIP)
 
 				// 端口转发
+				network.GET("/client-ip", handler.GetMyIP) // 获取当前访问面板的客户端 IP（端口转发入站 IP 白名单快速填充）
 				network.GET("/port-forward/list", handler.GetPortForwardList)
 				network.POST("/port-forward/add", handler.AddPortForward)
 				network.PUT("/port-forward/:id", handler.UpdatePortForward)
@@ -350,6 +352,7 @@ func Setup() *gin.Engine {
 				vpc.PUT("/security-groups/:id", middleware.ElasticCloudOnlyMiddleware(), handler.UpdateVPCSecurityGroup)
 				vpc.DELETE("/security-groups/:id", middleware.ElasticCloudOnlyMiddleware(), handler.DeleteVPCSecurityGroup)
 				vpc.POST("/security-groups/:id/rules", handler.AddVPCSecurityGroupRule)
+				vpc.PUT("/security-groups/rules/:id", handler.UpdateVPCSecurityGroupRule) // 编辑安全组规则（保存后重建 VPC ACL）
 				vpc.DELETE("/security-groups/rules/:id", handler.DeleteVPCSecurityGroupRule)
 				vpc.GET("/acl/preview", handler.PreviewVPCACL)
 				vpc.POST("/acl/apply", handler.ApplyVPCACL)
