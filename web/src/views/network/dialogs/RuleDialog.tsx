@@ -1,15 +1,25 @@
 /**
- * 添加安全组规则对话框
+ * 添加 / 编辑安全组规则对话框
  * - 方向 / 协议 / 端口（支持单端口、范围、全端口）
  * - 目标类型：CIDR/IP、指定交换机、指定安全组（仅允许选择当前用户可见资源）
+ * - 传入 rule 时进入编辑模式：回填规则字段，保存走更新接口
  */
 import { useMemo, useState } from 'react'
 import { Checkbox, Input, Modal, Select, TextArea, Toast } from '@douyinfe/semi-ui'
-import { addVPCSecurityGroupRule, vpcSwitchModeDetail, type VpcSecurityGroup, type VpcSwitch } from '@/api/vpc'
+import {
+  addVPCSecurityGroupRule,
+  updateVPCSecurityGroupRule,
+  vpcSwitchModeDetail,
+  type VpcSecurityGroup,
+  type VpcSecurityGroupRule,
+  type VpcSwitch,
+} from '@/api/vpc'
 import { useMountModalLifecycle } from '@/hooks/useMountModalLifecycle'
+import { securityGroupRuleActionText } from '../utils'
 
 interface RuleDialogProps {
   group: VpcSecurityGroup
+  rule?: VpcSecurityGroupRule
   switches: VpcSwitch[]
   securityGroups: VpcSecurityGroup[]
   onClose: () => void
@@ -38,10 +48,39 @@ const INITIAL_FORM: RuleFormState = {
   remark: '',
 }
 
-export default function RuleDialog({ group, switches, securityGroups, onClose, onSaved }: RuleDialogProps) {
+/** 由已有规则回填表单：端口 1-65535 或 ICMP/全部协议统一回填为「全端口」 */
+function formFromRule(rule: VpcSecurityGroupRule): RuleFormState {
+  const protocol = rule.protocol || 'tcp'
+  const icmpLike = protocol === 'icmp' || protocol === 'icmpv6' || protocol === 'all'
+  const portAll = icmpLike || (rule.port_start === 1 && rule.port_end === 65535)
+  const portText = portAll
+    ? ''
+    : rule.port_start === rule.port_end
+      ? String(rule.port_start)
+      : `${rule.port_start}-${rule.port_end}`
+  return {
+    direction: rule.direction || 'ingress',
+    address_family: rule.address_family === 'ipv6' ? 'ipv6' : 'ipv4',
+    protocol,
+    port_text: portText,
+    port_all: portAll,
+    target_type: rule.target_type || 'cidr',
+    target_value: rule.target_value || '',
+    remark: rule.remark || '',
+  }
+}
+
+export default function RuleDialog({
+  group,
+  rule,
+  switches,
+  securityGroups,
+  onClose,
+  onSaved,
+}: RuleDialogProps) {
   const { modalVisible, requestClose, afterModalClose } = useMountModalLifecycle(onClose)
   const [submitting, setSubmitting] = useState(false)
-  const [form, setForm] = useState<RuleFormState>(INITIAL_FORM)
+  const [form, setForm] = useState<RuleFormState>(() => (rule ? formFromRule(rule) : INITIAL_FORM))
 
   const patch = (p: Partial<RuleFormState>) => setForm((f) => ({ ...f, ...p }))
 
@@ -62,14 +101,15 @@ export default function RuleDialog({ group, switches, securityGroups, onClose, o
     [securityGroups, group.username],
   )
 
+  const peerText = form.direction === 'egress' ? '目标' : '来源'
   const targetHelp =
     form.target_type === 'cidr'
       ? form.address_family === 'ipv6'
-        ? '支持 IPv6 地址或 CIDR，如 ::/0 表示所有 IPv6 来源'
-        : '支持 IPv4 地址或 CIDR，如 0.0.0.0/0 表示所有 IPv4 来源'
+        ? `支持 IPv6 地址或 CIDR，如 ::/0 表示所有 IPv6 ${peerText}`
+        : `支持 IPv4 地址或 CIDR，如 0.0.0.0/0 表示所有 IPv4 ${peerText}`
       : form.target_type === 'switch'
-        ? `选择当前用户可访问的交换机，仅匹配其中的 ${form.address_family === 'ipv6' ? 'IPv6' : 'IPv4'} 地址`
-        : `选择当前用户拥有的安全组，仅匹配其中的 ${form.address_family === 'ipv6' ? 'IPv6' : 'IPv4'} 地址`
+        ? `选择当前用户可访问的${peerText}交换机，仅匹配其中的 ${form.address_family === 'ipv6' ? 'IPv6' : 'IPv4'} 地址`
+        : `选择当前用户拥有的${peerText}安全组，仅匹配其中的 ${form.address_family === 'ipv6' ? 'IPv6' : 'IPv4'} 地址`
 
   const handleAddressFamilyChange = (family: 'ipv4' | 'ipv6') => {
     patch({
@@ -145,7 +185,7 @@ export default function RuleDialog({ group, switches, securityGroups, onClose, o
 
     setSubmitting(true)
     try {
-      await addVPCSecurityGroupRule(group.id, {
+      const payload = {
         direction: form.direction,
         address_family: form.address_family,
         protocol: form.protocol,
@@ -154,8 +194,14 @@ export default function RuleDialog({ group, switches, securityGroups, onClose, o
         target_type: form.target_type,
         target_value: targetValue,
         remark: form.remark,
-      })
-      Toast.success('规则已添加')
+      }
+      if (rule) {
+        await updateVPCSecurityGroupRule(rule.id, payload)
+        Toast.success('规则已更新')
+      } else {
+        await addVPCSecurityGroupRule(group.id, payload)
+        Toast.success('规则已添加')
+      }
       onSaved()
       requestClose()
     } catch {
@@ -167,7 +213,7 @@ export default function RuleDialog({ group, switches, securityGroups, onClose, o
 
   return (
     <Modal
-      title={`添加规则 — ${group.name}`}
+      title={`${rule ? '编辑规则' : '添加规则'} — ${group.name}`}
       visible={modalVisible}
       afterClose={afterModalClose}
       onCancel={requestClose}
@@ -192,6 +238,14 @@ export default function RuleDialog({ group, switches, securityGroups, onClose, o
           />
         </div>
         <div className="qvm-form-item">
+          <div className="qvm-form-label">动作</div>
+          <Input value={securityGroupRuleActionText(form.direction)} disabled />
+          <div className="qvm-form-tip">动作由方向自动确定，仅供预览</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+        <div className="qvm-form-item">
           <div className="qvm-form-label">IP 版本</div>
           <Select
             style={{ width: '100%' }}
@@ -203,23 +257,22 @@ export default function RuleDialog({ group, switches, securityGroups, onClose, o
             ]}
           />
         </div>
-      </div>
-
-      <div className="qvm-form-item">
-        <div className="qvm-form-label">协议</div>
-        <Select
-          style={{ width: '100%' }}
-          value={form.protocol}
-          onChange={(v) => patch({ protocol: String(v) })}
-          optionList={[
-            { value: 'tcp', label: 'TCP' },
-            { value: 'udp', label: 'UDP' },
-            form.address_family === 'ipv6'
-              ? { value: 'icmpv6', label: 'ICMPv6' }
-              : { value: 'icmp', label: 'ICMP' },
-            { value: 'all', label: '全部' },
-          ]}
-        />
+        <div className="qvm-form-item">
+          <div className="qvm-form-label">协议</div>
+          <Select
+            style={{ width: '100%' }}
+            value={form.protocol}
+            onChange={(v) => patch({ protocol: String(v) })}
+            optionList={[
+              { value: 'tcp', label: 'TCP' },
+              { value: 'udp', label: 'UDP' },
+              form.address_family === 'ipv6'
+                ? { value: 'icmpv6', label: 'ICMPv6' }
+                : { value: 'icmp', label: 'ICMP' },
+              { value: 'all', label: '全部' },
+            ]}
+          />
+        </div>
       </div>
 
       <div className="qvm-form-item">
@@ -269,7 +322,7 @@ export default function RuleDialog({ group, switches, securityGroups, onClose, o
           <Select
             style={{ width: '100%' }}
             filter
-            placeholder="选择允许访问的交换机"
+            placeholder={form.direction === 'egress' ? '选择拒绝访问的目标交换机' : '选择允许访问的来源交换机'}
             emptyContent="当前用户没有可选交换机"
             value={form.target_value}
             onChange={(v) => patch({ target_value: String(v || '') })}
@@ -280,7 +333,7 @@ export default function RuleDialog({ group, switches, securityGroups, onClose, o
           <Select
             style={{ width: '100%' }}
             filter
-            placeholder="选择允许访问的安全组"
+            placeholder={form.direction === 'egress' ? '选择拒绝访问的目标安全组' : '选择允许访问的来源安全组'}
             emptyContent="当前用户没有可选安全组"
             value={form.target_value}
             onChange={(v) => patch({ target_value: String(v || '') })}

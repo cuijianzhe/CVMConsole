@@ -192,7 +192,7 @@ func detectHostPortListener(protocol string, port int) (bool, string) {
 	ssResult := utils.ExecShellQuiet(fmt.Sprintf(
 		"ss %s 2>/dev/null | awk '{print $4}' | grep -P ':%d$'", ssFlag, port))
 	if strings.TrimSpace(ssResult.Stdout) != "" {
-		procResult := utils.ExecShell(fmt.Sprintf(
+		procResult := utils.ExecShellQuiet(fmt.Sprintf(
 			"ss %s 2>/dev/null | grep ':%d ' | head -1",
 			ssProcessFlag, port))
 		procInfo := strings.TrimSpace(procResult.Stdout)

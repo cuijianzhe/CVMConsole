@@ -23,6 +23,21 @@ SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 ENV_FILE="${INSTALL_DIR}/.env"
 GITHUB_REPO="cuijianzhe/CVMConsole"
 GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+INSTALL_LAUNCH_DIR="$PWD"
+COMPATIBILITY_CHECK_SCRIPT="check-system-compatibility.sh"
+# 首次安装兼容性脚本下载地址，发布前填入正式地址。
+COMPATIBILITY_CHECK_URL="https://download.xiaozhuhouses.asia/download/v1/links/qhnoBKgQhgqxdXFxnZIW95hjerBS3L7HBUAo0GNg8Do"
+COMPATIBILITY_REPORT_DIR="${INSTALL_DIR}/logs/compatibility"
+COMPATIBILITY_SCRIPT_PATH=""
+COMPATIBILITY_DOWNLOAD_TMP=""
+COMPATIBILITY_WARNING=0
+COMPATIBILITY_SKIPPED=0
+COMPATIBILITY_FAILURE_STAGE=""
+COMPATIBILITY_CHECK_STATUS=0
+COMPATIBILITY_INTERRUPTED=0
+# 开源版官方下载源（按架构区分）
+DOWNLOAD_URL_AMD64="https://download.xiaozhuhouses.asia/download/v1/links/YsxWkWgFPiZFrc8I0r2F8SpdLbhBA_O7PMnD0TDS0wM"
+DOWNLOAD_URL_ARM64="https://download.xiaozhuhouses.asia/download/v1/links/SSr8OGj6KLbxHHKK746R_-CvpoFj1Skh9XIkjkNNzZ0"
 
 STORAGE_IMG="/var/lib/kvm-user-storage.img"
 STORAGE_MOUNT="/var/lib/kvm-user-storage"
@@ -32,6 +47,7 @@ OVS_CONFIG_DIR="/etc/kvm-console/ovs"
 OVS_STATE_DIR="/var/lib/kvm-console/ovs"
 OVS_DNSMASQ_UNIT="kvm-console-ovs-dnsmasq.service"
 OVS_DNSMASQ_SERVICE_FILE="/etc/systemd/system/${OVS_DNSMASQ_UNIT}"
+DEFAULT_OVS_SUBNET_PREFIX="192.168.122"
 PORT_FORWARD_DIR="/etc/kvm-portforward"
 VM_ACCESS_DIR="/etc/libvirt/vm-access"
 FIREWALL_DIR="/etc/kvm-console/firewall"
@@ -1189,6 +1205,129 @@ random_secret() {
     printf '%s' "$secret"
 }
 
+ipv4_to_int() {
+    local ip="$1"
+    local a b c d octet
+    IFS=. read -r a b c d <<< "$ip"
+    for octet in "$a" "$b" "$c" "$d"; do
+        if ! [[ "$octet" =~ ^[0-9]{1,3}$ ]] || [ "$((10#$octet))" -gt 255 ]; then
+            return 1
+        fi
+    done
+    printf '%u\n' "$(( (10#$a << 24) + (10#$b << 16) + (10#$c << 8) + 10#$d ))"
+}
+
+cidr_to_range() {
+    local cidr="$1"
+    local ip="${cidr%/*}"
+    local prefix_len="${cidr#*/}"
+    local ip_int mask network broadcast
+    if [ "$ip" = "$cidr" ] || ! [[ "$prefix_len" =~ ^[0-9]{1,2}$ ]] || [ "$prefix_len" -gt 32 ]; then
+        return 1
+    fi
+    ip_int=$(ipv4_to_int "$ip") || return 1
+    if [ "$prefix_len" -eq 0 ]; then
+        mask=0
+    else
+        mask=$(( (0xFFFFFFFF << (32 - prefix_len)) & 0xFFFFFFFF ))
+    fi
+    network=$(( ip_int & mask ))
+    broadcast=$(( network | (0xFFFFFFFF ^ mask) ))
+    printf '%u %u\n' "$network" "$broadcast"
+}
+
+cidr_overlaps() {
+    local left="$1"
+    local right="$2"
+    local left_range right_range left_start left_end right_start right_end
+    left_range=$(cidr_to_range "$left") || return 1
+    right_range=$(cidr_to_range "$right") || return 1
+    read -r left_start left_end <<< "$left_range"
+    read -r right_start right_end <<< "$right_range"
+    [ "$left_start" -le "$right_end" ] && [ "$right_start" -le "$left_end" ]
+}
+
+host_ipv4_cidrs() {
+    { ip -o -4 addr show 2>/dev/null || true; } | awk '
+        $2 != "lo" {
+            for (i = 1; i <= NF; i++) {
+                if ($i == "inet") {
+                    print $2, $(i + 1)
+                    break
+                }
+            }
+        }
+    '
+}
+
+first_ovs_subnet_conflict() {
+    local subnet_prefix="$1"
+    local candidate_cidr="${subnet_prefix}.0/24"
+    local iface iface_cidr
+    while read -r iface iface_cidr; do
+        [ -n "${iface:-}" ] && [ -n "${iface_cidr:-}" ] || continue
+        if cidr_overlaps "$candidate_cidr" "$iface_cidr"; then
+            printf '%s %s' "$iface" "$iface_cidr"
+            return 0
+        fi
+    done < <(host_ipv4_cidrs)
+    return 1
+}
+
+generate_ovs_subnet_candidates() {
+    local third second
+    printf '%s\n' "$DEFAULT_OVS_SUBNET_PREFIX"
+    for third in $(seq 123 254) $(seq 2 121); do
+        printf '192.168.%s\n' "$third"
+    done
+    for second in 250 251 252 253 254 240 241 242 243 244 245 246 247 248 249; do
+        for third in $(seq 0 254); do
+            printf '10.%s.%s\n' "$second" "$third"
+        done
+    done
+    for second in 31 30 29 28 27 26 25 24 23 22 21 20; do
+        for third in $(seq 0 254); do
+            printf '172.%s.%s\n' "$second" "$third"
+        done
+    done
+}
+
+select_available_ovs_subnet_prefix() {
+    local candidate
+    while read -r candidate; do
+        [ -n "$candidate" ] || continue
+        if ! first_ovs_subnet_conflict "$candidate" >/dev/null; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done < <(generate_ovs_subnet_candidates)
+    printf '%s' "$DEFAULT_OVS_SUBNET_PREFIX"
+    return 0
+}
+
+write_default_ovs_subnet_prefix() {
+    local existing_value
+    existing_value=$(env_get "KVM_SUBNET_PREFIX")
+    if [ -n "$existing_value" ] || grep -q "^KVM_SUBNET_PREFIX=" "$ENV_FILE" 2>/dev/null; then
+        return
+    fi
+
+    local selected_prefix default_conflict
+    selected_prefix=$(select_available_ovs_subnet_prefix)
+    default_conflict=$(first_ovs_subnet_conflict "$DEFAULT_OVS_SUBNET_PREFIX" || true)
+    env_set "KVM_SUBNET_PREFIX" "$selected_prefix"
+
+    if [ "$selected_prefix" != "$DEFAULT_OVS_SUBNET_PREFIX" ]; then
+        if [ -n "$default_conflict" ]; then
+            warn "检测到默认基础网络 ${DEFAULT_OVS_SUBNET_PREFIX}.0/24 与宿主机网卡 ${default_conflict} 冲突，已自动改用 ${selected_prefix}.0/24"
+        else
+            warn "默认基础网络 ${DEFAULT_OVS_SUBNET_PREFIX}.0/24 不可用，已自动改用 ${selected_prefix}.0/24"
+        fi
+    else
+        success "基础网络默认网段: ${selected_prefix}.0/24"
+    fi
+}
+
 configure_port() {
     local default_port="8080"
     local existing_port
@@ -1347,9 +1486,10 @@ write_env() {
         env_default "KVM_NETWORK_BACKEND" "ovs"
         env_default "KVM_OVS_BRIDGE" "br-ovs"
         env_default "KVM_OVS_UPLINK" ""
+        env_default "KVM_ELASTIC_CLOUD_UPLINK" ""
         env_default "KVM_OVS_DHCP_START" ""
         env_default "KVM_OVS_DHCP_END" ""
-        env_default "KVM_SUBNET_PREFIX" "192.168.122"
+        write_default_ovs_subnet_prefix
         env_default "KVM_AUTO_PORT_START" "10000"
         env_default "KVM_AUTO_PORT_END" "20000"
         env_default "KVM_HOST_IP" ""
@@ -2038,6 +2178,29 @@ deploy_compatibility_script() {
     success "兼容性测试脚本已部署到 ${INSTALL_DIR}/scripts/${COMPATIBILITY_CHECK_SCRIPT}"
 }
 
+execute_compatibility_check() {
+    local script_path="$1"
+    COMPATIBILITY_CHECK_STATUS=0
+    COMPATIBILITY_INTERRUPTED=0
+
+    info "开始创建 1 vCPU / 1GB 内存 / 1GB 磁盘的临时测试虚拟机..."
+    trap 'COMPATIBILITY_INTERRUPTED=1; warn "收到中断信号，正在等待兼容性测试清理临时资源"' INT TERM
+    set +e
+    bash "$script_path" \
+        --binary "${INSTALL_DIR}/kvm-console" \
+        --report-dir "$COMPATIBILITY_REPORT_DIR" \
+        --vcpu 1 \
+        --ram-gb 1 \
+        --disk-gb 1
+    COMPATIBILITY_CHECK_STATUS=$?
+    set -e
+    trap - INT TERM
+
+    if [ "$COMPATIBILITY_INTERRUPTED" -eq 1 ]; then
+        COMPATIBILITY_CHECK_STATUS=130
+    fi
+}
+
 rollback_first_install_program_files() {
     warn "正在撤回本次复制的程序文件；依赖、网络地基、配置和诊断报告将保留"
     rm -f \
@@ -2073,7 +2236,6 @@ run_first_install_compatibility_check() {
 
     local run_check
     local check_status
-    local compatibility_interrupted=0
     echo ""
     read -rp "是否运行系统兼容性测试？首次安装强烈推荐 [Y/n]: " run_check
     run_check=${run_check:-Y}
@@ -2090,30 +2252,73 @@ run_first_install_compatibility_check() {
     fi
 
     deploy_compatibility_script "$COMPATIBILITY_SCRIPT_PATH"
-    info "开始创建 1 vCPU / 1GB 内存 / 1GB 磁盘的临时测试虚拟机..."
-    trap 'compatibility_interrupted=1; warn "收到中断信号，正在等待兼容性测试清理临时资源"' INT TERM
-    set +e
-    bash "$COMPATIBILITY_SCRIPT_PATH" \
-        --binary "${INSTALL_DIR}/kvm-console" \
-        --report-dir "$COMPATIBILITY_REPORT_DIR" \
-        --vcpu 1 \
-        --ram-gb 1 \
-        --disk-gb 1
-    check_status=$?
-    set -e
-    trap - INT TERM
+    execute_compatibility_check "${INSTALL_DIR}/scripts/${COMPATIBILITY_CHECK_SCRIPT}"
+    check_status=$COMPATIBILITY_CHECK_STATUS
 
-    if [ "$check_status" -eq 0 ] && [ "$compatibility_interrupted" -eq 0 ]; then
+    if [ "$check_status" -eq 0 ]; then
         success "宿主机虚拟机创建与基础 OVS 网络兼容性测试通过"
         return 0
     fi
 
-    if [ "$compatibility_interrupted" -eq 1 ] || [ "$check_status" -eq 130 ]; then
+    if [ "$check_status" -eq 130 ]; then
         COMPATIBILITY_FAILURE_STAGE="用户中断"
     else
-        COMPATIBILITY_FAILURE_STAGE="虚拟机创建、启动或 OVS 联合验证"
+        COMPATIBILITY_FAILURE_STAGE="一个或多个兼容性测试阶段"
     fi
     confirm_continue_after_compatibility_failure
+}
+
+run_update_compatibility_check() {
+    [ "$MODE" = "update" ] || return 0
+
+    local run_check
+    local release_script="${RELEASE_SOURCE_DIR}/${COMPATIBILITY_CHECK_SCRIPT}"
+    local installed_script="${INSTALL_DIR}/scripts/${COMPATIBILITY_CHECK_SCRIPT}"
+    echo ""
+    read -rp "是否使用本次更新的新版本代码重新运行系统兼容性测试？[y/N]: " run_check
+    run_check=${run_check:-N}
+    if [[ ! "$run_check" =~ ^[Yy]$ ]]; then
+        info "已跳过更新后的系统兼容性测试"
+        return 0
+    fi
+
+    if ! validate_compatibility_script "$release_script"; then
+        COMPATIBILITY_WARNING=1
+        COMPATIBILITY_FAILURE_STAGE="新版本兼容性测试脚本校验"
+        warn "本次发行包中的兼容性测试脚本缺失或校验失败，未使用已安装的旧脚本替代"
+        return 0
+    fi
+    if [ ! -x "${INSTALL_DIR}/kvm-console" ]; then
+        COMPATIBILITY_WARNING=1
+        COMPATIBILITY_FAILURE_STAGE="新版本后端程序校验"
+        warn "本次更新后的后端程序不存在或不可执行"
+        return 0
+    fi
+
+    deploy_compatibility_script "$release_script"
+    if ! validate_compatibility_script "$installed_script" || ! cmp -s "$release_script" "$installed_script"; then
+        COMPATIBILITY_WARNING=1
+        COMPATIBILITY_FAILURE_STAGE="新版本兼容性测试脚本部署"
+        warn "新版本兼容性测试脚本部署校验失败"
+        return 0
+    fi
+
+    info "将使用本次发行包部署的兼容性脚本和更新后的后端程序执行测试"
+    execute_compatibility_check "$installed_script"
+    if [ "$COMPATIBILITY_CHECK_STATUS" -eq 0 ]; then
+        success "更新后的系统兼容性测试通过"
+        return 0
+    fi
+
+    COMPATIBILITY_WARNING=1
+    if [ "$COMPATIBILITY_CHECK_STATUS" -eq 130 ]; then
+        COMPATIBILITY_FAILURE_STAGE="用户中断"
+        warn "更新后的系统兼容性测试已中断，更新流程将继续启动面板"
+    else
+        COMPATIBILITY_FAILURE_STAGE="一个或多个兼容性测试阶段"
+        warn "更新后的系统兼容性测试未通过，更新流程将继续启动面板"
+    fi
+    warn "诊断报告目录: ${COMPATIBILITY_REPORT_DIR}"
 }
 
 setup_service() {
@@ -2248,6 +2453,7 @@ run_install_or_update() {
     ensure_sysctl_network
     setup_ovs_foundation
     run_first_install_compatibility_check
+    run_update_compatibility_check
     setup_sshd_foundation
     setup_service
     start_service

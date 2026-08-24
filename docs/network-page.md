@@ -14,12 +14,12 @@
 | 宿主机网桥 | 网络概览保留历史网桥展示、删除与接口 IP 配置；新的物理上行统一在创建交换机时选择，不再提供独立“创建桥接网桥”入口 |
 | OVS NAT 出口协调 | `KVM_OVS_UPLINK` 可继续保存物理上联口；若该物理口已加入 OVS 网桥且默认路由已迁移到网桥，运行态 NAT/FORWARD 会自动改用实际三层网桥，并清理指向旧出口的同网段规则 |
 | 接口 IP/DNS 配置 | 展示当前 IPv4/IPv6/网关/DNS；编辑保存或一键清除；物理网卡已加入网桥时提示改为在网桥上配置；不可配置接口禁用表单 |
-| 交换机 | 直接管理零或一个上行链路，明确显示“空交换机 / 物理直通 / 内置 DHCP/NAT / 系统基础网络”；普通用户自行创建时固定为空交换机；历史用户 NAT 交换机显示待迁移状态并由管理员逐台迁移 |
-| 交换机表单 | 一步选择物理上行和内置 DHCP。无上行时为独立纯二层；物理上行且 DHCP 关闭时显示 VLAN、桥接安全与宿主机 IP 迁移；DHCP 开启时显示上行网关、CIDR、内部网关和地址池。自动检测不到出口默认路由时可填写上行网关；已有直通网桥的物理口既可作为托管 NAT 出口，也可由使用不同非零 VLAN ID 的直通交换机共享。关闭 DHCP 会保留最近一次托管网段，后续可复用 |
+| 交换机 | 直接管理零或一个上行链路，明确显示“空交换机 / 物理直通 / 内置 DHCP/NAT / 系统基础网络”；普通用户通过“开启互联网”在纯二层与管理员预设出口的托管 DHCP/NAT 之间切换；历史用户 NAT 交换机显示待迁移状态并由管理员逐台迁移。系统基础网络交换机仅管理员可见，普通用户（弹性云）列表与所有交换机下拉选项只展示自己的交换机，不能选择系统基础网络 |
+| 交换机表单 | 管理员一步选择物理上行和内置 DHCP；普通用户仅操作“开启互联网”，真实上行由 `KVM_ELASTIC_CLOUD_UPLINK` 强制映射。无上行时为独立纯二层；物理上行且 DHCP 关闭时显示 VLAN、桥接安全与宿主机 IP 迁移；DHCP 开启时管理员和普通用户都可设置上行网关、CIDR、内部网关和地址池。自动检测不到出口默认路由时可填写上行网关；已有直通网桥的物理口既可作为托管 NAT 出口，也可由使用不同非零 VLAN ID 的直通交换机共享。关闭 DHCP 会保留最近一次托管网段，后续可复用 |
 | 在线重配置 | 拓扑变化提交 `vpc_switch_reconfigure` 异步任务；任务按网口保留 MAC、型号、interface ID 与带宽 XML，热插失败时恢复已经处理的网口和旧运行态；行级任务期间更多按钮显示旋转图标 |
 | 交换机操作 | 行内只保留“查看虚拟机”图标；编辑、历史迁移、重置流量和删除收入 `⋯` 菜单。系统基础网络只读；物理上行、在线切换和宿主机网络变化保留二次验证 |
-| 安全组策略 | 名称/类型搜索；行展开内联管理规则（方向/IP 版本/协议/端口范围/目标/备注/删除）；创建/编辑（默认组名称不可改）；删除（默认组受保护禁用） |
-| 安全组规则 | IP 版本（IPv4/IPv6）；方向（入站/出站）；协议（IPv4：TCP/UDP/ICMP/全部，IPv6：TCP/UDP/ICMPv6/全部）；端口（单端口/范围/全端口，ICMP、ICMPv6 与全部协议固定 0-0）；目标类型（CIDR/IP、指定交换机、指定安全组，仅允许选择当前用户可见资源） |
+| 安全组策略 | 名称/类型搜索；行展开内联管理规则（方向/动作/IP 版本/协议/端口范围/目标/备注/编辑/删除）；创建/编辑（默认组名称不可改）；删除（默认组受保护禁用） |
+| 安全组规则 | IP 版本（IPv4/IPv6）；方向（入站/出站）决定固定动作（入站接收、出站拒绝，表单灰色只读预览）；协议（IPv4：TCP/UDP/ICMP/全部，IPv6：TCP/UDP/ICMPv6/全部）；端口（单端口/范围/全端口，ICMP、ICMPv6 与全部协议固定 0-0）；目标类型（CIDR/IP、指定交换机、指定安全组，仅允许选择当前用户可见资源） |
 | ACL（管理员） | nftables 规则预览（代码块 + 复制，HTTP 场景剪贴板降级）；应用 ACL（高风险确认后重建防火墙规则，428 二次验证由请求层自动处理） |
 
 ## 目录结构
@@ -40,7 +40,7 @@ web/src/views/network/
     ├── BridgeDialog.tsx             # 历史桥接接口兼容组件（网络概览不再提供创建入口）
     ├── InterfaceConfigDialog.tsx    # 接口 IP/DNS 配置
     ├── SecurityGroupDialog.tsx      # 创建/编辑安全组
-    └── RuleDialog.tsx               # 添加安全组规则
+    └── RuleDialog.tsx               # 添加/编辑安全组规则
 ```
 
 相关共享模块：
@@ -62,9 +62,13 @@ web/src/views/network/
 - `GET /vpc/quota`：流量/带宽配额
 - `GET/POST /vpc/switches`、`PUT/DELETE /vpc/switches/:id`、`POST /vpc/switches/:id/traffic/reset`、`GET /vpc/switches/:id/vms`：交换机管理
 - `POST /vpc/switches/:id/reconfigure`：异步重配置完整目标拓扑，返回 `task_id/status`；支持 API Key 并保留二次验证
-- `GET/POST /vpc/security-groups`、`PUT/DELETE /vpc/security-groups/:id`、`POST /vpc/security-groups/:id/rules`、`DELETE /vpc/security-groups/rules/:id`：安全组与规则管理
+- `GET/POST /vpc/security-groups`、`PUT/DELETE /vpc/security-groups/:id`、`POST /vpc/security-groups/:id/rules`、`PUT/DELETE /vpc/security-groups/rules/:id`：安全组与规则管理（规则支持新增、编辑、删除）
 - `GET /vpc/acl/preview`、`POST /vpc/acl/apply`：ACL 预览与应用（应用为高风险操作，428 二次验证）
 - `GET /user/list`：用户选项（管理员）
+
+安全组规则接口不接收独立 `action` 字段：`direction=ingress` 固定生成接收规则，`direction=egress` 固定生成拒绝规则。新增、编辑或删除规则后后端会立即重建并应用 VPC ACL；应用失败时接口返回明确错误，不再静默报告成功。
+
+`GET /vpc/quota` 同时返回 `internet_available`，供普通用户界面判断管理员是否已配置弹性云互联网出口。普通用户创建或重配置交换机时提交 `internet_enabled`；后端忽略其直接传入的物理接口、桥接安全和 VLAN 字段，并统一使用系统设置中的上联网卡。开启互联网会进入与管理员开启内置 DHCP 相同的托管 DHCP/NAT 流程，支持 `cidr`、`gateway_ip`、`dhcp_start`、`dhcp_end` 和可选的 `uplink_gateway`。
 
 ## 接口 IP/DNS 配置 IPv6 支持
 
@@ -74,7 +78,6 @@ web/src/views/network/
 4. 面板管理网桥（已启用宿主机 IP 迁移）的 IPv6 配置持久化到数据库 `host_addrs6`/`host_gateway6`/`host_metric6` 字段，并在网桥恢复脚本中以静态变量恢复。
 5. 网桥创建/删除时的 IP 迁移同步处理 IPv4 和 IPv6：创建时从物理口捕获双栈地址并迁移到网桥；删除时将双栈地址回迁至物理口。
 6. 清除配置会同时移除 IPv4 和 IPv6 的所有静态地址、路由和 DNS。
-
 ## IPv6 安全组规则
 
 1. 添加规则时先选择 `IPv6`，CIDR 默认切换为 `::/0`，协议列表提供 TCP、UDP、ICMPv6 和全部协议。
@@ -82,6 +85,7 @@ web/src/views/network/
 3. 指定交换机或指定安全组作为来源时，ACL 只提取所选地址族的成员地址。IPv6 成员使用精确 `/128`，IPv4 成员使用精确 `/32`。
 4. IPv6 ICMP 规则编译为 nftables `ipv6-icmp`，覆盖回显及 IPv6 必需的控制报文；TCP/UDP 继续按单端口或端口范围下发。
 5. 历史规则未保存 `address_family` 时保持兼容：IPv6 CIDR 和 ICMPv6 会自动识别为 IPv6，其余旧规则沿用 IPv4 语义。
+6. 入站规则编译为 `accept`，未命中的入站流量仍由 VM 默认拒绝规则处理；出站规则编译为 `reject`，并置于 `established,related accept` 之前，确保新增规则会立即阻断匹配的新连接和已有连接流量，未命中的出站流量继续默认接收。
 
 新增安全组规则的请求示例：
 

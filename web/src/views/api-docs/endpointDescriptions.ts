@@ -49,23 +49,23 @@ export const fallbackGroupDescription = '未归入以上模块的通用接口。
 
 // 复用的请求体描述
 const vmCreateBody =
-  'JSON: name, remark, vcpu, max_vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], floppy_image, nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, watchdog, boot_order[], video_model(virtio/vga/vmvga/cirrus/ramfb/none，none=禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), cpu_limit_percent(仅管理员, 0-100), virt_type(kvm/qemu), arch(x86_64/aarch64/riscv64), memory_dynamic{dynamic_enabled,memory_backend,memory_initial,memory_min,memory_max,memory_auto_balloon,memory_current}, switch_id, security_group_id, allowed_ipv4_addresses, allowed_ipv6_addresses, storage_pool_id, extra_nics[{switch_id,security_group_id,nic_model,allowed_ipv4_addresses,allowed_ipv6_addresses}], extra_disks[{size,format,bus,storage_pool_id}], host_devices[{pci_address}](仅管理员), vgpu_instances[{uuid}](仅管理员,要挂载的vGPU实例UUID列表)'
+  'JSON: name, remark, vcpu, max_vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], floppy_image, nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, watchdog, boot_order[], video_model(virtio/vga/vmvga/cirrus/ramfb/none，none=禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), cpu_limit_percent(仅管理员, 0-100), virt_type(kvm/qemu), arch(x86_64/aarch64/riscv64), switch_id, security_group_id, allowed_ipv4_addresses, allowed_ipv6_addresses, storage_pool_id, extra_nics[{switch_id,security_group_id,nic_model,allowed_ipv4_addresses,allowed_ipv6_addresses}], extra_disks[{size,format,bus,storage_pool_id}], host_devices[{pci_address}](仅管理员), vgpu_instances[{uuid}](仅管理员,要挂载的vGPU实例UUID列表)'
 const selfVmCreateBody =
-  'JSON: name, remark, vcpu, max_vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], floppy_image, nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, boot_order[], video_model(virtio/vga/vmvga/cirrus/ramfb/none，none=禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), memory_dynamic{dynamic_enabled,memory_backend,memory_initial,memory_min,memory_max,memory_auto_balloon,memory_current}, switch_id, security_group_id, allowed_ipv4_addresses, allowed_ipv6_addresses, storage_pool_id, extra_nics[{switch_id,security_group_id,nic_model,allowed_ipv4_addresses,allowed_ipv6_addresses}], extra_disks[{size,format,bus,storage_pool_id}]'
+  'JSON: name, remark, vcpu, max_vcpu, ram, disk_size, disk_format, disk_bus, os_variant, iso_path, iso_paths[], floppy_image, nic_model, autostart, freeze, apic, pae, rtc_offset, rtc_startdate, guest_agent{enabled}, smbios1{base64,family,manufacturer,product,serial,sku,uuid,version}, os_type, machine_type, boot_type, boot_order[], video_model(virtio/vga/vmvga/cirrus/ramfb/none，none=禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode(auto/single_socket/host_default), switch_id, security_group_id, allowed_ipv4_addresses, allowed_ipv6_addresses, storage_pool_id, extra_nics[{switch_id,security_group_id,nic_model,allowed_ipv4_addresses,allowed_ipv6_addresses}], extra_disks[{size,format,bus,storage_pool_id}]'
 const cloneBody =
   'JSON: template, name, remark, template_type, clone_mode(linked链式克隆/full完整克隆,默认linked), vcpu, ram, disk_size, disk_bus, hostname(可选,留空随机生成), user(可选,留空用模板默认), password(可选,留空单台随机生成/批量保留模板原密码), template_root_pass, template_user, switch_id, security_group_id, allowed_ipv4_addresses, allowed_ipv6_addresses, extra_nics[{switch_id,security_group_id,nic_model,allowed_ipv4_addresses,allowed_ipv6_addresses}], storage_pool_id, extra_disks[{size,format,bus,storage_pool_id,cloud_disk_spec_id,iops_total,iops_read,iops_write}], system_disk_iops(仅管理员), host_devices[{pci_address}](仅管理员), vgpu_instances[{uuid}](仅管理员,要挂载的vGPU实例UUID列表), nic_model, video_model(支持none禁用虚拟显示), spice_enabled(bool,是否启用SPICE显示协议,不传=回退全局默认), cpu_topology_mode, cpu_limit_percent(仅管理员, 0-100), cpu_affinity(仅管理员,如0,2,4), first_boot_reboot_mode(normal/cold), memory_dynamic(动态内存请求), guest_agent, smbios1, uefi(bool), rtc_offset, rtc_startdate, disable_system_init(bool,禁用系统初始化), static_ip/gateway/dns(OpenWrt 静态网络), preserve_fnos_device_id/fnos_device_id(FnOS 可选), pcie_root_ports(q35预留pcie-root-port数量), autostart, freeze, apic, pae, kvm_hidden(bool), vendor_id(str), nested_virt(bool,默认true) 等克隆表单字段'
 const reinstallBody = 'JSON: template, disk_size, hostname, user, password, preserve_fnos_device_id, fnos_device_id'
 const scheduleBody = 'JSON: name, action(start/shutdown/destroy/reboot/delete), cron/execute_at, enabled, timezone, params'
 const portForwardBody =
-  'JSON: vm_name, guest_ip, guest_port, host_port, protocol(tcp/udp), description, target_type, public_ip_id'
+  'JSON: vm_name, vm_ip, host_port(留空自动分配), vm_port, protocol(tcp/udp/both, 编辑仅 tcp/udp), source_ip(可选入站 IP 白名单，IPv4/CIDR，如 1.2.3.4 或 10.0.0.0/8，空或 0.0.0.0/0 = 不限制)'
 const publicIPBody = 'JSON: ip(IPv4/IPv6), cidr, gateway, uplink_if, supported_modes, status, remark'
 const firewallPolicyBody =
   'JSON: policy 或完整防火墙策略对象，包含 default_action, rules, region_rules, port_forward_policy 等'
 const vpcSwitchBody =
-  'JSON: name, username, uplink_mode(none/physical/system), uplink_if, uplink_gateway, dhcp_enabled, migrate_host_ip, bridge_vlan_id, cidr, gateway_ip, dhcp_start, dhcp_end, ipv6_security_enabled, trusted_ipv6_prefixes, allow_promiscuous, allow_mac_change, allow_forged_transmits'
+  'JSON: name, username, internet_enabled(普通用户互联网开关), uplink_mode(none/physical/system), uplink_if, uplink_gateway, dhcp_enabled, migrate_host_ip, bridge_vlan_id, cidr, gateway_ip, dhcp_start, dhcp_end, ipv6_security_enabled, trusted_ipv6_prefixes, allow_promiscuous, allow_mac_change, allow_forged_transmits'
 const securityGroupBody = 'JSON: name, remark, username'
 const securityRuleBody =
-  'JSON: direction, address_family(ipv4/ipv6), protocol(tcp/udp/icmp/icmpv6/all), port_start, port_end, target_type(cidr/switch/security_group), target_value, action, remark'
+  'JSON: direction(ingress=接收、egress=拒绝), address_family(ipv4/ipv6), protocol(tcp/udp/icmp/icmpv6/all), port_start, port_end, target_type(cidr/switch/security_group), target_value, remark；动作由方向固定推导，无需提交 action。'
 const templateMetaBody =
   'JSON: admin_name, display_name, clone_visible, disabled, category, vcpu, ram, disk_size, disk_bus, nic_model, video_model, cpu_topology_mode, first_boot_reboot_mode'
 const hostRuleBody = 'JSON: name, direction, protocol, port, source, action, enabled'
@@ -243,6 +243,15 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
     response: 'data: total_size, total_size_human, files[{name,size,mod_time,is_today,category}], categories',
     notes: ['返回日志目录下所有日志文件列表及磁盘总占用大小'],
   },
+  'GET /settings/log/read': {
+    summary: '读取日志文件内容',
+    query: ['file', 'lines', 'offset'],
+    response: 'data: name, content（脱敏后的日志文本）, lines, prev_offset, eof',
+    notes: [
+      '在线预览日志文本，从文件尾部向前分页读取：file 为日志文件名（仅 .log，拒绝路径穿越），lines 为每次读取行数（默认 200，上限 1000），offset 传上一页返回的 prev_offset 可加载更早记录',
+      '压缩归档（.log.gz）不支持在线预览；敏感字段（token、密码、密钥等）在记录时已脱敏',
+    ],
+  },
   'POST /settings/log/delete': {
     summary: '删除日志文件',
     body: 'JSON: files[] 文件名列表',
@@ -268,8 +277,8 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   },
   'POST /settings/storage/trim': {
     summary: '执行用户存储空间回收',
-    response: 'data: before_blocks, after_blocks, trimmed_bytes, trimmed_human。',
-    notes: ['执行 fstrim 与稀疏化回收，耗时较长。'],
+    response: 'data: task, reused。任务完成结果包含 image_path、mount_point、before_blocks、after_blocks、trimmed_bytes、trimmed_human。',
+    notes: ['异步执行 fstrim 与稀疏化回收；已有同类任务运行时复用现有任务。'],
   },
 
   // ==================== 虚拟机 ====================
@@ -351,13 +360,24 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
     notes: ['运行中 VM 自动执行硬盘热迁移，关机 VM 自动执行冷迁移；成功后删除源硬盘文件。'],
   },
   'PUT /vm/:name/security-group': { summary: '切换 VM 安全组', body: 'JSON: security_group_id' },
-  'GET /vm/:name/interfaces': { summary: '列出 VM 所有网口' },
-  'POST /vm/:name/interfaces': { summary: '新增 VM 网口', body: 'JSON: switch_id, security_group_id, nic_model, bandwidth_inbound_avg, bandwidth_outbound_avg, allowed_ipv4_addresses, allowed_ipv6_addresses' },
+  'GET /vm/:name/interfaces': {
+    summary: '列出 VM 所有网口',
+    notes: ['普通用户仅可查看本人虚拟机（需先满足归属校验）。'],
+  },
+  'POST /vm/:name/interfaces': {
+    summary: '新增 VM 网口',
+    body: 'JSON: switch_id, security_group_id, nic_model, bandwidth_inbound_avg, bandwidth_outbound_avg, allowed_ipv4_addresses, allowed_ipv6_addresses',
+    notes: ['普通用户（弹性云）仅能操作本人虚拟机，且只能接入本人的非系统交换机；网口级速率限制仅管理员生效，轻量云用户不允许自助操作。'],
+  },
   'PUT /vm/:name/interfaces/:order': {
     summary: '更新 VM 指定网口',
     body: 'JSON: switch_id, security_group_id, nic_model, bandwidth_inbound_avg, bandwidth_outbound_avg, allowed_ipv4_addresses, allowed_ipv6_addresses',
+    notes: ['普通用户（弹性云）仅能更新本人虚拟机的附加网口（order > 0），主网口请使用 VPC 绑定接口；速率限制保留管理员配置。'],
   },
-  'DELETE /vm/:name/interfaces/:order': { summary: '删除 VM 指定网口' },
+  'DELETE /vm/:name/interfaces/:order': {
+    summary: '删除 VM 指定网口',
+    notes: ['普通用户（弹性云）仅能删除本人虚拟机的附加网口（order > 0），主网口由 VPC 绑定管理。'],
+  },
   'DELETE /vm/:name': { summary: '删除虚拟机', body: 'JSON: delete_disks, transfer_disks, transfer_user' },
   'POST /vm/:name/force-delete': {
     summary: '强制删除虚拟机',
@@ -593,6 +613,7 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   'POST /network/static-ip/bind': { summary: '绑定静态 IP', body: 'JSON: vm_name, ip, mac, network' },
   'POST /network/static-ip/unbind': { summary: '解绑静态 IP', body: 'JSON: vm_name, ip' },
   'GET /network/port-forward/list': { summary: '获取端口转发列表' },
+  'GET /network/client-ip': { summary: '获取当前访问面板的客户端 IP（端口转发入站 IP 白名单快速填充）', response: 'data: { ip }。', },
   'POST /network/port-forward/add': { summary: '新增端口转发', body: portForwardBody },
   'PUT /network/port-forward/:id': { summary: '更新端口转发', body: portForwardBody },
   'DELETE /network/port-forward/:id': { summary: '删除端口转发' },
@@ -635,7 +656,11 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   'DELETE /network/captures/:task_id': { summary: '删除抓包会话文件' },
 
   // ==================== VPC ====================
-  'GET /vpc/quota': { summary: '读取 VPC 配额', query: ['username(管理员可选)'] },
+  'GET /vpc/quota': {
+    summary: '读取 VPC 配额与互联网可用状态',
+    query: ['username(管理员可选)'],
+    response: 'data: 配额分配与剩余量、internet_available（管理员是否已配置弹性云互联网出口）。',
+  },
   'GET /vpc/switches': { summary: '列出 VPC 交换机', query: ['username(管理员可选)'] },
   'POST /vpc/switches': { summary: '创建 VPC 交换机', body: vpcSwitchBody },
   'PUT /vpc/switches/:id': { summary: '更新 VPC 交换机', body: vpcSwitchBody },
@@ -643,7 +668,10 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
     summary: '异步重配置交换机拓扑',
     body: vpcSwitchBody,
     response: 'data: task_id, status。',
-    notes: ['在线切换保留网口 MAC、型号、interface ID 和带宽配置；热插失败时任务恢复旧网络。'],
+    notes: [
+      '在线切换保留网口 MAC、型号、interface ID 和带宽配置；热插失败时任务恢复旧网络。',
+      '普通用户仅可重配置自己的交换机；internet_enabled=true 时后端强制使用管理员设置的弹性云出口，并启用托管 DHCP/NAT。',
+    ],
   },
   'POST /vpc/switches/:id/traffic/reset': { summary: '重置交换机流量统计' },
   'DELETE /vpc/switches/:id': { summary: '删除 VPC 交换机' },
@@ -653,6 +681,7 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   'PUT /vpc/security-groups/:id': { summary: '更新安全组', body: securityGroupBody },
   'DELETE /vpc/security-groups/:id': { summary: '删除安全组' },
   'POST /vpc/security-groups/:id/rules': { summary: '新增安全组规则', body: securityRuleBody },
+  'PUT /vpc/security-groups/rules/:id': { summary: '编辑安全组规则', body: securityRuleBody },
   'DELETE /vpc/security-groups/rules/:id': { summary: '删除安全组规则' },
   'GET /vpc/acl/preview': { summary: '预览 VPC ACL 规则', response: 'data: ACL 预览文本或结构。' },
   'POST /vpc/acl/apply': { summary: '应用 VPC ACL 规则' },
@@ -746,18 +775,23 @@ export const endpointDescriptions: Record<string, EndpointDescription> = {
   'GET /nodes': { summary: '获取节点列表' },
   'POST /nodes': {
     summary: '添加节点',
-    body: 'JSON: name, api_base_url, api_key_id, api_key, ssh_host, ssh_port, ssh_user(必须为 root), ssh_password, enabled',
+    body: 'JSON: name, api_base_url, api_key_id, api_key, ssh_host, ssh_port, ssh_user(必须为 root), ssh_password, ssh_key_auth(选 true 用 SSH 密钥免密), ssh_key_path(可选私钥路径), enabled',
+    notes: ['先探测节点连接（SSH + 面板 API 双通道），探测通过才创建；失败返回 400 且不落库，data 携带探测结果。', 'SSH 密钥认证时无需 ssh_password，面板不保存密钥，仅检测免密连通性。'],
   },
   'PUT /nodes/:id': {
     summary: '更新节点',
-    body: 'JSON: name, api_base_url, api_key_id, api_key, ssh_host, ssh_port, ssh_user(必须为 root), ssh_password, enabled；密钥留空表示不修改',
+    body: 'JSON: name, api_base_url, api_key_id, api_key, ssh_host, ssh_port, ssh_user(必须为 root), ssh_password, ssh_key_auth, ssh_key_path, enabled；密钥留空表示不修改',
+    notes: ['先探测节点连接，探测通过才更新；失败返回 400 且不改动原节点。', '密码认证切换为 SSH 密钥认证会清空已存密码；密钥认证切换为密码认证时必须填写 ssh_password。'],
   },
   'DELETE /nodes/:id': { summary: '删除节点' },
-  'POST /nodes/:id/probe': { summary: '探测节点能力' },
+  'POST /nodes/:id/probe': {
+    summary: '探测节点能力',
+    notes: ['校验面板 API 与 SSH 双通道；SSH 密钥认证节点探测免密连通性，失败会附带公钥配置提示。'],
+  },
   'GET /nodes/:id/migration-options': {
     summary: '加载 VM 迁移表单选项',
     query: ['vm_name'],
-    notes: ['返回自动迁移模式、目标存储、目标用户处理方式；目标节点 SSH 用户必须为 root；目标已有同名用户时才返回该用户下的 VPC/安全组。'],
+    notes: ['返回自动迁移模式、目标存储、目标用户处理方式；目标节点 SSH 用户必须为 root；目标已有同名用户时才返回该用户下的交换机/安全组。'],
   },
   'POST /migration/adopt-vm': {
     summary: '目标面板接管迁移 VM',

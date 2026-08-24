@@ -72,6 +72,8 @@ type Config struct {
 	OVSBridge string `json:"ovs_bridge"`
 	// OVS NAT 出口网卡，留空自动检测默认路由
 	OVSUplink string `json:"ovs_uplink"`
+	// 弹性云用户托管 DHCP/NAT 交换机统一使用的物理上联网卡；留空时用户交换机保持纯二层
+	ElasticCloudUplink string `json:"elastic_cloud_uplink"`
 	// OVS DHCP 起始地址
 	OVSDHCPStart string `json:"ovs_dhcp_start"`
 	// OVS DHCP 结束地址
@@ -133,16 +135,7 @@ type Config struct {
 	SMTPFromAddress    string `json:"smtp_from_address"`
 	SMTPSecurity       string `json:"smtp_security"`
 	SMTPTimeoutSeconds int    `json:"smtp_timeout_seconds"`
-	// 动态内存调度配置
-	DynamicMemorySchedulerEnabled         bool `json:"dynamic_memory_scheduler_enabled"`
-	DynamicMemoryIntervalSeconds          int  `json:"dynamic_memory_interval_seconds"`
-	DynamicMemoryHostReserveMB            int  `json:"dynamic_memory_host_reserve_mb"`
-	DynamicMemoryHostReservePercent       int  `json:"dynamic_memory_host_reserve_percent"`
-	DynamicMemoryIncreaseThresholdPercent int  `json:"dynamic_memory_increase_threshold_percent"`
-	DynamicMemoryReclaimThresholdPercent  int  `json:"dynamic_memory_reclaim_threshold_percent"`
-	DynamicMemoryCooldownSeconds          int  `json:"dynamic_memory_cooldown_seconds"`
-	DynamicMemoryObservationHours         int  `json:"dynamic_memory_observation_hours"`
-	SchedulerEventRetentionHours          int  `json:"scheduler_event_retention_hours"`
+	SchedulerEventRetentionHours int `json:"scheduler_event_retention_hours"`
 	// VPC 逻辑交换机配置
 	VPCSubnetPrefix string `json:"vpc_subnet_prefix"`
 	VPCVLANStart    int    `json:"vpc_vlan_start"`
@@ -184,6 +177,10 @@ type Config struct {
 	LogConsoleLevel string `json:"log_console_level"` // 终端输出的日志级别（可独立于文件级别）
 	LogMaxSizeMB    int    `json:"log_max_size_mb"`
 	LogMaxBackups   int    `json:"log_max_backups"` // 日志最大归档备份数（0=不限制）
+	// 请求日志详情记录开关（默认开启，记录脱敏后的响应体 JSON；关闭后仅保留基础请求日志）
+	RequestDetailLogEnabled bool `json:"request_detail_log_enabled"`
+	// 请求日志响应体捕获上限（字节，默认 8192，超出截断；仅环境变量可调）
+	RequestLogMaxBodyBytes int `json:"request_log_max_body_bytes"`
 	// 禁用网络等待就绪检测（解决 OVS 桥接后开机卡 systemd-networkd-wait-online.service）
 	NetworkWaitOnlineDisabled bool `json:"network_wait_online_disabled"`
 	// 请求过滤开关
@@ -198,6 +195,8 @@ type Config struct {
 	PasswordBreachCheckEnabled bool `json:"password_breach_check_enabled"`
 	// 定时泄露密码检测开关（默认开启，每天本地时间 00:00 执行）
 	ScheduledPasswordBreachCheckEnabled bool `json:"scheduled_password_breach_check_enabled"`
+	// 用户存储自动定时回收开关（默认开启，每天本地时间 02:00 执行 fstrim + fallocate --dig-holes）
+	ScheduledStorageTrimEnabled bool `json:"scheduled_storage_trim_enabled"`
 	// 硬件直通开关（默认关闭，开启后启用 IOMMU 和 vfio-pci 支持）
 	HardwarePassthroughEnabled bool `json:"hardware_passthrough_enabled"`
 	// 命令执行超时时间（秒），默认 30 秒
@@ -267,6 +266,7 @@ func Init() {
 		NetworkBackend:                        getEnv("KVM_NETWORK_BACKEND", "ovs"),
 		OVSBridge:                             getEnv("KVM_OVS_BRIDGE", "br-ovs"),
 		OVSUplink:                             getEnv("KVM_OVS_UPLINK", ""),
+		ElasticCloudUplink:                    getEnv("KVM_ELASTIC_CLOUD_UPLINK", ""),
 		OVSDHCPStart:                          getEnv("KVM_OVS_DHCP_START", ""),
 		OVSDHCPEnd:                            getEnv("KVM_OVS_DHCP_END", ""),
 		SubnetPrefix:                          getEnv("KVM_SUBNET_PREFIX", "192.168.122"),
@@ -305,14 +305,6 @@ func Init() {
 		SMTPFromAddress:                       getEnv("KVM_SMTP_FROM_ADDRESS", ""),
 		SMTPSecurity:                          getEnv("KVM_SMTP_SECURITY", "starttls"),
 		SMTPTimeoutSeconds:                    getEnvInt("KVM_SMTP_TIMEOUT_SECONDS", 15),
-		DynamicMemorySchedulerEnabled:         getEnvBool("KVM_DYNAMIC_MEMORY_SCHEDULER_ENABLED", true),
-		DynamicMemoryIntervalSeconds:          getEnvInt("KVM_DYNAMIC_MEMORY_INTERVAL_SECONDS", 30),
-		DynamicMemoryHostReserveMB:            getEnvInt("KVM_DYNAMIC_MEMORY_HOST_RESERVE_MB", 2048),
-		DynamicMemoryHostReservePercent:       getEnvInt("KVM_DYNAMIC_MEMORY_HOST_RESERVE_PERCENT", 20),
-		DynamicMemoryIncreaseThresholdPercent: getEnvInt("KVM_DYNAMIC_MEMORY_INCREASE_THRESHOLD_PERCENT", 15),
-		DynamicMemoryReclaimThresholdPercent:  getEnvInt("KVM_DYNAMIC_MEMORY_RECLAIM_THRESHOLD_PERCENT", 35),
-		DynamicMemoryCooldownSeconds:          getEnvInt("KVM_DYNAMIC_MEMORY_COOLDOWN_SECONDS", 120),
-		DynamicMemoryObservationHours:         getEnvInt("KVM_DYNAMIC_MEMORY_OBSERVATION_HOURS", 24),
 		SchedulerEventRetentionHours:          getEnvInt("KVM_SCHEDULER_EVENT_RETENTION_HOURS", 168),
 		VPCSubnetPrefix:                       getEnv("KVM_VPC_SUBNET_PREFIX", "10.200"),
 		VPCVLANStart:                          getEnvInt("KVM_VPC_VLAN_START", 100),
@@ -346,6 +338,8 @@ func Init() {
 		LogConsoleLevel:                       getEnv("KVM_LOG_CONSOLE_LEVEL", ""),
 		LogMaxSizeMB:                          getEnvInt("KVM_LOG_MAX_SIZE_MB", 100),
 		LogMaxBackups:                         getEnvInt("KVM_LOG_MAX_BACKUPS", 0),
+		RequestDetailLogEnabled:               getEnvBool("KVM_REQUEST_DETAIL_LOG_ENABLED", true),
+		RequestLogMaxBodyBytes:                getEnvInt("KVM_REQUEST_LOG_MAX_BODY_BYTES", 8192),
 		NetworkWaitOnlineDisabled:             getEnvBool("KVM_NETWORK_WAIT_ONLINE_DISABLED", false),
 		RequestFilterEnabled:                  getEnvBool("KVM_REQUEST_FILTER_ENABLED", true),
 		APIMaxBodySizeMB:                      getEnvInt("KVM_API_MAX_BODY_SIZE_MB", 2),
@@ -353,6 +347,7 @@ func Init() {
 		SessionFingerprintEnabled:             getEnvBool("KVM_SESSION_FINGERPRINT_ENABLED", true),
 		PasswordBreachCheckEnabled:            getEnvBool("KVM_PASSWORD_BREACH_CHECK_ENABLED", true),
 		ScheduledPasswordBreachCheckEnabled:   getEnvBool("KVM_SCHEDULED_PASSWORD_BREACH_CHECK_ENABLED", true),
+		ScheduledStorageTrimEnabled:           getEnvBool("KVM_SCHEDULED_STORAGE_TRIM_ENABLED", true),
 		HardwarePassthroughEnabled:            getEnvBool("KVM_HARDWARE_PASSTHROUGH_ENABLED", false),
 		ExecTimeoutSeconds:                    getEnvInt("KVM_EXEC_TIMEOUT_SECONDS", 30),
 		SecurityGroupDefaultAllowAll:          getEnvBool("KVM_SECURITY_GROUP_DEFAULT_ALLOW_ALL", false),
@@ -562,14 +557,6 @@ var PersistableKeys = []string{
 	"smtp_from_address",
 	"smtp_security",
 	"smtp_timeout_seconds",
-	"dynamic_memory_scheduler_enabled",
-	"dynamic_memory_interval_seconds",
-	"dynamic_memory_host_reserve_mb",
-	"dynamic_memory_host_reserve_percent",
-	"dynamic_memory_increase_threshold_percent",
-	"dynamic_memory_reclaim_threshold_percent",
-	"dynamic_memory_cooldown_seconds",
-	"dynamic_memory_observation_hours",
 	"scheduler_event_retention_hours",
 	"port_forward_http_probe_enabled",
 	"port_forward_http_probe_interval_minutes",
@@ -606,8 +593,11 @@ var PersistableKeys = []string{
 	"network_wait_online_disabled",
 	"session_fingerprint_enabled",
 	"request_filter_enabled",
+	"request_detail_log_enabled",
+	"request_log_max_body_bytes",
 	"password_breach_check_enabled",
 	"scheduled_password_breach_check_enabled",
+	"scheduled_storage_trim_enabled",
 	"igpu_passthrough_enabled",
 	"hardware_passthrough_enabled",
 	"exec_timeout_seconds",
@@ -626,6 +616,7 @@ var keyToEnvVar = map[string]string{
 	"network_backend":           "KVM_NETWORK_BACKEND",
 	"ovs_bridge":                "KVM_OVS_BRIDGE",
 	"ovs_uplink":                "KVM_OVS_UPLINK",
+	"elastic_cloud_uplink":      "KVM_ELASTIC_CLOUD_UPLINK",
 	"ovs_dhcp_start":            "KVM_OVS_DHCP_START",
 	"ovs_dhcp_end":              "KVM_OVS_DHCP_END",
 	"subnet_prefix":             "KVM_SUBNET_PREFIX",
@@ -656,14 +647,6 @@ var keyToEnvVar = map[string]string{
 	"smtp_from_address":                         "KVM_SMTP_FROM_ADDRESS",
 	"smtp_security":                             "KVM_SMTP_SECURITY",
 	"smtp_timeout_seconds":                      "KVM_SMTP_TIMEOUT_SECONDS",
-	"dynamic_memory_scheduler_enabled":          "KVM_DYNAMIC_MEMORY_SCHEDULER_ENABLED",
-	"dynamic_memory_interval_seconds":           "KVM_DYNAMIC_MEMORY_INTERVAL_SECONDS",
-	"dynamic_memory_host_reserve_mb":            "KVM_DYNAMIC_MEMORY_HOST_RESERVE_MB",
-	"dynamic_memory_host_reserve_percent":       "KVM_DYNAMIC_MEMORY_HOST_RESERVE_PERCENT",
-	"dynamic_memory_increase_threshold_percent": "KVM_DYNAMIC_MEMORY_INCREASE_THRESHOLD_PERCENT",
-	"dynamic_memory_reclaim_threshold_percent":  "KVM_DYNAMIC_MEMORY_RECLAIM_THRESHOLD_PERCENT",
-	"dynamic_memory_cooldown_seconds":           "KVM_DYNAMIC_MEMORY_COOLDOWN_SECONDS",
-	"dynamic_memory_observation_hours":          "KVM_DYNAMIC_MEMORY_OBSERVATION_HOURS",
 	"scheduler_event_retention_hours":           "KVM_SCHEDULER_EVENT_RETENTION_HOURS",
 	"port_forward_http_probe_enabled":           "KVM_PORT_FORWARD_HTTP_PROBE_ENABLED",
 	"port_forward_http_probe_interval_minutes":  "KVM_PORT_FORWARD_HTTP_PROBE_INTERVAL_MINUTES",
@@ -697,11 +680,14 @@ var keyToEnvVar = map[string]string{
 	"log_console_level":                         "KVM_LOG_CONSOLE_LEVEL",
 	"log_max_size_mb":                           "KVM_LOG_MAX_SIZE_MB",
 	"log_max_backups":                           "KVM_LOG_MAX_BACKUPS",
+	"request_detail_log_enabled":                "KVM_REQUEST_DETAIL_LOG_ENABLED",
+	"request_log_max_body_bytes":                "KVM_REQUEST_LOG_MAX_BODY_BYTES",
 	"network_wait_online_disabled":              "KVM_NETWORK_WAIT_ONLINE_DISABLED",
 	"session_fingerprint_enabled":               "KVM_SESSION_FINGERPRINT_ENABLED",
 	"request_filter_enabled":                    "KVM_REQUEST_FILTER_ENABLED",
 	"password_breach_check_enabled":             "KVM_PASSWORD_BREACH_CHECK_ENABLED",
 	"scheduled_password_breach_check_enabled":   "KVM_SCHEDULED_PASSWORD_BREACH_CHECK_ENABLED",
+	"scheduled_storage_trim_enabled":            "KVM_SCHEDULED_STORAGE_TRIM_ENABLED",
 	"igpu_passthrough_enabled":                  "KVM_IGPU_PASSTHROUGH_ENABLED",
 	"hardware_passthrough_enabled":              "KVM_HARDWARE_PASSTHROUGH_ENABLED",
 	"exec_timeout_seconds":                      "KVM_EXEC_TIMEOUT_SECONDS",
@@ -743,6 +729,8 @@ func (c *Config) LoadFromDB(settings map[string]string) {
 			c.OVSBridge = value
 		case "ovs_uplink":
 			c.OVSUplink = value
+		case "elastic_cloud_uplink":
+			c.ElasticCloudUplink = value
 		case "ovs_dhcp_start":
 			c.OVSDHCPStart = value
 		case "ovs_dhcp_end":
@@ -830,38 +818,6 @@ func (c *Config) LoadFromDB(settings map[string]string) {
 		case "smtp_timeout_seconds":
 			if v, err := strconv.Atoi(value); err == nil {
 				c.SMTPTimeoutSeconds = v
-			}
-		case "dynamic_memory_scheduler_enabled":
-			if v, err := strconv.ParseBool(value); err == nil {
-				c.DynamicMemorySchedulerEnabled = v
-			}
-		case "dynamic_memory_interval_seconds":
-			if v, err := strconv.Atoi(value); err == nil {
-				c.DynamicMemoryIntervalSeconds = v
-			}
-		case "dynamic_memory_host_reserve_mb":
-			if v, err := strconv.Atoi(value); err == nil {
-				c.DynamicMemoryHostReserveMB = v
-			}
-		case "dynamic_memory_host_reserve_percent":
-			if v, err := strconv.Atoi(value); err == nil {
-				c.DynamicMemoryHostReservePercent = v
-			}
-		case "dynamic_memory_increase_threshold_percent":
-			if v, err := strconv.Atoi(value); err == nil {
-				c.DynamicMemoryIncreaseThresholdPercent = v
-			}
-		case "dynamic_memory_reclaim_threshold_percent":
-			if v, err := strconv.Atoi(value); err == nil {
-				c.DynamicMemoryReclaimThresholdPercent = v
-			}
-		case "dynamic_memory_cooldown_seconds":
-			if v, err := strconv.Atoi(value); err == nil {
-				c.DynamicMemoryCooldownSeconds = v
-			}
-		case "dynamic_memory_observation_hours":
-			if v, err := strconv.Atoi(value); err == nil {
-				c.DynamicMemoryObservationHours = v
 			}
 		case "scheduler_event_retention_hours":
 			if v, err := strconv.Atoi(value); err == nil {
@@ -969,6 +925,12 @@ func (c *Config) LoadFromDB(settings map[string]string) {
 			if v, err := strconv.Atoi(value); err == nil {
 				c.LogMaxBackups = v
 			}
+		case "request_detail_log_enabled":
+			c.RequestDetailLogEnabled = value != "false"
+		case "request_log_max_body_bytes":
+			if v, err := strconv.Atoi(value); err == nil && v > 0 {
+				c.RequestLogMaxBodyBytes = v
+			}
 		case "network_wait_online_disabled":
 			if v, err := strconv.ParseBool(value); err == nil {
 				c.NetworkWaitOnlineDisabled = v
@@ -981,6 +943,8 @@ func (c *Config) LoadFromDB(settings map[string]string) {
 			c.PasswordBreachCheckEnabled = value != "false"
 		case "scheduled_password_breach_check_enabled":
 			c.ScheduledPasswordBreachCheckEnabled = value != "false"
+		case "scheduled_storage_trim_enabled":
+			c.ScheduledStorageTrimEnabled = value != "false"
 		case "hardware_passthrough_enabled":
 			c.HardwarePassthroughEnabled = value == "true"
 		case "security_group_default_allow_all":
@@ -1012,6 +976,7 @@ func (c *Config) ToSettingsMap() map[string]string {
 		"network_backend":           c.NetworkBackend,
 		"ovs_bridge":                c.OVSBridge,
 		"ovs_uplink":                c.OVSUplink,
+		"elastic_cloud_uplink":      c.ElasticCloudUplink,
 		"ovs_dhcp_start":            c.OVSDHCPStart,
 		"ovs_dhcp_end":              c.OVSDHCPEnd,
 		"subnet_prefix":             c.SubnetPrefix,
@@ -1046,14 +1011,6 @@ func (c *Config) ToSettingsMap() map[string]string {
 		"smtp_from_address":                         c.SMTPFromAddress,
 		"smtp_security":                             c.SMTPSecurity,
 		"smtp_timeout_seconds":                      strconv.Itoa(c.SMTPTimeoutSeconds),
-		"dynamic_memory_scheduler_enabled":          strconv.FormatBool(c.DynamicMemorySchedulerEnabled),
-		"dynamic_memory_interval_seconds":           strconv.Itoa(c.DynamicMemoryIntervalSeconds),
-		"dynamic_memory_host_reserve_mb":            strconv.Itoa(c.DynamicMemoryHostReserveMB),
-		"dynamic_memory_host_reserve_percent":       strconv.Itoa(c.DynamicMemoryHostReservePercent),
-		"dynamic_memory_increase_threshold_percent": strconv.Itoa(c.DynamicMemoryIncreaseThresholdPercent),
-		"dynamic_memory_reclaim_threshold_percent":  strconv.Itoa(c.DynamicMemoryReclaimThresholdPercent),
-		"dynamic_memory_cooldown_seconds":           strconv.Itoa(c.DynamicMemoryCooldownSeconds),
-		"dynamic_memory_observation_hours":          strconv.Itoa(c.DynamicMemoryObservationHours),
 		"scheduler_event_retention_hours":           strconv.Itoa(c.SchedulerEventRetentionHours),
 		"vpc_subnet_prefix":                         c.VPCSubnetPrefix,
 		"vpc_vlan_start":                            strconv.Itoa(c.VPCVLANStart),
@@ -1084,11 +1041,14 @@ func (c *Config) ToSettingsMap() map[string]string {
 		"log_console_level":                         c.LogConsoleLevel,
 		"log_max_size_mb":                           strconv.Itoa(c.LogMaxSizeMB),
 		"log_max_backups":                           strconv.Itoa(c.LogMaxBackups),
+		"request_detail_log_enabled":                strconv.FormatBool(c.RequestDetailLogEnabled),
+		"request_log_max_body_bytes":                strconv.Itoa(c.RequestLogMaxBodyBytes),
 		"network_wait_online_disabled":              strconv.FormatBool(c.NetworkWaitOnlineDisabled),
 		"session_fingerprint_enabled":               strconv.FormatBool(c.SessionFingerprintEnabled),
 		"request_filter_enabled":                    strconv.FormatBool(c.RequestFilterEnabled),
 		"password_breach_check_enabled":             strconv.FormatBool(c.PasswordBreachCheckEnabled),
 		"scheduled_password_breach_check_enabled":   strconv.FormatBool(c.ScheduledPasswordBreachCheckEnabled),
+		"scheduled_storage_trim_enabled":            strconv.FormatBool(c.ScheduledStorageTrimEnabled),
 		"hardware_passthrough_enabled":              strconv.FormatBool(c.HardwarePassthroughEnabled),
 		"exec_timeout_seconds":                      strconv.Itoa(c.ExecTimeoutSeconds),
 		"security_group_default_allow_all":          strconv.FormatBool(c.SecurityGroupDefaultAllowAll),

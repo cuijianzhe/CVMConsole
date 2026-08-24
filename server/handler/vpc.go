@@ -51,7 +51,7 @@ func CreateVPCSwitch(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "参数错误"})
 		return
 	}
-	if role == "admin" && strings.TrimSpace(req.UplinkIF) != "" {
+	if (role == "admin" && strings.TrimSpace(req.UplinkIF) != "") || (role != "admin" && req.InternetEnabled != nil && *req.InternetEnabled) {
 		if !requireHighRiskVerification(c, "create_vpc_switch_physical_uplink") {
 			return
 		}
@@ -83,10 +83,6 @@ func UpdateVPCSwitch(c *gin.Context) {
 // ReconfigureVPCSwitch 提交交换机上行链路和 DHCP/NAT 拓扑重配置任务。
 func ReconfigureVPCSwitch(c *gin.Context) {
 	username, role := currentUserAndRole(c)
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "仅管理员可重配置交换机拓扑"})
-		return
-	}
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "交换机 ID 无效"})
@@ -104,7 +100,7 @@ func ReconfigureVPCSwitch(c *gin.Context) {
 	if !requireHighRiskVerification(c, "vpc_switch_reconfigure") {
 		return
 	}
-	params := service.VPCSwitchReconfigureParams{SwitchID: uint(id), Request: req, Operator: username}
+	params := service.VPCSwitchReconfigureParams{SwitchID: uint(id), Request: req, Operator: username, Role: role}
 	task, err := taskqueue.SubmitWithStruct(model.TaskTypeVPCSwitchReconfigure, params, username)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "提交交换机重配置任务失败: " + err.Error()})
@@ -116,7 +112,6 @@ func ReconfigureVPCSwitch(c *gin.Context) {
 		"data":    gin.H{"task_id": task.ID, "status": task.Status},
 	})
 }
-
 func GetVPCSwitchVMs(c *gin.Context) {
 	username, role := currentUserAndRole(c)
 	id, _ := strconv.Atoi(c.Param("id"))
@@ -221,8 +216,31 @@ func AddVPCSecurityGroupRule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
-	_ = service.ApplyVPCACLRules()
+	if err := service.ApplyVPCACLRules(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "规则已保存，但应用 VPC ACL 失败: " + err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"code": 200, "message": "规则已添加", "data": rule})
+}
+
+func UpdateVPCSecurityGroupRule(c *gin.Context) {
+	username, role := currentUserAndRole(c)
+	id, _ := strconv.Atoi(c.Param("id"))
+	var req service.VPCSecurityGroupRuleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "参数错误"})
+		return
+	}
+	rule, err := service.UpdateVPCSecurityGroupRule(username, role, uint(id), req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
+		return
+	}
+	if err := service.ApplyVPCACLRules(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "规则已保存，但应用 VPC ACL 失败: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "message": "规则已更新", "data": rule})
 }
 
 func DeleteVPCSecurityGroupRule(c *gin.Context) {
@@ -232,7 +250,10 @@ func DeleteVPCSecurityGroupRule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
-	_ = service.ApplyVPCACLRules()
+	if err := service.ApplyVPCACLRules(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "规则已删除，但应用 VPC ACL 失败: " + err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"code": 200, "message": "规则已删除"})
 }
 
@@ -298,6 +319,10 @@ func BindVMVPC(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "轻量云服务器使用管理员分配的专用 VPC，不能切换 VPC"})
 		return
 	}
+	if service.IsSystemVPCSwitch(req.SwitchID) {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "系统基础网络交换机不可选择，请使用自己的交换机"})
+		return
+	}
 	if err := service.BindVMToVPC(username, vmName, req.SwitchID, req.SecurityGroupID); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
@@ -323,16 +348,17 @@ func SwitchVMSecurityGroup(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 200, "message": "安全组已切换"})
 }
 
-// ==================== 多网口管理（仅管理员） ====================
+// ==================== 多网口管理（管理员全量；弹性云用户可自助管理本人虚拟机的附加网口） ====================
 
 // ListVMInterfaces 列出虚拟机所有网口绑定
 func ListVMInterfaces(c *gin.Context) {
-	_, role := currentUserAndRole(c)
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "仅管理员可管理多网口"})
+	username, role := currentUserAndRole(c)
+	vmName := c.Param("name")
+	if role != "admin" && !service.UserOwnsVM(username, vmName) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "无权操作此虚拟机"})
 		return
 	}
-	interfaces, err := service.ListVMInterfaces(c.Param("name"))
+	interfaces, err := service.ListVMInterfaces(vmName)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
@@ -342,17 +368,20 @@ func ListVMInterfaces(c *gin.Context) {
 
 // AddVMInterface 为虚拟机新增网口
 func AddVMInterface(c *gin.Context) {
-	_, role := currentUserAndRole(c)
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "仅管理员可管理多网口"})
-		return
-	}
+	username, role := currentUserAndRole(c)
+	vmName := c.Param("name")
 	var req service.AddVMInterfaceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "参数错误"})
 		return
 	}
-	info, err := service.AddVMInterface(c.Param("name"), req)
+	var info *service.VMInterfaceInfo
+	var err error
+	if role == "admin" {
+		info, err = service.AddVMInterface(vmName, req)
+	} else {
+		info, err = service.AddVMInterfaceAsUser(username, vmName, req)
+	}
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
@@ -362,18 +391,20 @@ func AddVMInterface(c *gin.Context) {
 
 // RemoveVMInterface 删除虚拟机指定网口
 func RemoveVMInterface(c *gin.Context) {
-	_, role := currentUserAndRole(c)
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "仅管理员可管理多网口"})
-		return
-	}
+	username, role := currentUserAndRole(c)
+	vmName := c.Param("name")
 	orderStr := c.Param("order")
 	order, err := strconv.Atoi(orderStr)
 	if err != nil || order < 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "网口序号无效"})
 		return
 	}
-	if err := service.RemoveVMInterface(c.Param("name"), order); err != nil {
+	if role == "admin" {
+		err = service.RemoveVMInterface(vmName, order)
+	} else {
+		err = service.RemoveVMInterfaceAsUser(username, vmName, order)
+	}
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
@@ -382,11 +413,8 @@ func RemoveVMInterface(c *gin.Context) {
 
 // UpdateVMInterface 更新虚拟机指定网口的 VPC 绑定
 func UpdateVMInterface(c *gin.Context) {
-	_, role := currentUserAndRole(c)
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "仅管理员可管理多网口"})
-		return
-	}
+	username, role := currentUserAndRole(c)
+	vmName := c.Param("name")
 	orderStr := c.Param("order")
 	order, err := strconv.Atoi(orderStr)
 	if err != nil || order < 0 {
@@ -398,7 +426,12 @@ func UpdateVMInterface(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "参数错误"})
 		return
 	}
-	if err := service.UpdateVMInterface(c.Param("name"), order, req); err != nil {
+	if role == "admin" {
+		err = service.UpdateVMInterface(vmName, order, req)
+	} else {
+		err = service.UpdateVMInterfaceAsUser(username, vmName, order, req)
+	}
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
 	}

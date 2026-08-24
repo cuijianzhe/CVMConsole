@@ -103,6 +103,8 @@ func init() {
 
 		// ---- Host (additional) ----
 		CollectHostDiskIOBytes: collectHostDiskIOBytes,
+		CollectHostNetDevices:  collectHostNetDevices,
+		CollectHostDiskDevices: collectHostDiskDevices,
 
 		// ---- Bandwidth (additional) ----
 		RebalanceUserBandwidth: RebalanceUserBandwidth,

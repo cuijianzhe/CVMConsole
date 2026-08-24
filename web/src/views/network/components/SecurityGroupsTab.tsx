@@ -9,7 +9,14 @@ import { Button, Empty, Input, Pagination, Select, Table, Tag, Tooltip } from '@
 import { IconDelete, IconEdit, IconLock, IconPlus, IconSearch } from '@douyinfe/semi-icons'
 import type { ColumnProps } from '@douyinfe/semi-ui/lib/es/table'
 import type { VpcSecurityGroup, VpcSecurityGroupRule } from '@/api/vpc'
-import { addressFamilyText, directionText, portText, protocolText, targetText } from '../utils'
+import {
+  addressFamilyText,
+  directionText,
+  portText,
+  protocolText,
+  securityGroupRuleActionText,
+  targetText,
+} from '../utils'
 
 const PAGE_SIZE = 100
 
@@ -21,6 +28,7 @@ interface SecurityGroupsTabProps {
   onEdit: (row: VpcSecurityGroup) => void
   onDelete: (row: VpcSecurityGroup) => void
   onAddRule: (group: VpcSecurityGroup) => void
+  onEditRule: (group: VpcSecurityGroup, rule: VpcSecurityGroupRule) => void
   onDeleteRule: (rule: VpcSecurityGroupRule) => void
 }
 
@@ -28,10 +36,12 @@ interface SecurityGroupsTabProps {
 function RulePanel({
   group,
   onAddRule,
+  onEditRule,
   onDeleteRule,
 }: {
   group: VpcSecurityGroup
   onAddRule: (group: VpcSecurityGroup) => void
+  onEditRule: (group: VpcSecurityGroup, rule: VpcSecurityGroupRule) => void
   onDeleteRule: (rule: VpcSecurityGroupRule) => void
 }) {
   const ruleColumns: ColumnProps<VpcSecurityGroupRule>[] = [
@@ -54,6 +64,18 @@ function RulePanel({
       render: (_text, rule) => (
         <Tag size="small" color={addressFamilyText(rule) === 'IPv6' ? 'violet' : 'blue'}>
           {addressFamilyText(rule)}
+        </Tag>
+      ),
+    },
+    {
+      key: 'rule_action',
+      title: '动作',
+      dataIndex: 'direction',
+      width: 80,
+      align: 'center',
+      render: (text) => (
+        <Tag size="small" color="grey">
+          {securityGroupRuleActionText(text)}
         </Tag>
       ),
     },
@@ -83,20 +105,33 @@ function RulePanel({
     {
       title: '操作',
       dataIndex: 'actions',
-      width: 80,
+      width: 120,
       align: 'center',
       render: (_text, rule) => (
-        <Tooltip content="删除规则" position="top">
-          <Button
-            className="qvm-act-ic"
-            size="small"
-            theme="borderless"
-            type="danger"
-            icon={<IconDelete />}
-            aria-label="删除规则"
-            onClick={() => onDeleteRule(rule)}
-          />
-        </Tooltip>
+        <div className="net-row-actions">
+          <Tooltip content="编辑规则" position="top">
+            <Button
+              className="qvm-act-ic"
+              size="small"
+              theme="borderless"
+              type="primary"
+              icon={<IconEdit />}
+              aria-label="编辑规则"
+              onClick={() => onEditRule(group, rule)}
+            />
+          </Tooltip>
+          <Tooltip content="删除规则" position="top">
+            <Button
+              className="qvm-act-ic"
+              size="small"
+              theme="borderless"
+              type="danger"
+              icon={<IconDelete />}
+              aria-label="删除规则"
+              onClick={() => onDeleteRule(rule)}
+            />
+          </Tooltip>
+        </div>
       ),
     },
   ]
@@ -132,6 +167,7 @@ export default function SecurityGroupsTab({
   onEdit,
   onDelete,
   onAddRule,
+  onEditRule,
   onDeleteRule,
 }: SecurityGroupsTabProps) {
   const [searchName, setSearchName] = useState('')
@@ -286,7 +322,12 @@ export default function SecurityGroupsTab({
           empty="暂无安全组"
           expandedRowRender={(row) =>
             row ? (
-              <RulePanel group={row} onAddRule={onAddRule} onDeleteRule={onDeleteRule} />
+              <RulePanel
+                group={row}
+                onAddRule={onAddRule}
+                onEditRule={onEditRule}
+                onDeleteRule={onDeleteRule}
+              />
             ) : null
           }
         />

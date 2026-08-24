@@ -36,6 +36,7 @@ export interface SettingsForm {
   network_backend: string
   ovs_bridge: string
   ovs_uplink: string
+  elastic_cloud_uplink: string
   ovs_dhcp_start: string
   ovs_dhcp_end: string
   subnet_prefix: string
@@ -59,14 +60,6 @@ export interface SettingsForm {
   default_disk_iops_read: number
   default_disk_iops_write: number
   batch_clone_max_concurrency: number
-  dynamic_memory_scheduler_enabled: boolean
-  dynamic_memory_interval_seconds: number
-  dynamic_memory_host_reserve_mb: number
-  dynamic_memory_host_reserve_percent: number
-  dynamic_memory_increase_threshold_percent: number
-  dynamic_memory_reclaim_threshold_percent: number
-  dynamic_memory_cooldown_seconds: number
-  dynamic_memory_observation_hours: number
   scheduler_event_retention_hours: number
   rescue_iso: string
   public_base_url: string
@@ -76,6 +69,7 @@ export interface SettingsForm {
   request_filter_enabled: boolean
   password_breach_check_enabled: boolean
   scheduled_password_breach_check_enabled: boolean
+  scheduled_storage_trim_enabled: boolean
   maintenance_mode: boolean
   maintenance_service_units: string
   maintenance_vm_shutdown_timeout_seconds: number
@@ -93,6 +87,7 @@ export interface SettingsForm {
   jwt_secret_rotate_hours: number
   jwt_secret_last_rotated: string
   log_max_backups: number
+  request_detail_log_enabled: boolean
   network_wait_online_disabled: boolean
   network_wait_online_summary: string
   spice_enabled_by_default: boolean
@@ -133,6 +128,7 @@ export const DEFAULT_SETTINGS_FORM: SettingsForm = {
   network_backend: 'ovs',
   ovs_bridge: 'br-ovs',
   ovs_uplink: '',
+  elastic_cloud_uplink: '',
   ovs_dhcp_start: '',
   ovs_dhcp_end: '',
   subnet_prefix: '',
@@ -156,14 +152,6 @@ export const DEFAULT_SETTINGS_FORM: SettingsForm = {
   default_disk_iops_read: 0,
   default_disk_iops_write: 0,
   batch_clone_max_concurrency: 10,
-  dynamic_memory_scheduler_enabled: true,
-  dynamic_memory_interval_seconds: 30,
-  dynamic_memory_host_reserve_mb: 2048,
-  dynamic_memory_host_reserve_percent: 20,
-  dynamic_memory_increase_threshold_percent: 15,
-  dynamic_memory_reclaim_threshold_percent: 35,
-  dynamic_memory_cooldown_seconds: 120,
-  dynamic_memory_observation_hours: 24,
   scheduler_event_retention_hours: 168,
   rescue_iso: '',
   public_base_url: '',
@@ -173,6 +161,7 @@ export const DEFAULT_SETTINGS_FORM: SettingsForm = {
   request_filter_enabled: true,
   password_breach_check_enabled: true,
   scheduled_password_breach_check_enabled: true,
+  scheduled_storage_trim_enabled: true,
   maintenance_mode: false,
   maintenance_service_units: DEFAULT_MAINTENANCE_SERVICE_UNITS,
   maintenance_vm_shutdown_timeout_seconds: 40,
@@ -190,6 +179,7 @@ export const DEFAULT_SETTINGS_FORM: SettingsForm = {
   jwt_secret_rotate_hours: 24,
   jwt_secret_last_rotated: '',
   log_max_backups: 0,
+  request_detail_log_enabled: true,
   network_wait_online_disabled: false,
   network_wait_online_summary: '',
   spice_enabled_by_default: false,
@@ -214,23 +204,6 @@ export function validateSettingsForm(form: SettingsForm): string | null {
   if (form.auto_port_start < 1024 || form.auto_port_end > 65535) return '端口范围: 1024 - 65535'
   if (form.smtp_port < 1 || form.smtp_port > 65535) return 'SMTP 端口范围: 1 - 65535'
   if (form.smtp_timeout_seconds < 5) return 'SMTP 超时时间不能小于 5 秒'
-  if (form.dynamic_memory_interval_seconds < 10) return '动态内存调度间隔不能小于 10 秒'
-  if (form.dynamic_memory_host_reserve_mb < 512) return '宿主机保留内存不能小于 512MB'
-  if (form.dynamic_memory_host_reserve_percent < 5 || form.dynamic_memory_host_reserve_percent > 80)
-    return '宿主机保留比例需在 5% - 80% 之间'
-  if (
-    form.dynamic_memory_increase_threshold_percent < 5 ||
-    form.dynamic_memory_increase_threshold_percent > 50
-  )
-    return '增长触发阈值需在 5% - 50% 之间'
-  if (
-    form.dynamic_memory_reclaim_threshold_percent < 10 ||
-    form.dynamic_memory_reclaim_threshold_percent > 90
-  )
-    return '回收触发阈值需在 10% - 90% 之间'
-  if (form.dynamic_memory_cooldown_seconds < 30) return '动态内存冷却时间不能小于 30 秒'
-  if (form.dynamic_memory_observation_hours < 0 || form.dynamic_memory_observation_hours > 168)
-    return '观察期需在 0 - 168 小时之间'
   if (form.scheduler_event_retention_hours < 1 || form.scheduler_event_retention_hours > 2160)
     return '调度事件保留时长需在 1 - 2160 小时之间'
   if (form.public_ipv6_sync_interval_seconds < 10 || form.public_ipv6_sync_interval_seconds > 3600)
@@ -274,6 +247,7 @@ export function buildSettingsPayload(form: SettingsForm): Record<string, unknown
     network_backend: form.network_backend || 'ovs',
     ovs_bridge: form.ovs_bridge,
     ovs_uplink: form.ovs_uplink,
+    elastic_cloud_uplink: form.elastic_cloud_uplink,
     ovs_dhcp_start: form.ovs_dhcp_start,
     ovs_dhcp_end: form.ovs_dhcp_end,
     subnet_prefix: form.subnet_prefix,
@@ -299,14 +273,6 @@ export function buildSettingsPayload(form: SettingsForm): Record<string, unknown
     default_disk_iops_total: form.default_disk_iops_total,
     default_disk_iops_read: form.default_disk_iops_read,
     default_disk_iops_write: form.default_disk_iops_write,
-    dynamic_memory_scheduler_enabled: form.dynamic_memory_scheduler_enabled,
-    dynamic_memory_interval_seconds: form.dynamic_memory_interval_seconds,
-    dynamic_memory_host_reserve_mb: form.dynamic_memory_host_reserve_mb,
-    dynamic_memory_host_reserve_percent: form.dynamic_memory_host_reserve_percent,
-    dynamic_memory_increase_threshold_percent: form.dynamic_memory_increase_threshold_percent,
-    dynamic_memory_reclaim_threshold_percent: form.dynamic_memory_reclaim_threshold_percent,
-    dynamic_memory_cooldown_seconds: form.dynamic_memory_cooldown_seconds,
-    dynamic_memory_observation_hours: form.dynamic_memory_observation_hours,
     scheduler_event_retention_hours: form.scheduler_event_retention_hours,
     rescue_iso: form.rescue_iso,
     public_base_url: form.public_base_url,
@@ -316,6 +282,7 @@ export function buildSettingsPayload(form: SettingsForm): Record<string, unknown
     request_filter_enabled: form.request_filter_enabled,
     password_breach_check_enabled: form.password_breach_check_enabled,
     scheduled_password_breach_check_enabled: form.scheduled_password_breach_check_enabled,
+    scheduled_storage_trim_enabled: form.scheduled_storage_trim_enabled,
     maintenance_mode: form.maintenance_mode,
     maintenance_service_units:
       form.maintenance_service_units?.trim() || DEFAULT_MAINTENANCE_SERVICE_UNITS,
@@ -330,6 +297,7 @@ export function buildSettingsPayload(form: SettingsForm): Record<string, unknown
     smtp_timeout_seconds: form.smtp_timeout_seconds,
     jwt_secret_rotate_hours: form.jwt_secret_rotate_hours,
     log_max_backups: form.log_max_backups,
+    request_detail_log_enabled: form.request_detail_log_enabled,
     network_wait_online_disabled: form.network_wait_online_disabled,
     spice_enabled_by_default: form.spice_enabled_by_default,
     igpu_passthrough_enabled: form.igpu_passthrough_enabled,

@@ -21,7 +21,6 @@ import (
 	"kvm_console/service/libvirt_rpc"
 	netpkg "kvm_console/service/network"
 	"kvm_console/service/snapshot"
-	vmmemory "kvm_console/service/vm/memory"
 	vmmigration "kvm_console/service/vm/migration"
 	vmimport "kvm_console/service/vm/vmimport"
 	"kvm_console/taskqueue"
@@ -113,12 +112,12 @@ func main() {
 
 	// 启动资源采集器（后台定时采集VM资源数据）
 	service.StartStatsCollector()
-	vmmemory.StartMemoryBalloonScheduler()
 	service.StartSchedulerEventCleanup()
 	service.StartVMScheduleRunner()
 	service.StartJWTSecretRotator()
 	service.StartExpiredUploadSessionCleanup() // 清理过期分片上传会话
 	service.StartPasswordBreachScheduler()
+	service.StartStorageTrimScheduler()
 
 	// 同步 SSH 拒绝配置（确保与数据库状态一致）
 	service.SyncSSHDenyConfig()
@@ -1091,6 +1090,22 @@ func registerTaskHandlers() {
 			return "", fmt.Errorf("解析参数失败: %w", err)
 		}
 		return service.ExecutePasswordBreachNotification(ctx, params, progress)
+	})
+	taskqueue.RegisterHandler(model.TaskTypeStorageTrim, func(ctx context.Context, task *model.Task, progress func(int, string)) (string, error) {
+		var params service.StorageTrimTaskParams
+		if err := json.Unmarshal([]byte(task.Params), &params); err != nil {
+			return "", fmt.Errorf("解析存储回收参数失败: %w", err)
+		}
+		result, err := service.ExecuteStorageTrim(ctx, params, progress)
+		if err != nil {
+			return "", err
+		}
+		if result == nil {
+			// 存储文件系统未挂载，本次跳过
+			return `{"skipped":true}`, nil
+		}
+		resultJSON, _ := json.Marshal(result)
+		return string(resultJSON), nil
 	})
 	logger.App.Info("任务处理器注册完成")
 }

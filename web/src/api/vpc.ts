@@ -54,6 +54,7 @@ export interface VpcSwitchPayload {
   username?: string
   name: string
   dhcp_enabled?: boolean
+  internet_enabled?: boolean
   uplink_mode?: 'none' | 'physical' | 'system'
   uplink_if?: string
   uplink_gateway?: string
@@ -104,6 +105,7 @@ export function vpcSwitchModeDetail(item: VpcSwitch): string {
 /** VPC 流量/带宽配额 */
 export interface VpcQuota {
   username: string
+  internet_available: boolean
   max_traffic_down: number
   max_traffic_up: number
   allocated_traffic_down: number
@@ -304,6 +306,23 @@ export function addVPCSecurityGroupRule(
   return service.post<unknown, ApiResponse<unknown>>(`/vpc/security-groups/${id}/rules`, data)
 }
 
+/** 更新安全组规则 */
+export function updateVPCSecurityGroupRule(
+  id: number,
+  data: {
+    direction: string
+    address_family: string
+    protocol: string
+    port_start: number
+    port_end: number
+    target_type: string
+    target_value: string
+    remark: string
+  },
+) {
+  return service.put<unknown, ApiResponse<unknown>>(`/vpc/security-groups/rules/${id}`, data)
+}
+
 /** 删除安全组规则 */
 export function deleteVPCSecurityGroupRule(id: number) {
   return service.delete<unknown, ApiResponse<unknown>>(`/vpc/security-groups/rules/${id}`)
@@ -330,7 +349,7 @@ export function switchVMSecurityGroup(name: string, securityGroupID: number) {
   )
 }
 
-// ==================== 多网口管理（仅管理员） ====================
+// ==================== 多网口管理（管理员全量；弹性云用户可自助管理本人虚拟机的附加网口） ====================
 
 /** 网口信息（绑定 + 交换机 + 安全组） */
 export interface VMInterfaceInfo {
@@ -351,7 +370,7 @@ export interface VMInterfacePayload {
   allowed_ipv6_addresses?: string
 }
 
-/** 获取虚拟机网口列表（仅管理员） */
+/** 获取虚拟机网口列表（普通用户仅限本人虚拟机） */
 export function listVMInterfaces(name: string) {
   return service.get<unknown, ApiResponse<VMInterfaceInfo[]>>(
     `/vm/${encodeURIComponent(name)}/interfaces`,
@@ -359,7 +378,7 @@ export function listVMInterfaces(name: string) {
   )
 }
 
-/** 新增网口（仅管理员） */
+/** 新增网口（普通用户仅限本人虚拟机与本人交换机） */
 export function addVMInterface(name: string, data: VMInterfacePayload) {
   return service.post<unknown, ApiResponse<VMInterfaceInfo>>(
     `/vm/${encodeURIComponent(name)}/interfaces`,
@@ -367,7 +386,7 @@ export function addVMInterface(name: string, data: VMInterfacePayload) {
   )
 }
 
-/** 更新网口（仅管理员） */
+/** 更新网口（普通用户仅限本人虚拟机的附加网口） */
 export function updateVMInterface(name: string, order: number, data: VMInterfacePayload) {
   return service.put<unknown, ApiResponse<null>>(
     `/vm/${encodeURIComponent(name)}/interfaces/${order}`,
@@ -375,7 +394,7 @@ export function updateVMInterface(name: string, order: number, data: VMInterface
   )
 }
 
-/** 删除网口（仅管理员） */
+/** 删除网口（普通用户仅限本人虚拟机的附加网口） */
 export function removeVMInterface(name: string, order: number) {
   return service.delete<unknown, ApiResponse<null>>(
     `/vm/${encodeURIComponent(name)}/interfaces/${order}`,
