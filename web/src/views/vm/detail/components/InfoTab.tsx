@@ -48,15 +48,7 @@ function EmptyIPDetail({ status }: { status: VmDetailInfo['guest_agent_status'] 
   if (status?.configured) {
     return (
       <div className="qvm-ip-detail">
-        <div>QEMU Guest Agent 已配置但未连接，请检查虚拟机内的来宾代理服务。</div>
-        <a
-          className="qvm-ip-detail-link"
-          href={GUEST_AGENT_DOC_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          查看安装文档
-        </a>
+        QEMU Guest Agent 已配置但未连接，请检查虚拟机内的 qemu-guest-agent 服务是否已安装并运行。
       </div>
     )
   }
