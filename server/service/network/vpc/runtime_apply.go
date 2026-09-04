@@ -74,9 +74,6 @@ func applyVPCSwitchRuntime(vmName string, sw model.VPCSwitch, ensureSwitch bool)
 	if err := ensureVMVPCInterfaceConfig(vmName, sw.VLANID); err != nil {
 		return err
 	}
-	if mac := ip_resolver.GetFirstVMMAC(vmName); mac != "" {
-		HookCleanOVSDHCPLease(mac, "")
-	}
 	if vmRunning {
 		if err := ensureVMVPCRuntimeInterfaceConfig(vmName, sw.VLANID); err != nil {
 			return err
@@ -84,6 +81,11 @@ func applyVPCSwitchRuntime(vmName string, sw model.VPCSwitch, ensureSwitch bool)
 	}
 	if !vmRunning {
 		// 关机虚拟机没有 vnet 运行态端口，持久化 XML 已更新，无需输出异常告警。
+		// 仅在关机时清理旧 DHCP 租约：运行中 VM 的租约是有效的，删除会导致
+		// 后台端口安全协调读到 lease 文件无记录而误报 missing_ipv4。
+		if mac := ip_resolver.GetFirstVMMAC(vmName); mac != "" {
+			HookCleanOVSDHCPLease(mac, "")
+		}
 		return nil
 	}
 	vnetIF := ip_resolver.GetVMVnetIF(vmName)

@@ -470,6 +470,16 @@ log-dhcp
 		logger.App.Warn("配置桥接网桥 DHCP/DNS 入站规则失败", "bridge", bridge.Name, "error", err)
 	}
 
+	// 如果 dnsmasq 已在运行，仅发送 SIGHUP 重载配置和 dhcp-hosts 文件，避免批量创建时反复重启导致端口冲突
+	if pidData, err := os.ReadFile(pidPath); err == nil {
+		pid := strings.TrimSpace(string(pidData))
+		if pid != "" && utils.ExecCommand("kill", "-0", pid).Error == nil {
+			utils.ExecCommand("kill", "-HUP", pid)
+			return nil
+		}
+	}
+
+	// dnsmasq 未运行，执行完整的停止+启动
 	if err := stopBridgeDNSMasq(bridge.Name); err != nil {
 		logger.App.Warn("停止桥接网桥 DHCP 服务失败", "bridge", bridge.Name, "error", err)
 	}
