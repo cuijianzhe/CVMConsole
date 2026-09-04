@@ -26,6 +26,12 @@ func AddVMInterface(vmName string, req AddVMInterfaceRequest) (*VMInterfaceInfo,
 	if err := normalizeInterfacePortSecurityFields(&req, HookSwitchUsesDirectBridge(sw) && sw.IPv6SecurityEnabled); err != nil {
 		return nil, err
 	}
+	// 指定 IPv4 地址：预先校验能否绑定到该交换机，避免网口创建后才发现地址无效
+	if strings.TrimSpace(req.StaticIPv4) != "" && HookValidateStaticIPv4ForSwitch != nil {
+		if err := HookValidateStaticIPv4ForSwitch(&sw, req.StaticIPv4); err != nil {
+			return nil, err
+		}
+	}
 	if SwitchIsTrustedIsolated(sw) {
 		req.AllowedIPv4Addresses = ""
 		req.AllowedIPv6Addresses = ""
@@ -151,6 +157,13 @@ func AddVMInterface(vmName string, req AddVMInterfaceRequest) (*VMInterfaceInfo,
 	if err := applyNewInterfaceRuntime(vmName, sw, nextOrder); err != nil {
 		logger.App.Warn("为新网口应用 VPC 运行态失败", "vm", vmName, "order", nextOrder, "error", err)
 	}
+	// 指定 IPv4 地址：为新网口写入 DHCP 静态绑定，开机后即可获取指定地址
+	// （失败仅记录告警，不回滚网口，用户可在网络页重新绑定）
+	if strings.TrimSpace(req.StaticIPv4) != "" && HookBindInterfaceStaticIP != nil {
+		if err := HookBindInterfaceStaticIP(vmName, nextOrder, req.StaticIPv4); err != nil {
+			logger.App.Warn("为新网口绑定指定 IP 失败", "vm", vmName, "order", nextOrder, "error", err)
+		}
+	}
 	portSecurityEnabled := HookIsPortSecurityEnabled != nil && HookIsPortSecurityEnabled()
 	if portSecurityEnabled && HookReconcileVMPortSecurity != nil {
 		if err := HookReconcileVMPortSecurity(vmName); err != nil {
@@ -221,6 +234,12 @@ func UpdateVMInterface(vmName string, interfaceOrder int, req AddVMInterfaceRequ
 	}
 	if err := normalizeInterfacePortSecurityFields(&req, HookSwitchUsesDirectBridge(sw) && sw.IPv6SecurityEnabled); err != nil {
 		return err
+	}
+	// 指定 IPv4 地址：预先校验能否绑定到该交换机，避免修改后才发现地址无效
+	if strings.TrimSpace(req.StaticIPv4) != "" && HookValidateStaticIPv4ForSwitch != nil {
+		if err := HookValidateStaticIPv4ForSwitch(&sw, req.StaticIPv4); err != nil {
+			return err
+		}
 	}
 	if SwitchIsTrustedIsolated(sw) {
 		req.AllowedIPv4Addresses = ""
@@ -350,6 +369,14 @@ func UpdateVMInterface(vmName string, interfaceOrder int, req AddVMInterfaceRequ
 	}
 	// 直通桥接模式：将允许的 IPv4 地址同步为桥接 dnsmasq 静态绑定
 	syncDirectBridgeStaticIPFromAllowed(&sw, &binding)
+
+	// 指定 IPv4 地址：更新网口 DHCP 静态绑定（覆盖交换机自动分配的地址；留空则保持现有绑定不变）
+	if strings.TrimSpace(req.StaticIPv4) != "" && HookBindInterfaceStaticIP != nil {
+		if err := HookBindInterfaceStaticIP(vmName, interfaceOrder, req.StaticIPv4); err != nil {
+			restoreLink()
+			return fmt.Errorf("绑定指定 IP 失败: %w", err)
+		}
+	}
 
 	// 应用带宽设置到该网口
 	if req.BandwidthInboundAvg > 0 || req.BandwidthOutboundAvg > 0 {

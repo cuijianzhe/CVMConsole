@@ -154,6 +154,10 @@ func importApplianceHandler(c *gin.Context, admin bool) {
 	if !validateSwitchBridges(c, params.SwitchID, params.ExtraNics) {
 		return
 	}
+	// 同步校验：指定 IPv4 地址能否绑定到对应交换机（主网卡 + 附加网口）
+	if !validateStaticIPv4s(c, params.SwitchID, req.StaticIPv4, params.ExtraNics) {
+		return
+	}
 	if err := service.AddVMToUser(usernameStr, req.Name); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "预留虚拟机归属失败: " + err.Error()})
 		return

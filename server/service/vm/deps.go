@@ -68,6 +68,8 @@ type Deps struct {
 	IsPortSecurityEnabled             func() bool
 	ReconcileVMPortSecurity           func(vmName string) error
 	PrepareVMPortSecurityBinding      func(owner, vmName string, switchID, securityGroupID uint, allowedIPv4, allowedIPv6 string) error
+	// BindVMInterfaceStaticIP 为虚拟机指定网口绑定 DHCP 静态 IP（创建启动前调用）
+	BindVMInterfaceStaticIP func(vmName string, interfaceOrder int, ipAddr string) error
 
 	// ---- Storage pool ----
 	GetAllISOs           func() ([]ISOFileInfo, error)

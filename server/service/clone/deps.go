@@ -117,6 +117,8 @@ type Deps struct {
 
 	// ---- 端口安全 ----
 	PrepareVMPortSecurityBinding func(owner, vmName string, switchID, securityGroupID uint, allowedIPv4, allowedIPv6 string) error
+	// BindVMInterfaceStaticIP 为虚拟机指定网口绑定 DHCP 静态 IP（克隆启动前调用）
+	BindVMInterfaceStaticIP func(vmName string, interfaceOrder int, ipAddr string) error
 
 	// ---- SPICE graphics（创建即带，默认本地监听） ----
 	InjectSPICEGraphics   func(xmlStr, passwd, listenAddr string) string

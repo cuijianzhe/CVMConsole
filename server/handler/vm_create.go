@@ -51,6 +51,7 @@ type CreateVmRequest struct {
 	SecurityGroupID      uint                            `json:"security_group_id"`
 	AllowedIPv4Addresses string                          `json:"allowed_ipv4_addresses"`
 	AllowedIPv6Addresses string                          `json:"allowed_ipv6_addresses"`
+	StaticIPv4           string                          `json:"static_ipv4"` // 主网卡指定 IPv4 地址（启动前做 DHCP 静态绑定）
 	ExtraNics            []service.AddVMInterfaceRequest `json:"extra_nics"`
 	StoragePoolID        string                          `json:"storage_pool_id"`
 	SystemDiskIOPS       *service.DiskIOPSTune           `json:"system_disk_iops"`          // 系统盘 IOPS 限制（仅管理员）
@@ -109,6 +110,11 @@ func CreateVm(c *gin.Context) {
 		return
 	}
 
+	// 同步校验：指定 IPv4 地址能否绑定到对应交换机（主网卡 + 附加网口）
+	if !validateStaticIPv4s(c, req.SwitchID, req.StaticIPv4, req.ExtraNics) {
+		return
+	}
+
 	params := &service.CreateVMParams{
 		Name:                 req.Name,
 		Remark:               req.Remark,
@@ -147,6 +153,7 @@ func CreateVm(c *gin.Context) {
 		SecurityGroupID:      req.SecurityGroupID,
 		AllowedIPv4Addresses: req.AllowedIPv4Addresses,
 		AllowedIPv6Addresses: req.AllowedIPv6Addresses,
+		StaticIPv4:           req.StaticIPv4,
 		ExtraNics:            req.ExtraNics,
 		StoragePoolID:        req.StoragePoolID,
 		SystemDiskIOPS:       req.SystemDiskIOPS,
@@ -319,6 +326,7 @@ type ImportDiskByPathRequest struct {
 	UserData             string                          `json:"user_data,omitempty"`  // cloud-init UserData 扩展
 	AllowedIPv4Addresses string                          `json:"allowed_ipv4_addresses,omitempty"`
 	AllowedIPv6Addresses string                          `json:"allowed_ipv6_addresses,omitempty"`
+	StaticIPv4           string                          `json:"static_ipv4,omitempty"` // 主网卡指定 IPv4 地址（启动前做 DHCP 静态绑定）
 }
 
 // AdminImportDisk 管理员通过绝对路径导入磁盘创建虚拟机（异步任务）
@@ -407,6 +415,7 @@ func AdminImportDisk(c *gin.Context) {
 		UserData:             req.UserData,
 		AllowedIPv4Addresses: req.AllowedIPv4Addresses,
 		AllowedIPv6Addresses: req.AllowedIPv6Addresses,
+		StaticIPv4:           req.StaticIPv4,
 	}
 
 	task, err := taskqueue.SubmitWithStruct(model.TaskTypeImportDisk, params, usernameStr)

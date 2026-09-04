@@ -919,7 +919,8 @@ export interface ExtraNicPayload {
   switch_id: number
   security_group_id: number
   nic_model: string
-  allowed_ipv4_addresses?: string
+  /** 指定 IPv4 地址（非空时为该网口做 DHCP 静态绑定） */
+  static_ipv4?: string
   allowed_ipv6_addresses?: string
 }
 
@@ -941,7 +942,8 @@ export interface CreateVmPayload {
   floppy_image?: string
   switch_id?: number | null
   security_group_id?: number | null
-  allowed_ipv4_addresses?: string
+  /** 主网卡指定 IPv4 地址（非空时启动前做 DHCP 静态绑定） */
+  static_ipv4?: string
   allowed_ipv6_addresses?: string
   storage_pool_id?: string
   nic_model?: string
@@ -998,7 +1000,8 @@ export interface CloneVmPayload {
   disable_system_init?: boolean
   switch_id?: number | null
   security_group_id?: number | null
-  allowed_ipv4_addresses?: string
+  /** 主网卡指定 IPv4 地址（非空时启动前做 DHCP 静态绑定；批量克隆忽略） */
+  static_ipv4?: string
   allowed_ipv6_addresses?: string
   storage_pool_id?: string
   autostart?: boolean
@@ -1074,7 +1077,7 @@ export interface BatchCloneVmPayload {
   first_boot_reboot_mode?: string
   switch_id?: number | null
   security_group_id?: number | null
-  allowed_ipv4_addresses?: string
+  static_ipv4?: string
   allowed_ipv6_addresses?: string
   extra_nics?: ExtraNicPayload[]
   extra_disks?: ExtraDiskPayload[]
@@ -1120,7 +1123,8 @@ export interface ImportVmPayload {
   ram: number
   switch_id?: number | null
   security_group_id?: number | null
-  allowed_ipv4_addresses?: string
+  /** 主网卡指定 IPv4 地址（非空时导入启动前做 DHCP 静态绑定） */
+  static_ipv4?: string
   allowed_ipv6_addresses?: string
   copy_disk?: boolean
   hostname?: string

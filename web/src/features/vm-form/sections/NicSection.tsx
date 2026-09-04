@@ -2,7 +2,7 @@
  * 网络分区（创建 / 编辑共用）
  * 编辑：仅网卡类型（运行中禁用）；创建：默认网卡型号 + 网口列表。
  */
-import { Button, Empty, Select, Tag, TextArea, Tooltip } from '@douyinfe/semi-ui'
+import { Button, Empty, Input, Select, Tag, TextArea, Tooltip } from '@douyinfe/semi-ui'
 import { useEffect, useState } from 'react'
 import { IconGlobe, IconDelete, IconPlus } from '@douyinfe/semi-icons'
 import { IllustrationNoContent, IllustrationNoContentDark } from '@douyinfe/semi-illustrations'
@@ -46,7 +46,7 @@ export default function NicSection() {
         nic_model: f.nic_model || 'virtio',
         switch_id: options.vpcSwitches.length > 0 ? options.vpcSwitches[0].id : null,
         security_group_id: null,
-        allowed_ipv4_addresses: '',
+        static_ipv4: '',
         allowed_ipv6_addresses: '',
       },
     ])
@@ -67,7 +67,7 @@ export default function NicSection() {
       | 'nic_model'
       | 'switch_id'
       | 'security_group_id'
-      | 'allowed_ipv4_addresses'
+      | 'static_ipv4'
       | 'allowed_ipv6_addresses',
     value: unknown,
   ) => {
@@ -191,24 +191,31 @@ export default function NicSection() {
                     </FormField>
                   )}
                 </div>
-                {portSecurityEnabled && (() => {
+                {(() => {
                   const selectedSwitch = options.vpcSwitches.find((item) => item.id === nic.switch_id)
                   const directBridge = selectedSwitch?.bridge_mode === 'bridge'
-                  if (directBridge && !selectedSwitch?.uplink_if) return null
+                  const trustedEmpty = directBridge && !selectedSwitch?.uplink_if
+                  // 空交换机（直通桥且无上行口）没有 DHCP 服务，指定 IP 无意义，不显示
+                  if (trustedEmpty) return null
+                  const showIPv6 = portSecurityEnabled && directBridge && selectedSwitch?.ipv6_security_enabled
                   return (
                     <div className="qvm-vf-grid-2">
                       <FormField
-                        label="允许的 IPv4 地址"
-                        tip={directBridge ? '可选；留空时保持兼容保护，填写后启用精确地址校验' : '静态地址可在此登记，DHCP 租约会自动加入策略'}
+                        label="指定 IPv4 地址"
+                        tip={
+                          directBridge
+                            ? '可选；留空由上级网络分配，填写后为该网口绑定固定 IP（需在网桥 DHCP 地址池内）'
+                            : '可选；留空由 DHCP 自动分配，填写后为该网口绑定固定 IP（需在交换机 DHCP 范围内）'
+                        }
                       >
-                        <TextArea
-                          value={nic.allowed_ipv4_addresses}
-                          onChange={(v) => updateNic(index, 'allowed_ipv4_addresses', v)}
-                          placeholder="每行一个精确 IPv4 地址"
-                          autosize={{ minRows: 2, maxRows: 4 }}
+                        <Input
+                          value={nic.static_ipv4}
+                          onChange={(v) => updateNic(index, 'static_ipv4', v)}
+                          placeholder="例如 192.168.1.10，留空自动分配"
+                          showClear
                         />
                       </FormField>
-                      {directBridge && selectedSwitch?.ipv6_security_enabled && (
+                      {showIPv6 && (
                         <FormField label="允许的 IPv6 地址" required tip="须位于交换机可信前缀内">
                           <TextArea
                             value={nic.allowed_ipv6_addresses}

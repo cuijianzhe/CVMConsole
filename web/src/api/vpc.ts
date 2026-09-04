@@ -366,7 +366,8 @@ export interface VMInterfacePayload {
   nic_model: string
   bandwidth_inbound_avg: number
   bandwidth_outbound_avg: number
-  allowed_ipv4_addresses?: string
+  /** 指定 IPv4 地址（非空时为该网口做 DHCP 静态绑定） */
+  static_ipv4?: string
   allowed_ipv6_addresses?: string
 }
 

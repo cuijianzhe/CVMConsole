@@ -54,6 +54,7 @@ type CloneParams struct {
 	SecurityGroupID       uint                           `json:"security_group_id,omitempty"`
 	AllowedIPv4Addresses  string                         `json:"allowed_ipv4_addresses,omitempty"`
 	AllowedIPv6Addresses  string                         `json:"allowed_ipv6_addresses,omitempty"`
+	StaticIPv4            string                         `json:"static_ipv4,omitempty"` // 主网卡指定 IPv4 地址（非空时启动前做 DHCP 静态绑定；批量克隆忽略）
 	ExtraNics             []AddVMInterfaceRequest        `json:"extra_nics,omitempty"`
 	StoragePoolID         string                         `json:"storage_pool_id,omitempty"`
 	ExtraDisks            []ExtraDiskParam               `json:"extra_disks,omitempty"`

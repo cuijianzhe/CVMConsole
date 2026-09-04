@@ -435,41 +435,42 @@ func UnmountStorageFromVM(c *gin.Context) {
 
 // SelfCreateVmRequest 用户自助创建VM请求
 type SelfCreateVmRequest struct {
-	Name                 string                            `json:"name" binding:"required"`
-	Remark               string                            `json:"remark"`
-	VCPU                 int                               `json:"vcpu" binding:"required"`
-	MaxVCPU              int                               `json:"max_vcpu"`
-	RAM                  int                               `json:"ram" binding:"required"`
-	DiskSize             int                               `json:"disk_size" binding:"required"`
-	DiskFormat           string                            `json:"disk_format"`
-	DiskBus              string                            `json:"disk_bus"`
-	OSVariant            string                            `json:"os_variant"`
-	ISOPath              string                            `json:"iso_path"`
-	ISOPaths             []string                          `json:"iso_paths"`
-	FloppyImage          string                            `json:"floppy_image"`
-	NicModel             string                            `json:"nic_model"`
-	Autostart            bool                              `json:"autostart"`
-	Freeze               bool                              `json:"freeze"`
-	APIC                 *bool                             `json:"apic"`
-	PAE                  *bool                             `json:"pae"`
-	RTCOffset            string                            `json:"rtc_offset"`
-	RTCStartDate         string                            `json:"rtc_startdate"`
-	GuestAgent           *vm_xml.VMGuestAgentConfig        `json:"guest_agent"`
-	SMBIOS1              *vm_xml.VMSMBIOS1Config           `json:"smbios1"`
-	OSType               string                            `json:"os_type"`
-	MachineType          string                            `json:"machine_type"`
-	BootType             string                            `json:"boot_type"`
-	BootOrder            []string                          `json:"boot_order"`
-	VideoModel           string                            `json:"video_model"`
-	SpiceEnabled         *bool                             `json:"spice_enabled"` // 是否启用 SPICE 显示协议（不传=回退全局默认）
-	CPUTopologyMode      string                            `json:"cpu_topology_mode"`
-	SwitchID             uint                              `json:"switch_id"`
-	SecurityGroupID      uint                              `json:"security_group_id"`
-	AllowedIPv4Addresses string                            `json:"allowed_ipv4_addresses"`
-	AllowedIPv6Addresses string                            `json:"allowed_ipv6_addresses"`
-	ExtraNics            []service.AddVMInterfaceRequest   `json:"extra_nics"`
-	StoragePoolID        string                            `json:"storage_pool_id"`
-	PCIERootPorts        int                               `json:"pcie_root_ports,omitempty"` // q35 预留 pcie-root-port 数量
+	Name                 string                          `json:"name" binding:"required"`
+	Remark               string                          `json:"remark"`
+	VCPU                 int                             `json:"vcpu" binding:"required"`
+	MaxVCPU              int                             `json:"max_vcpu"`
+	RAM                  int                             `json:"ram" binding:"required"`
+	DiskSize             int                             `json:"disk_size" binding:"required"`
+	DiskFormat           string                          `json:"disk_format"`
+	DiskBus              string                          `json:"disk_bus"`
+	OSVariant            string                          `json:"os_variant"`
+	ISOPath              string                          `json:"iso_path"`
+	ISOPaths             []string                        `json:"iso_paths"`
+	FloppyImage          string                          `json:"floppy_image"`
+	NicModel             string                          `json:"nic_model"`
+	Autostart            bool                            `json:"autostart"`
+	Freeze               bool                            `json:"freeze"`
+	APIC                 *bool                           `json:"apic"`
+	PAE                  *bool                           `json:"pae"`
+	RTCOffset            string                          `json:"rtc_offset"`
+	RTCStartDate         string                          `json:"rtc_startdate"`
+	GuestAgent           *vm_xml.VMGuestAgentConfig      `json:"guest_agent"`
+	SMBIOS1              *vm_xml.VMSMBIOS1Config         `json:"smbios1"`
+	OSType               string                          `json:"os_type"`
+	MachineType          string                          `json:"machine_type"`
+	BootType             string                          `json:"boot_type"`
+	BootOrder            []string                        `json:"boot_order"`
+	VideoModel           string                          `json:"video_model"`
+	SpiceEnabled         *bool                           `json:"spice_enabled"` // 是否启用 SPICE 显示协议（不传=回退全局默认）
+	CPUTopologyMode      string                          `json:"cpu_topology_mode"`
+	SwitchID             uint                            `json:"switch_id"`
+	SecurityGroupID      uint                            `json:"security_group_id"`
+	AllowedIPv4Addresses string                          `json:"allowed_ipv4_addresses"`
+	AllowedIPv6Addresses string                          `json:"allowed_ipv6_addresses"`
+	StaticIPv4           string                          `json:"static_ipv4"` // 主网卡指定 IPv4 地址（启动前做 DHCP 静态绑定）
+	ExtraNics            []service.AddVMInterfaceRequest `json:"extra_nics"`
+	StoragePoolID        string                          `json:"storage_pool_id"`
+	PCIERootPorts        int                             `json:"pcie_root_ports,omitempty"` // q35 预留 pcie-root-port 数量
 	ExtraDisks           []struct {
 		Size          int    `json:"size"`
 		Format        string `json:"format"`
@@ -591,6 +592,11 @@ func SelfCreateVm(c *gin.Context) {
 		req.SecurityGroupID = securityGroupID
 	}
 
+	// 同步校验：指定 IPv4 地址能否绑定到对应交换机（主网卡 + 附加网口）
+	if !validateStaticIPv4s(c, req.SwitchID, req.StaticIPv4, req.ExtraNics) {
+		return
+	}
+
 	params := &service.CreateVMParams{
 		Name:                 req.Name,
 		Remark:               req.Remark,
@@ -625,6 +631,7 @@ func SelfCreateVm(c *gin.Context) {
 		SecurityGroupID:      req.SecurityGroupID,
 		AllowedIPv4Addresses: req.AllowedIPv4Addresses,
 		AllowedIPv6Addresses: req.AllowedIPv6Addresses,
+		StaticIPv4:           req.StaticIPv4,
 		StoragePoolID:        req.StoragePoolID,
 		IsAdmin:              false,
 		ExtraNics:            req.ExtraNics,

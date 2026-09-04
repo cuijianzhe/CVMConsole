@@ -48,6 +48,7 @@ type LinkedCloneVmRequest struct {
 	SystemDiskIOPS       *service.DiskIOPSTune           `json:"system_disk_iops"` // 系统盘 IOPS 限制（仅管理员）
 	AllowedIPv4Addresses string                          `json:"allowed_ipv4_addresses,omitempty"`
 	AllowedIPv6Addresses string                          `json:"allowed_ipv6_addresses,omitempty"`
+	StaticIPv4           string                          `json:"static_ipv4,omitempty"` // 主网卡指定 IPv4 地址（启动前做 DHCP 静态绑定）
 	HostDevices          []service.HostDeviceParam       `json:"host_devices,omitempty"`
 }
 
@@ -107,6 +108,11 @@ func LinkedCloneVm(c *gin.Context) {
 		return
 	}
 
+	// 同步校验: 指定 IPv4 地址能否绑定到对应交换机（主网卡 + 附加网口）
+	if !validateStaticIPv4s(c, req.SwitchID, req.StaticIPv4, req.ExtraNics) {
+		return
+	}
+
 	// 归一化机器类型
 	linkedArch := arch.DetectHostArch()
 	linkedProfile := arch.GetProfile(linkedArch)
@@ -154,6 +160,7 @@ func LinkedCloneVm(c *gin.Context) {
 		IsAdmin:              true,
 		AllowedIPv4Addresses: req.AllowedIPv4Addresses,
 		AllowedIPv6Addresses: req.AllowedIPv6Addresses,
+		StaticIPv4:           req.StaticIPv4,
 		HostDevices:          req.HostDevices,
 	}
 

@@ -100,14 +100,25 @@ func ExecutePortSecurityTask(ctx context.Context, params PortSecurityTaskParams,
 	return portsecurity.ExecuteTask(ctx, params, progress)
 }
 
-// PrepareVMPortSecurityBinding 在虚拟机首次启动前保存主网卡身份资料并同步交换机 XML。
+// PrepareVMPortSecurityBinding 在虚拟机首次启动前建立 VPC 绑定并保存主网卡身份资料。
+// 注意：VPC 绑定记录（vpc_vm_bindings）在端口安全关闭时也必须建立——
+// 创建/导入流程在启动前还需要基于该记录执行 DHCP 静态绑定（指定 IP）、
+// 流量统计与安全组关联；绑定本身是幂等的（已存在则更新）。
+// 允许地址清单仅在端口安全开启时才写入。
 func PrepareVMPortSecurityBinding(owner, vmName string, switchID, securityGroupID uint, allowedIPv4, allowedIPv6 string) error {
-	if config.GlobalConfig == nil || !config.GlobalConfig.PortSecurityEnabled || switchID == 0 {
+	if switchID == 0 {
 		return nil
 	}
 	owner = strings.TrimSpace(owner)
 	if owner == "" {
 		owner = FindVMOwner(vmName)
+	}
+	// 普通用户未指定安全组时回退到其默认安全组（BindVMToVPC 不接受 SG=0）
+	if !IsAdministratorAccount(owner) && securityGroupID == 0 {
+		var g model.VPCSecurityGroup
+		if err := model.DB.Where("username = ? AND is_default = ?", owner, true).First(&g).Error; err == nil {
+			securityGroupID = g.ID
+		}
 	}
 	var err error
 	if IsAdministratorAccount(owner) {
@@ -117,6 +128,10 @@ func PrepareVMPortSecurityBinding(owner, vmName string, switchID, securityGroupI
 	}
 	if err != nil {
 		return err
+	}
+	// 端口安全关闭时无需登记允许地址清单
+	if config.GlobalConfig == nil || !config.GlobalConfig.PortSecurityEnabled {
+		return nil
 	}
 	if err := UpdateVMInterfaceAllowedAddresses(vmName, 0, allowedIPv4, allowedIPv6); err != nil {
 		return fmt.Errorf("保存主网卡允许地址失败: %w", err)

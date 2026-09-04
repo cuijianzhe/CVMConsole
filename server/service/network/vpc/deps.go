@@ -127,6 +127,11 @@ var (
 	HookGetLightweightVMQuota  func(vmName string) (*model.LightweightVMQuota, error)
 	HookClearVMBandwidth       func(vmName string) error
 
+	// HookValidateStaticIPv4ForSwitch 校验指定 IP 能否绑定到交换机（由 network 包提供实现）
+	HookValidateStaticIPv4ForSwitch func(sw *model.VPCSwitch, ipAddr string) error
+	// HookBindInterfaceStaticIP 为虚拟机指定网口绑定 DHCP 静态 IP（由 network 包提供实现）
+	HookBindInterfaceStaticIP func(vmName string, interfaceOrder int, ipAddr string) error
+
 	HookListAllVMNames             func() []string
 	HookGetFirewallVMIP            func(vmName string) string
 	HookPublicIPNATPrivateIPsForVM func(vmName string) []string

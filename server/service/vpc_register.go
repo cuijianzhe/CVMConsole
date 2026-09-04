@@ -208,6 +208,7 @@ func EnsureVPCForVMCreate(username string, switchID, securityGroupID uint) error
 func ResolveVPCForVMCreate(username string, switchID, securityGroupID uint) (uint, uint, error) {
 	return vpcpkg.ResolveVPCForVMCreate(username, switchID, securityGroupID)
 }
+
 // EnsureSecurityGroupAllowsPortForward 为 VPC 虚拟机补安全组放行规则（sourceIP 为端口转发入站 IP 白名单）
 func EnsureSecurityGroupAllowsPortForward(vmName, protocol, portText, sourceIP string) error {
 	return vpcpkg.EnsureSecurityGroupAllowsPortForward(vmName, protocol, portText, sourceIP)
@@ -366,6 +367,10 @@ func init() {
 	}
 	vpcpkg.HookTriggerPortSecurityReconcile = TriggerPortSecurityReconcile
 	vpcpkg.HookReconcileVMPortSecurity = ReconcileVMPortSecurity
+
+	// ── 指定 IPv4 地址（DHCP 静态绑定）hooks ──
+	vpcpkg.HookValidateStaticIPv4ForSwitch = netpkg.ValidateStaticIPv4ForSwitch
+	vpcpkg.HookBindInterfaceStaticIP = netpkg.BindVMInterfaceStaticIP
 
 	// ── OVS Static Host / DHCP hooks ──
 	vpcpkg.HookGetOVSStaticHostByVMName = func(vmName string) (vpcpkg.StaticHost, bool) {

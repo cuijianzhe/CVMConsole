@@ -2,6 +2,7 @@ package ip_resolver
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"kvm_console/service/libvirt_rpc"
@@ -16,8 +17,13 @@ func GetFirstVMMAC(vmName string) string {
 		if err == nil {
 			ifaces := libvirt_rpc.ParseInterfacesFromDomainXML(xmlStr)
 			if len(ifaces) > 0 {
-				return strings.ToLower(ifaces[0].MAC)
+				mac := strings.ToLower(ifaces[0].MAC)
+				log.Printf("[DEBUG-GetFirstVMMAC] RPC 命中 vm=%s mac=%s ifaceCount=%d xmlLen=%d", vmName, mac, len(ifaces), len(xmlStr))
+				return mac
 			}
+			log.Printf("[DEBUG-GetFirstVMMAC] RPC 成功但未解析到网卡 vm=%s xmlLen=%d xmlHead=%s", vmName, len(xmlStr), truncateForLog(xmlStr, 200))
+		} else {
+			log.Printf("[DEBUG-GetFirstVMMAC] RPC 失败 vm=%s err=%v", vmName, err)
 		}
 	}
 	// 降级为 shell 命令
@@ -25,9 +31,19 @@ func GetFirstVMMAC(vmName string) string {
 		"virsh domiflist %s 2>/dev/null | grep -oP '([0-9a-f]{2}:){5}[0-9a-f]{2}' | head -1",
 		utils.ShellSingleQuote(vmName)))
 	if macResult.Error != nil {
+		log.Printf("[DEBUG-GetFirstVMMAC] shell 失败 vm=%s err=%v", vmName, macResult.Error)
 		return ""
 	}
-	return strings.TrimSpace(macResult.Stdout)
+	mac := strings.TrimSpace(macResult.Stdout)
+	log.Printf("[DEBUG-GetFirstVMMAC] shell 命中 vm=%s mac=%s", vmName, mac)
+	return mac
+}
+
+func truncateForLog(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
 
 // GetVMVnetIF 获取运行中 VM 的第一个 vnet 接口名（优先 RPC，降级 shell）

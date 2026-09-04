@@ -92,7 +92,7 @@ export const buildAllNicsPayload = (
 ): {
   primarySwitchId: number
   primarySecurityGroupId: number
-  primaryAllowedIPv4Addresses: string
+  primaryStaticIPv4: string
   primaryAllowedIPv6Addresses: string
   extraNics: ExtraNicPayload[]
 } => {
@@ -101,7 +101,7 @@ export const buildAllNicsPayload = (
     return {
       primarySwitchId: 0,
       primarySecurityGroupId: 0,
-      primaryAllowedIPv4Addresses: '',
+      primaryStaticIPv4: '',
       primaryAllowedIPv6Addresses: '',
       extraNics: [],
     }
@@ -111,13 +111,13 @@ export const buildAllNicsPayload = (
     switch_id: n.switch_id as number,
     security_group_id: n.security_group_id || 0,
     nic_model: n.nic_model || 'virtio',
-    allowed_ipv4_addresses: (n.allowed_ipv4_addresses || '').trim(),
+    static_ipv4: (n.static_ipv4 || '').trim(),
     allowed_ipv6_addresses: (n.allowed_ipv6_addresses || '').trim(),
   }))
   return {
     primarySwitchId: first.switch_id as number,
     primarySecurityGroupId: first.security_group_id || 0,
-    primaryAllowedIPv4Addresses: (first.allowed_ipv4_addresses || '').trim(),
+    primaryStaticIPv4: (first.static_ipv4 || '').trim(),
     primaryAllowedIPv6Addresses: (first.allowed_ipv6_addresses || '').trim(),
     extraNics: rest,
   }
@@ -172,7 +172,7 @@ export const buildCreatePayload = (
     floppy_image: form.floppy_image || '',
     switch_id: nics.primarySwitchId,
     security_group_id: nics.primarySecurityGroupId,
-    allowed_ipv4_addresses: nics.primaryAllowedIPv4Addresses,
+    static_ipv4: nics.primaryStaticIPv4,
     allowed_ipv6_addresses: nics.primaryAllowedIPv6Addresses,
     storage_pool_id: form.storage_pool_id,
     nic_model: form.nic_model,
@@ -263,7 +263,7 @@ const buildCloneSharedFields = (form: VmFormModel, ctx: CloneBuildContext) => {
       first_boot_reboot_mode: form.first_boot_reboot_mode,
       switch_id: nics.primarySwitchId,
       security_group_id: nics.primarySecurityGroupId,
-      allowed_ipv4_addresses: nics.primaryAllowedIPv4Addresses,
+      static_ipv4: nics.primaryStaticIPv4,
       allowed_ipv6_addresses: nics.primaryAllowedIPv6Addresses,
       extra_nics: nics.extraNics,
       static_ip: ctx.isOpenWrtTemplate ? form.static_ip : undefined,
@@ -306,6 +306,8 @@ export const buildBatchClonePayload = (
   const { base, initUser } = buildCloneSharedFields(form, ctx)
   const payload: any = {
     ...base,
+    // 批量克隆不支持指定 IP：多台虚拟机绑定同一地址会冲突，后端亦忽略该字段
+    static_ipv4: undefined,
     uefi: base.uefi ? true : undefined,
     prefix: form.name,
     start_num: 1,
@@ -335,7 +337,7 @@ export const buildImportPayload = (form: VmFormModel, ctx: CreateBuildContext): 
     cloud_disk_spec_id: form.cloud_disk_spec_id || undefined,
     switch_id: nics.primarySwitchId,
     security_group_id: nics.primarySecurityGroupId,
-    allowed_ipv4_addresses: nics.primaryAllowedIPv4Addresses,
+    static_ipv4: nics.primaryStaticIPv4,
     allowed_ipv6_addresses: nics.primaryAllowedIPv6Addresses,
     copy_disk: form.copy_disk,
     hostname: form.system_init_enabled ? form.hostname || form.name : '',

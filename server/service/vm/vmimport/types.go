@@ -53,6 +53,7 @@ type ImportVMParams struct {
 	UserData             string                          `json:"user_data,omitempty"`  // cloud-init UserData 扩展
 	AllowedIPv4Addresses string                          `json:"allowed_ipv4_addresses,omitempty"`
 	AllowedIPv6Addresses string                          `json:"allowed_ipv6_addresses,omitempty"`
+	StaticIPv4           string                          `json:"static_ipv4,omitempty"` // 主网卡指定 IPv4 地址（非空时启动前做 DHCP 静态绑定）
 }
 
 // ImportVMResult 导入结果
@@ -110,6 +111,7 @@ type ImportDiskByPathParams struct {
 	UserData             string                          `json:"user_data,omitempty"`          // cloud-init UserData 扩展
 	AllowedIPv4Addresses string                          `json:"allowed_ipv4_addresses,omitempty"`
 	AllowedIPv6Addresses string                          `json:"allowed_ipv6_addresses,omitempty"`
+	StaticIPv4           string                          `json:"static_ipv4,omitempty"` // 主网卡指定 IPv4 地址（非空时启动前做 DHCP 静态绑定）
 	// trustedApplianceSource 仅在虚拟机包完成归档、路径和清单校验后由任务内部设置。
 	trustedApplianceSource bool
 }

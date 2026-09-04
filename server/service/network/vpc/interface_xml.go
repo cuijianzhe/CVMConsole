@@ -322,11 +322,43 @@ func generateRandomMAC() string {
 	return fmt.Sprintf("52:54:00:%02x:%02x:%02x", rand.Intn(256), rand.Intn(256), rand.Intn(256))
 }
 
+// replaceFirstInterfaceMAC 替换 XML 中第一个网卡的 MAC 地址（克隆/创建时确保新 VM 不沿用模板 MAC）
 func replaceFirstInterfaceMAC(xmlText string) string {
+	return setFirstInterfaceMAC(xmlText, generateRandomMAC())
+}
+
+// getFirstInterfaceMAC 从 XML 中提取第一个网卡的 MAC 地址
+func getFirstInterfaceMAC(xmlText string) string {
 	if strings.TrimSpace(xmlText) == "" {
+		return ""
+	}
+	searchFrom := 0
+	for {
+		startRel := strings.Index(xmlText[searchFrom:], "<interface ")
+		if startRel < 0 {
+			return ""
+		}
+		start := searchFrom + startRel
+		endRel := strings.Index(xmlText[start:], "</interface>")
+		if endRel < 0 {
+			return ""
+		}
+		end := start + endRel + len("</interface>")
+		block := xmlText[start:end]
+		macRe := regexp.MustCompile(`<mac\s+address=['"]([^'"]+)['"]\s*/>`)
+		m := macRe.FindStringSubmatch(block)
+		if len(m) >= 2 {
+			return strings.ToLower(m[1])
+		}
+		searchFrom = end
+	}
+}
+
+// setFirstInterfaceMAC 将 XML 中第一个网卡的 MAC 地址设置为指定值
+func setFirstInterfaceMAC(xmlText, mac string) string {
+	if strings.TrimSpace(xmlText) == "" || strings.TrimSpace(mac) == "" {
 		return xmlText
 	}
-	mac := generateRandomMAC()
 	searchFrom := 0
 	for {
 		startRel := strings.Index(xmlText[searchFrom:], "<interface ")

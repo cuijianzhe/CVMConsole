@@ -240,7 +240,7 @@ func importVMInitByType(_ context.Context, params *ImportVMParams, _ string, _ s
 }
 
 // importVMPostDefine handles post-define steps shared by Windows and Linux import paths
-func importVMPostDefine(vmName, srcDiskPath, destDiskPath string, copyDisk bool, remark string, freeze, startAfterImport bool, owner string, switchID, securityGroupID uint, allowedIPv4, allowedIPv6 string) error {
+func importVMPostDefine(vmName, srcDiskPath, destDiskPath string, copyDisk bool, remark string, freeze, startAfterImport bool, owner string, switchID, securityGroupID uint, allowedIPv4, allowedIPv6, staticIPv4 string) error {
 	if !copyDisk {
 		_ = os.Remove(srcDiskPath)
 	}
@@ -255,6 +255,14 @@ func importVMPostDefine(vmName, srcDiskPath, destDiskPath string, copyDisk bool,
 	}
 	if err := service.PrepareVMPortSecurityBinding(owner, vmName, switchID, securityGroupID, allowedIPv4, allowedIPv6); err != nil {
 		return fmt.Errorf("启动前准备端口安全绑定失败: %w", err)
+	}
+
+	// 指定 IP：启动前为主网卡做 DHCP 静态绑定。导入流程此时源盘可能已删除，
+	// 绑定失败仅记录日志不阻断（虚拟机仍可通过 DHCP 自动分配地址）。
+	if strings.TrimSpace(staticIPv4) != "" {
+		if err := service.BindVMInterfaceStaticIP(vmName, 0, staticIPv4); err != nil {
+			logger.App.Warn("导入虚拟机绑定指定 IPv4 地址失败", "vm", vmName, "ip", staticIPv4, "error", err)
+		}
 	}
 
 	if startAfterImport {

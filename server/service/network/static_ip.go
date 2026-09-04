@@ -270,8 +270,27 @@ func normalizeIPForVPC(ipAddr string, sw model.VPCSwitch) (string, error) {
 	return ipAddr, nil
 }
 
-// UpsertVPCStaticHost 插入或更新 VPC 静态绑定
+// UpsertVPCStaticHost 插入或更新 VPC 静态绑定。
+// 系统基础网络（VLANID == 0）直接跑在 br-ovs 上，没有独立网关端口与 per-VPC dnsmasq，
+// DHCP 由集中式旧版 OVS dnsmasq 提供（/etc/kvm-console/ovs/dhcp-hosts），
+// 因此 VLAN0 的静态绑定写入集中式文件；其余 NAT 交换机写入各自的 per-VPC hosts 文件
+// 并重载对应 dnsmasq。
 func UpsertVPCStaticHost(sw model.VPCSwitch, vmName, mac, ipAddr string) error {
+	mac = strings.ToLower(strings.TrimSpace(mac))
+	vmName = strings.TrimSpace(vmName)
+	ipAddr = strings.TrimSpace(ipAddr)
+	if sw.VLANID == 0 {
+		if HookUpsertOVSStaticHost == nil {
+			return fmt.Errorf("当前环境不支持系统基础网络静态绑定")
+		}
+		if err := HookUpsertOVSStaticHost(vmName, mac, ipAddr); err != nil {
+			return fmt.Errorf("写入系统基础网络静态绑定失败: %w", err)
+		}
+		// 清理历史版本可能写入 per-VPC 文件的残留条目（VLAN0 下无 dnsmasq 读取该文件，
+		// 但会被静态绑定列表扫描展示，残留条目会成为幽灵绑定）
+		purgeStaleVPCHostsEntry(sw.ID, vmName, mac)
+		return nil
+	}
 	if err := os.MkdirAll(vpcConfigDir, 0755); err != nil {
 		return err
 	}
@@ -280,9 +299,6 @@ func UpsertVPCStaticHost(sw model.VPCSwitch, vmName, mac, ipAddr string) error {
 			return fmt.Errorf("创建 VPC 静态 DHCP 绑定文件失败: %w", err)
 		}
 	}
-	mac = strings.ToLower(strings.TrimSpace(mac))
-	vmName = strings.TrimSpace(vmName)
-	ipAddr = strings.TrimSpace(ipAddr)
 	hosts, err := HookListVPCStaticHosts(sw.ID)
 	if err != nil {
 		return err
@@ -297,11 +313,35 @@ func UpsertVPCStaticHost(sw model.VPCSwitch, vmName, mac, ipAddr string) error {
 	HookCleanVPCDHCPLease(sw.ID, mac, ipAddr)
 	HookCleanOVSDHCPLease(mac, "")
 	HookReloadVPCDNSMasq(sw.ID)
+	// 清理可能残留的旧版集中式绑定，避免同一 MAC 存在两份 dhcp-host
+	if HookRemoveOVSStaticHost != nil {
+		_, _ = HookRemoveOVSStaticHost(vmName, mac)
+	}
 	return nil
 }
 
-// RemoveVPCStaticHost 删除 VPC 静态绑定
+// RemoveVPCStaticHost 删除 VPC 静态绑定，返回被删除的 IP。
+// VLAN0（系统基础网络）的绑定实际存放在集中式旧版 OVS dhcp-hosts 中，需路由到旧版删除。
 func RemoveVPCStaticHost(switchID uint, vmName, mac string) (string, error) {
+	var sw model.VPCSwitch
+	if err := model.DB.First(&sw, switchID).Error; err == nil && sw.VLANID == 0 {
+		var removedIP string
+		if HookRemoveOVSStaticHost != nil {
+			ip, err := HookRemoveOVSStaticHost(vmName, mac)
+			if err != nil {
+				return "", err
+			}
+			removedIP = ip
+		}
+		// 兼容清理 per-VPC 文件中的历史残留
+		if ip := purgeStaleVPCHostsEntry(switchID, vmName, mac); ip != "" && removedIP == "" {
+			removedIP = ip
+		}
+		if removedIP == "" {
+			return "", fmt.Errorf("该虚拟机没有静态绑定")
+		}
+		return removedIP, nil
+	}
 	hosts, err := HookListVPCStaticHosts(switchID)
 	if err != nil {
 		return "", err
@@ -324,6 +364,60 @@ func RemoveVPCStaticHost(switchID uint, vmName, mac string) (string, error) {
 	}
 	HookReloadVPCDNSMasq(switchID)
 	return removedIP, nil
+}
+
+// purgeStaleVPCHostsEntry 直接操作 per-VPC 物理 hosts 文件，删除匹配 MAC 或 VM 名称的条目。
+// 仅供 VLAN0 路由路径清理历史残留使用（不经过 Hook，避免与 VLAN0 列表路由互相递归）。
+func purgeStaleVPCHostsEntry(switchID uint, vmName, mac string) string {
+	path := vpcDHCPHostsPath(switchID)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	mac = strings.ToLower(strings.TrimSpace(mac))
+	vmName = strings.TrimSpace(vmName)
+	var removedIP string
+	var kept []string
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		parts := strings.Split(trimmed, ",")
+		if len(parts) < 2 {
+			kept = append(kept, line)
+			continue
+		}
+		lineMAC := strings.ToLower(strings.TrimSpace(parts[0]))
+		lineVM := ""
+		lineIP := ""
+		for _, part := range parts[1:] {
+			part = strings.TrimSpace(part)
+			if net.ParseIP(part) != nil {
+				lineIP = part
+			} else if lineVM == "" {
+				lineVM = part
+			}
+		}
+		if (mac != "" && lineMAC == mac) || (vmName != "" && lineVM == vmName) {
+			if lineIP != "" {
+				removedIP = lineIP
+			}
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if removedIP == "" {
+		return ""
+	}
+	out := strings.Join(kept, "\n")
+	if out != "" {
+		out += "\n"
+	}
+	if err := os.WriteFile(path, []byte(out), 0644); err != nil {
+		logger.App.Warn("清理 per-VPC 历史残留静态绑定失败", "switch", switchID, "error", err)
+	}
+	return removedIP
 }
 
 // GetVPCStaticIPByMAC 通过 MAC 查找 VPC 静态绑定的 IP
@@ -470,6 +564,119 @@ func ResolvePortForwardTargetIP(vmName, requestedIP string) (string, error) {
 	return EnsureStaticIP(vmName)
 }
 
+// directBridgeDHCPPool 返回直通桥网桥的 DHCP 地址池信息（优先网桥配置，回退交换机预设字段）。
+func directBridgeDHCPPool(sw model.VPCSwitch) (cidr, start, end string, ok bool) {
+	if sw.BridgeName == "" {
+		return "", "", "", false
+	}
+	var bridge model.NetworkBridge
+	if model.DB != nil && model.DB.Where("name = ?", sw.BridgeName).First(&bridge).Error == nil &&
+		bridge.DHCPCIDR != "" && bridge.DHCPStart != "" && bridge.DHCPEnd != "" {
+		return bridge.DHCPCIDR, bridge.DHCPStart, bridge.DHCPEnd, true
+	}
+	if sw.BridgeIPMode == "preset" && sw.CIDR != "" && sw.DHCPStart != "" && sw.DHCPEnd != "" {
+		return sw.CIDR, sw.DHCPStart, sw.DHCPEnd, true
+	}
+	return "", "", "", false
+}
+
+// ValidateStaticIPv4ForSwitch 校验指定 IP 能否绑定到该交换机（创建/克隆前同步校验用）。
+func ValidateStaticIPv4ForSwitch(sw *model.VPCSwitch, ipAddr string) error {
+	ipAddr = strings.TrimSpace(ipAddr)
+	if ipAddr == "" {
+		return nil
+	}
+	if sw == nil {
+		return fmt.Errorf("交换机不存在")
+	}
+	ip := net.ParseIP(ipAddr)
+	if ip == nil || ip.To4() == nil {
+		return fmt.Errorf("指定的 IPv4 地址 %s 无效", ipAddr)
+	}
+	if HookSwitchUsesDirectBridge != nil && HookSwitchUsesDirectBridge(*sw) {
+		// 直通桥：仅当网桥配置了 DHCP 地址池（预设模式或上级路由+桥接池）时支持指定 IP
+		cidr, start, end, ok := directBridgeDHCPPool(*sw)
+		if !ok {
+			return fmt.Errorf("该直通桥交换机未配置 DHCP 地址池，无法指定 IP")
+		}
+		if cidr != "" && !ipInCIDR(ipAddr, cidr) {
+			return fmt.Errorf("指定的 IPv4 地址 %s 不在网段 %s 内", ipAddr, cidr)
+		}
+		s := net.ParseIP(start).To4()
+		e := net.ParseIP(end).To4()
+		v := ip.To4()
+		if s != nil && e != nil && v != nil && (compareIPv4(v, s) < 0 || compareIPv4(v, e) > 0) {
+			return fmt.Errorf("指定的 IPv4 地址 %s 不在 DHCP 地址池 %s-%s 内", ipAddr, start, end)
+		}
+		return nil
+	}
+	if !sw.IsSystem && !sw.DHCPEnabled {
+		return fmt.Errorf("该交换机由外部网络管理地址，无法指定 IP")
+	}
+	if _, err := normalizeIPForVPC(ipAddr, *sw); err != nil {
+		return err
+	}
+	return nil
+}
+
+// BindVMInterfaceStaticIP 为虚拟机指定网口绑定 DHCP 静态 IP。
+// 创建/克隆流程在虚拟机启动前调用，开机后虚拟机即可通过 DHCP 获取该地址；
+// 运行中网口调用时写入绑定，待续租/重启后生效。
+func BindVMInterfaceStaticIP(vmName string, interfaceOrder int, ipAddr string) error {
+	vmName = strings.TrimSpace(vmName)
+	ipAddr = strings.TrimSpace(ipAddr)
+	if vmName == "" || ipAddr == "" {
+		return nil
+	}
+	// 获取网口 MAC（支持关机状态从 XML 读取）
+	mac := ""
+	if interfaceOrder <= 0 {
+		mac = ip_resolver.GetFirstVMMAC(vmName)
+	} else if HookGetVMMACByOrder != nil {
+		mac = HookGetVMMACByOrder(vmName, interfaceOrder)
+	}
+	if mac == "" {
+		return fmt.Errorf("无法获取虚拟机 %s 网口 %d 的 MAC 地址", vmName, interfaceOrder)
+	}
+	// 查找该网口绑定的交换机
+	var binding model.VPCVMBinding
+	if err := model.DB.Where("vm_name = ? AND interface_order = ?", vmName, interfaceOrder).First(&binding).Error; err != nil {
+		return fmt.Errorf("未找到网口绑定记录，无法指定 IP")
+	}
+	var sw model.VPCSwitch
+	if err := model.DB.First(&sw, binding.SwitchID).Error; err != nil {
+		return fmt.Errorf("交换机不存在，无法指定 IP")
+	}
+	if err := ValidateStaticIPv4ForSwitch(&sw, ipAddr); err != nil {
+		return err
+	}
+	if HookSwitchUsesDirectBridge != nil && HookSwitchUsesDirectBridge(sw) {
+		// 直通桥：写入桥接 dnsmasq 静态绑定（覆盖自动分配的地址）
+		if HookUpsertBridgeStaticHost == nil {
+			return fmt.Errorf("桥接静态绑定能力不可用")
+		}
+		if err := HookUpsertBridgeStaticHost(sw.BridgeName, vmName, mac, ipAddr); err != nil {
+			return fmt.Errorf("注册桥接静态绑定失败: %w", err)
+		}
+		if HookReloadBridgeDNSMasq != nil {
+			if err := HookReloadBridgeDNSMasq(sw.BridgeName); err != nil {
+				logger.App.Warn("重载桥接 DHCP 服务失败", "bridge", sw.BridgeName, "error", err)
+			}
+		}
+		return nil
+	}
+	// NAT/系统交换机：写入 dnsmasq 静态绑定（UpsertVPCStaticHost 内部按 VLAN 路由：
+	// VLAN0 系统基础网络写集中式旧版 OVS dhcp-hosts，VLAN>0 写 per-VPC hosts 文件）
+	normalized, err := normalizeIPForVPC(ipAddr, sw)
+	if err != nil {
+		return err
+	}
+	if err := UpsertVPCStaticHost(sw, vmName, mac, normalized); err != nil {
+		return fmt.Errorf("绑定静态 IP 失败: %w", err)
+	}
+	return nil
+}
+
 // BindStaticIP 绑定静态 IP，ipAddr 为空时自动分配空闲 IP
 // 返回实际绑定的 IP 地址
 func BindStaticIP(vmName, ipAddr string) (string, error) {
@@ -498,7 +705,6 @@ func BindStaticIP(vmName, ipAddr string) (string, error) {
 		if err := UpsertVPCStaticHost(*sw, vmName, mac, ipAddr); err != nil {
 			return "", fmt.Errorf("绑定 VPC 静态 IP 失败: %w", err)
 		}
-		_, _ = HookRemoveOVSStaticHost(vmName, mac)
 		go refreshNIC(vmName, mac, "")
 		return ipAddr, nil
 	}
@@ -602,6 +808,7 @@ func UnbindStaticIP(vmName string) error {
 			}
 		}
 
+		// 系统基础网络（VLAN0）的解绑也由 RemoveVPCStaticHost 内部路由到集中式旧版文件
 		boundIP, err := RemoveVPCStaticHost(sw.ID, vmName, mac)
 		if err != nil {
 			return err

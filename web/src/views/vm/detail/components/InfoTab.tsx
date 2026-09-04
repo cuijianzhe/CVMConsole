@@ -27,8 +27,6 @@ interface InfoTabProps {
   onRemark: () => void
 }
 
-const GUEST_AGENT_DOC_URL = 'https://qvmcdocs.xiaozhuhouses.asia/docs/install/category/%E8%BF%9B%E9%98%B6%E5%86%85%E5%AE%B9'
-
 /** 信息行 */
 function Row({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   return (

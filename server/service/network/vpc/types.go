@@ -95,6 +95,7 @@ type AddVMInterfaceRequest struct {
 	BandwidthOutboundAvg int    `json:"bandwidth_outbound_avg"`
 	AllowedIPv4Addresses string `json:"allowed_ipv4_addresses"`
 	AllowedIPv6Addresses string `json:"allowed_ipv6_addresses"`
+	StaticIPv4           string `json:"static_ipv4,omitempty"` // 指定 IPv4 地址（非空时为网口做 DHCP 静态绑定）
 }
 
 // VMInterfaceInfo 网口信息

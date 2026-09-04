@@ -25,6 +25,8 @@ func ApplyVPCBindingRuntime(vmName string) error {
 }
 
 // ApplyVPCBindingToDomainXML 按主网口绑定同步持久化 XML，供关机态流程在开机前调用。
+// 注意：此函数在 StartVM 前调用，必须保留 VM 已有的 MAC 地址，
+// 不能调用 replaceFirstInterfaceMAC 生成新随机 MAC，否则会导致静态 IP 绑定失效。
 func ApplyVPCBindingToDomainXML(vmName, vmXML string) (string, bool, error) {
 	if model.DB == nil || strings.TrimSpace(vmName) == "" {
 		return vmXML, false, nil
@@ -36,9 +38,17 @@ func ApplyVPCBindingToDomainXML(vmName, vmXML string) (string, bool, error) {
 		return vmXML, false, nil
 	}
 
+	// 记录原有 MAC，在 ApplyVPCSwitchToDomainXML 之后恢复
+	originalMAC := getFirstInterfaceMAC(vmXML)
+
 	updatedXML, err := ApplyVPCSwitchToDomainXML(vmXML, binding.SwitchID)
 	if err != nil {
 		return vmXML, true, err
+	}
+	// 恢复原有 MAC：ApplyVPCSwitchToDomainXML 内部会调用 replaceFirstInterfaceMAC
+	// 生成新随机 MAC，但 StartVM 场景下必须保留已有 MAC，避免与静态 IP 绑定不匹配
+	if originalMAC != "" {
+		updatedXML = setFirstInterfaceMAC(updatedXML, originalMAC)
 	}
 	return updatedXML, true, nil
 }

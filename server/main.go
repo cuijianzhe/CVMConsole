@@ -1415,6 +1415,8 @@ func initCloneDeps() {
 		SwitchUsesDirectBridge:        service.SwitchUsesDirectBridge,
 		ListBridgeStaticHosts:         service.ListBridgeStaticHosts,
 		PrepareVMPortSecurityBinding:  service.PrepareVMPortSecurityBinding,
+		// 指定 IP：克隆虚拟机启动前为主网卡做 DHCP 静态绑定
+		BindVMInterfaceStaticIP: service.BindVMInterfaceStaticIP,
 
 		// XML modification helpers
 		ApplyRTCConfigToDomainXML:           service.ApplyRTCConfigToDomainXML,

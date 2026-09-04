@@ -1,6 +1,9 @@
 package service
 
 import (
+	"fmt"
+	"strings"
+
 	"kvm_console/model"
 	netpkg "kvm_console/service/network"
 	ovspkg "kvm_console/service/ovs"
@@ -127,7 +130,28 @@ func init() {
 	}
 	netpkg.HookGetVPCLeaseIPForVM = ovspkg.GetVPCLeaseIPForVM
 	netpkg.HookCleanVPCDHCPLease = ovspkg.CleanVPCDHCPLease
+	// vpcSwitchIsSystemBase 判断交换机是否为系统基础网络（VLAN0）。
+	// 系统基础网络没有独立 per-VPC dnsmasq，静态绑定与租约都存放在集中式旧版 OVS 文件中，
+	// 因此 VLAN0 的列表读取需路由到旧版文件。
+	vpcSwitchIsSystemBase := func(switchID uint) bool {
+		var sw model.VPCSwitch
+		if err := model.DB.First(&sw, switchID).Error; err != nil {
+			return false
+		}
+		return sw.VLANID == 0
+	}
 	netpkg.HookListVPCStaticHosts = func(switchID uint) ([]netpkg.OVSStaticHost, error) {
+		if vpcSwitchIsSystemBase(switchID) {
+			hosts, err := ovspkg.ListOVSStaticHosts()
+			if err != nil {
+				return nil, err
+			}
+			result := make([]netpkg.OVSStaticHost, len(hosts))
+			for i, h := range hosts {
+				result[i] = netpkg.OVSStaticHost{VMName: h.VMName, MAC: h.MAC, IP: h.IP}
+			}
+			return result, nil
+		}
 		hosts, err := ovspkg.ListVPCStaticHosts(switchID)
 		if err != nil {
 			return nil, err
@@ -175,7 +199,14 @@ func init() {
 		return result, nil
 	}
 	netpkg.HookListVPCDHCPLeasesForSwitch = func(switchID uint) ([]netpkg.OVSDHCPLease, error) {
-		leases, err := ovspkg.ListVPCDHCPLeasesForSwitch(switchID)
+		var leases []ovspkg.OVSDHCPLease
+		var err error
+		if vpcSwitchIsSystemBase(switchID) {
+			// 系统基础网络（VLAN0）租约存放在集中式旧版 OVS 租约文件中
+			leases, err = ovspkg.ListOVSDHCPLeases()
+		} else {
+			leases, err = ovspkg.ListVPCDHCPLeasesForSwitch(switchID)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -200,9 +231,29 @@ func init() {
 	// ── VM / User hooks ──
 	netpkg.HookGetUserVMList = GetUserVMList
 	netpkg.HookFindVMOwner = FindVMOwner
+	netpkg.HookGetVMMACByOrder = GetVMMACByOrder
 
 	// ── Utility hooks ──
 	netpkg.HookWriteFileIfChanged = ovspkg.WriteFileIfChanged
+}
+
+// ValidateVMStaticIPv4 校验指定 IPv4 地址能否绑定到交换机（创建/克隆同步校验入口）。
+// ipAddr 为空时直接通过。
+func ValidateVMStaticIPv4(switchID uint, ipAddr string) error {
+	ipAddr = strings.TrimSpace(ipAddr)
+	if ipAddr == "" {
+		return nil
+	}
+	var sw model.VPCSwitch
+	if err := model.DB.First(&sw, switchID).Error; err != nil {
+		return fmt.Errorf("交换机不存在")
+	}
+	return netpkg.ValidateStaticIPv4ForSwitch(&sw, ipAddr)
+}
+
+// BindVMInterfaceStaticIP 为虚拟机指定网口绑定 DHCP 静态 IP（创建/克隆启动前调用）。
+func BindVMInterfaceStaticIP(vmName string, interfaceOrder int, ipAddr string) error {
+	return netpkg.BindVMInterfaceStaticIP(vmName, interfaceOrder, ipAddr)
 }
 
 // ── Delegates ──

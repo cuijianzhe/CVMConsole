@@ -186,6 +186,7 @@ type ImportVMRequest struct {
 	UserData             string                     `json:"user_data,omitempty"` // cloud-init UserData 扩展
 	AllowedIPv4Addresses string                     `json:"allowed_ipv4_addresses,omitempty"`
 	AllowedIPv6Addresses string                     `json:"allowed_ipv6_addresses,omitempty"`
+	StaticIPv4           string                     `json:"static_ipv4,omitempty"` // 主网卡指定 IPv4 地址（启动前做 DHCP 静态绑定）
 }
 
 // ImportVMHandler 导入虚拟机（用户自助）
@@ -257,6 +258,11 @@ func ImportVMHandler(c *gin.Context) {
 			req.SwitchID = switchID
 			req.SecurityGroupID = securityGroupID
 		}
+	}
+
+	// 同步校验：指定 IPv4 地址能否绑定到对应交换机（导入请求无附加网口）
+	if !validateStaticIPv4s(c, req.SwitchID, req.StaticIPv4, nil) {
+		return
 	}
 
 	params := &vmimport.ImportVMParams{

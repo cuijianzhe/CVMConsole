@@ -111,6 +111,21 @@ func getSwitchBridgeName(switchID uint) (string, error) {
 	return sw.BridgeName, nil
 }
 
+// validateStaticIPv4s 校验指定 IPv4 地址能否绑定到对应交换机（主网卡 + 附加网口）
+func validateStaticIPv4s(c *gin.Context, switchID uint, staticIPv4 string, extraNics []service.AddVMInterfaceRequest) bool {
+	if err := service.ValidateVMStaticIPv4(switchID, staticIPv4); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": fmt.Sprintf("主网口指定 IPv4 地址无效: %s", err.Error())})
+		return false
+	}
+	for i, nic := range extraNics {
+		if err := service.ValidateVMStaticIPv4(nic.SwitchID, nic.StaticIPv4); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": fmt.Sprintf("网口 #%d 指定 IPv4 地址无效: %s", i+2, err.Error())})
+			return false
+		}
+	}
+	return true
+}
+
 // validateBatchVMNamesNotExists 批量校验虚拟机名称是否已被占用
 // prefix: 名称前缀, startNum: 起始编号, count: 批量数量
 func validateBatchVMNamesNotExists(c *gin.Context, prefix string, startNum, count int) bool {

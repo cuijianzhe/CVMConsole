@@ -642,6 +642,12 @@ func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ra
 			return fmt.Errorf("启动前准备端口安全绑定失败: %w", err)
 		}
 	}
+	// 主网卡指定 IPv4 地址：启动前完成 DHCP 静态绑定，开机即可获取指定地址
+	if strings.TrimSpace(params.StaticIPv4) != "" && D.BindVMInterfaceStaticIP != nil {
+		if err := D.BindVMInterfaceStaticIP(params.Name, 0, params.StaticIPv4); err != nil {
+			return fmt.Errorf("主网卡绑定指定 IPv4 地址失败: %w", err)
+		}
+	}
 
 	startFn := D.StartVM
 	if firstBootColdReboot {

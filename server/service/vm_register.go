@@ -69,6 +69,8 @@ func init() {
 		},
 		ReconcileVMPortSecurity:      ReconcileVMPortSecurity,
 		PrepareVMPortSecurityBinding: PrepareVMPortSecurityBinding,
+		// 指定 IP：创建虚拟机启动前为主网卡做 DHCP 静态绑定
+		BindVMInterfaceStaticIP: BindVMInterfaceStaticIP,
 
 		// ---- Storage pool ----
 		GetAllISOs:           GetAllISOs,

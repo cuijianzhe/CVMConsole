@@ -50,6 +50,7 @@ type LinkedCloneParams struct {
 	SecurityGroupID      uint                    `json:"security_group_id,omitempty"`
 	AllowedIPv4Addresses string                  `json:"allowed_ipv4_addresses,omitempty"`
 	AllowedIPv6Addresses string                  `json:"allowed_ipv6_addresses,omitempty"`
+	StaticIPv4           string                  `json:"static_ipv4,omitempty"` // 主网卡指定 IPv4 地址（非空时启动前做 DHCP 静态绑定）
 	ExtraNics            []AddVMInterfaceRequest `json:"extra_nics,omitempty"`
 	StoragePoolID        string                  `json:"storage_pool_id,omitempty"`
 	ExtraDisks           []ExtraDiskParam        `json:"extra_disks,omitempty"`
@@ -395,6 +396,13 @@ func LinkedCloneVM(ctx context.Context, params *LinkedCloneParams, progressFn fu
 		if err := D.PrepareVMPortSecurityBinding(params.Owner, params.Name, params.SwitchID, params.SecurityGroupID, params.AllowedIPv4Addresses, params.AllowedIPv6Addresses); err != nil {
 			cleanupLinkedCloneArtifacts(params.Name, cloneDisk)
 			return nil, fmt.Errorf("启动前准备端口安全绑定失败: %w", err)
+		}
+	}
+	// 主网卡指定 IPv4 地址：启动前完成 DHCP 静态绑定，开机即可获取指定地址
+	if strings.TrimSpace(params.StaticIPv4) != "" && D.BindVMInterfaceStaticIP != nil {
+		if err := D.BindVMInterfaceStaticIP(params.Name, 0, params.StaticIPv4); err != nil {
+			cleanupLinkedCloneArtifacts(params.Name, cloneDisk)
+			return nil, fmt.Errorf("主网卡绑定指定 IPv4 地址失败: %w", err)
 		}
 	}
 

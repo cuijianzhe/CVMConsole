@@ -1,11 +1,12 @@
 /**
  * 网口编辑弹窗（编辑模式 · 管理员与弹性云用户）
- * 添加 / 编辑虚拟机网口：网卡型号 + VPC 交换机 + 安全组 + 上下行速率限制（速率限制仅管理员可见）。
+ * 添加 / 编辑虚拟机网口：网卡型号 + VPC 交换机 + 安全组 + 指定 IPv4 地址 + 上下行速率限制（速率限制仅管理员可见）。
  * 普通用户仅能选择自己的交换机，后端按用户侧规则校验。
  */
 import { useEffect, useMemo, useState } from 'react'
-import { Divider, InputNumber, Modal, Select, Tag, TextArea, Toast } from '@douyinfe/semi-ui'
+import { Divider, Input, InputNumber, Modal, Select, Tag, TextArea, Toast } from '@douyinfe/semi-ui'
 import { getPortSecurityStatus } from '@/api/ovs'
+import { getStaticIPList } from '@/api/network'
 import {
   addVMInterface,
   vpcSwitchModeDetail,
@@ -51,7 +52,8 @@ export default function NicEditDialog({
   const [securityGroupId, setSecurityGroupId] = useState<number | null>(null)
   const [bandwidthIn, setBandwidthIn] = useState(0)
   const [bandwidthOut, setBandwidthOut] = useState(0)
-  const [allowedIPv4, setAllowedIPv4] = useState('')
+  // 指定 IPv4 地址：非空时为该网口做 DHCP 静态绑定（替代原白名单登记）
+  const [staticIPv4, setStaticIPv4] = useState('')
   const [allowedIPv6, setAllowedIPv6] = useState('')
   const [portSecurityEnabled, setPortSecurityEnabled] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -67,7 +69,7 @@ export default function NicEditDialog({
   useEffect(() => {
     if (!visible) return
     void options.loadVPCOptions()
-    // 端口安全状态接口仅管理员可访问，普通用户不查询也不展示地址登记表单
+    // 端口安全状态接口仅管理员可访问，普通用户不查询也不展示 IPv6 登记表单
     if (ctx.isAdmin) {
       void getPortSecurityStatus()
         .then((res) => setPortSecurityEnabled(!!res.data?.enabled))
@@ -79,7 +81,16 @@ export default function NicEditDialog({
       setSecurityGroupId(editing.binding?.security_group_id || editing.security_group?.id || null)
       setBandwidthIn(editing.binding?.bandwidth_inbound_avg || 0)
       setBandwidthOut(editing.binding?.bandwidth_outbound_avg || 0)
-      setAllowedIPv4(editing.binding?.allowed_ipv4_addresses || '')
+      // 回显当前 DHCP 静态绑定 IP（按网口 MAC 匹配；白名单字段已废弃不再读取）
+      void getStaticIPList()
+        .then((res) => {
+          const mac = (editing.mac || '').toLowerCase()
+          const hit = (res.data?.static_bindings || []).find(
+            (b) => b.mac?.toLowerCase() === mac,
+          )
+          setStaticIPv4(hit?.ip || '')
+        })
+        .catch(() => setStaticIPv4(''))
       setAllowedIPv6(editing.binding?.allowed_ipv6_addresses || '')
     } else {
       setNicModel('virtio')
@@ -87,7 +98,7 @@ export default function NicEditDialog({
       setSecurityGroupId(null)
       setBandwidthIn(0)
       setBandwidthOut(0)
-      setAllowedIPv4('')
+      setStaticIPv4('')
       setAllowedIPv6('')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -147,7 +158,8 @@ export default function NicEditDialog({
         security_group_id: securityGroupId || 0,
         bandwidth_inbound_avg: bandwidthIn || 0,
         bandwidth_outbound_avg: bandwidthOut || 0,
-        allowed_ipv4_addresses: isTrustedEmpty ? '' : allowedIPv4.trim(),
+        // 指定 IPv4 地址：非空时为该网口做 DHCP 静态绑定（原白名单字段已废弃不再提交）
+        static_ipv4: isTrustedEmpty ? '' : staticIPv4.trim(),
         allowed_ipv6_addresses: isTrustedEmpty ? '' : allowedIPv6.trim(),
       }
       if (editing) {
@@ -223,30 +235,34 @@ export default function NicEditDialog({
           />
         </FormField>
       )}
-      {portSecurityEnabled && !isTrustedEmpty && (
+      {!isTrustedEmpty && (
+        <FormField
+          label="指定 IPv4 地址"
+          tip={
+            isBridge
+              ? '可选；留空由上级网络分配，填写后为该网口绑定固定 IP（需在网桥 DHCP 地址池内）'
+              : '可选；留空由 DHCP 自动分配，填写后为该网口绑定固定 IP（需在交换机 DHCP 范围内）'
+          }
+        >
+          <Input
+            value={staticIPv4}
+            onChange={setStaticIPv4}
+            placeholder="例如 192.168.1.10，留空自动分配"
+            showClear
+          />
+        </FormField>
+      )}
+      {portSecurityEnabled && isBridge && selectedSwitch?.ipv6_security_enabled && !isTrustedEmpty && (
         <>
           <Divider margin="12px">端口安全地址</Divider>
-          <FormField
-            label="允许的 IPv4 地址"
-            tip={isBridge ? '物理直通填写后可启用精确 IPv4 校验' : '填写静态地址；DHCP 租约和公网绑定会自动加入策略'}
-          >
+          <FormField label="允许的 IPv6 地址" required tip="仅接受可信前缀内的精确地址，可用换行或逗号分隔">
             <TextArea
-              value={allowedIPv4}
-              onChange={setAllowedIPv4}
-              placeholder={'每行一个精确地址，例如：\n192.0.2.10'}
+              value={allowedIPv6}
+              onChange={setAllowedIPv6}
+              placeholder={'每行一个精确地址，例如：\n2001:db8:100::10'}
               autosize={{ minRows: 2, maxRows: 4 }}
             />
           </FormField>
-          {isBridge && selectedSwitch?.ipv6_security_enabled && (
-            <FormField label="允许的 IPv6 地址" required tip="仅接受可信前缀内的精确地址，可用换行或逗号分隔">
-              <TextArea
-                value={allowedIPv6}
-                onChange={setAllowedIPv6}
-                placeholder={'每行一个精确地址，例如：\n2001:db8:100::10'}
-                autosize={{ minRows: 2, maxRows: 4 }}
-              />
-            </FormField>
-          )}
         </>
       )}
       {ctx.isAdmin && (

@@ -97,6 +97,8 @@ var (
 var (
 	HookGetUserVMList func(username string) []string
 	HookFindVMOwner   func(vmName string) string
+	// HookGetVMMACByOrder 按网口序号获取虚拟机网卡 MAC（支持关机状态从 XML 读取）
+	HookGetVMMACByOrder func(vmName string, order int) string
 )
 
 // ── Bridge-related hooks (service root delegates to bridge package) ──
