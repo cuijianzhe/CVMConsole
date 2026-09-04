@@ -4,16 +4,16 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"kvm_console/logger"
+	"kvm_console/model"
+	"kvm_console/service/ip_resolver"
+	"kvm_console/service/libvirt_rpc"
+	"kvm_console/utils"
 	"net/http"
 	"net/netip"
 	"sort"
 	"strings"
 	"time"
-
-	"kvm_console/model"
-	"kvm_console/service/ip_resolver"
-	"kvm_console/service/libvirt_rpc"
-	"kvm_console/utils"
 )
 
 // BuildFirewallRules 将策略转换为 nftables 规则。
@@ -344,6 +344,11 @@ func parseCIDRText(text string) []string {
 		for _, part := range strings.Fields(line) {
 			values = append(values, part)
 		}
+	}
+	// 检查扫描器终止原因：输入来自内存字符串（GeoIP 区域文本），正常为 nil；
+	// 非 nil 说明有行超出默认缓冲被截断，区域列表会不完整
+	if err := scanner.Err(); err != nil {
+		logger.App.Warn("解析 CIDR 区域文本中断，区域列表可能不完整", "error", err)
 	}
 	return normalizeCIDRList(values)
 }

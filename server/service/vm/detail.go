@@ -327,7 +327,9 @@ func GetVMNetworkInfo(name string) NetInfoResult {
 	}
 
 	ifaces := libvirt_rpc.ParseInterfacesFromDomainXML(xmlStr)
-	for _, iface := range ifaces {
+	// 仅取第一张网卡的信息（原循环首个 iface 后即 break，等价于取首元素）
+	if len(ifaces) > 0 {
+		iface := ifaces[0]
 		switch iface.Type {
 		case "network":
 			info.Network = "nat"
@@ -338,7 +340,6 @@ func GetVMNetworkInfo(name string) NetInfoResult {
 		}
 		info.NicModel = iface.Model
 		info.MAC = iface.MAC
-		break
 	}
 
 	return info

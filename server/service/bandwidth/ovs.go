@@ -397,7 +397,7 @@ func ApplyVMNICBandwidth(vmName string, downAvg, downPeak, downBurst, upAvg, upP
 				logger.App.Warn("清理实时domiftune速率限制失败", "vm", vmName, "order", iface.Order, "error", err)
 			}
 			if iface.Name != "" {
-				applyTCDownloadLimit(iface.Name, downAvg, downPeak, downBurst)
+				applyTCDownloadLimit(iface.Name, downAvg)
 				applyTCUploadLimit(iface.Name, upAvg)
 			}
 		}

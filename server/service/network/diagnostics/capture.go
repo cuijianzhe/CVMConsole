@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"kvm_console/logger"
 	"kvm_console/utils"
 )
 
@@ -144,7 +145,7 @@ func ExecuteNetworkCapture(ctx context.Context, taskID uint, params NetworkCaptu
 		progress(30, "抓包进行中...")
 	}
 	var firstErr error
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		err := <-errCh
 		if err != nil && firstErr == nil && captureCtx.Err() == nil {
 			firstErr = err
@@ -232,6 +233,11 @@ func runTcpdumpSummary(ctx context.Context, taskID uint, iface string, packets i
 			if line != "" {
 				appendCaptureSummaryLine(taskID, line)
 			}
+		}
+		// 检查扫描器终止原因：正常结束 Err() 为 nil；若单行超出缓冲上限（token too long）
+		// 会静默丢行，必须记录日志便于排查，否则问题无从定位
+		if scanErr := scanner.Err(); scanErr != nil {
+			logger.App.Warn("读取 tcpdump 输出流中断，部分输出可能丢失", "task", taskID, "error", scanErr)
 		}
 	}
 	wg.Add(2)

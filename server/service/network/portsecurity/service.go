@@ -824,6 +824,11 @@ func startOVSDBInterfaceMonitor() {
 			for scanner.Scan() {
 				TriggerReconcile()
 			}
+			// Scan 退出通常意味着 ovsdb monitor 连接断开（或输出异常终止），
+			// 记录 Err 便于观察频繁重连的原因
+			if err := scanner.Err(); err != nil {
+				logger.App.Warn("ovsdb monitor 输出流中断，稍后重建监听", "error", err)
+			}
 			_ = cmd.Wait()
 			time.Sleep(2 * time.Second)
 		}

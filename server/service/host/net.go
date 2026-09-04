@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 )
 
@@ -66,6 +67,10 @@ func CollectHostNetIOBytesPerDevice() ([]model.HostNetDeviceStat, error) {
 			continue
 		}
 		devices = append(devices, model.HostNetDeviceStat{Name: name, RxBytes: rx, TxBytes: tx})
+	}
+	// 检查扫描器终止原因：/proc 输出行都很短，正常为 nil；非 nil 说明解析被异常中断
+	if err := scanner.Err(); err != nil {
+		logger.App.Warn("读取 /proc/net/dev 中断，网络流量统计可能不完整", "error", err)
 	}
 
 	// 按名称稳定排序，保证前端下拉选项顺序稳定

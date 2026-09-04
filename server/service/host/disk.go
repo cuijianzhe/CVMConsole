@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/utils"
 )
@@ -77,6 +78,10 @@ func parseHostDiskDeviceNames(output string) []string {
 		}
 		devices = append(devices, fields[0])
 	}
+	// 检查扫描器终止原因：输入来自内存字符串，正常为 nil
+	if err := scanner.Err(); err != nil {
+		logger.App.Warn("解析磁盘设备列表中断，结果可能不完整", "error", err)
+	}
 
 	return devices
 }
@@ -94,6 +99,10 @@ func detectTopLevelDiskDevicesFromDiskstats(content string) []string {
 		if isLikelyTopLevelDiskDevice(deviceName) && !slices.Contains(devices, deviceName) {
 			devices = append(devices, deviceName)
 		}
+	}
+	// 检查扫描器终止原因：输入来自内存字符串（/proc/diskstats），正常为 nil
+	if err := scanner.Err(); err != nil {
+		logger.App.Warn("解析 diskstats 中断，磁盘识别可能不完整", "error", err)
 	}
 
 	return devices
@@ -150,6 +159,10 @@ func parseDiskStatsPerDevice(content string, deviceNames []string) []model.HostD
 			WrBytes: wr * 512,
 		})
 	}
+	// 检查扫描器终止原因：输入来自内存字符串（/proc/diskstats），正常为 nil
+	if err := scanner.Err(); err != nil {
+		logger.App.Warn("解析磁盘 IO 统计中断，结果可能不完整", "error", err)
+	}
 
 	return devices
 }
@@ -162,8 +175,8 @@ func GetHostDiskInfos() ([]HostDiskInfo, error) {
 	}
 
 	var disks []HostDiskInfo
-	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
-	for _, line := range lines {
+	// 使用 SplitSeq 避免中间切片分配（仅遍历场景）
+	for line := range strings.SplitSeq(strings.TrimSpace(result.Stdout), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 7 {
 			continue

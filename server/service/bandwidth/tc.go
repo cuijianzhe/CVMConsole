@@ -60,8 +60,8 @@ func ClearTCVPCSwitchDownlinkLimit(gwPort string) {
 // 解决 virsh domiftune inbound 限速不生效的 libvirt 已知问题
 // 从宿主机 vnet 接口角度：egress(发出) = 数据发往VM = VM的下行
 // 注意：tc HTB 的 burst 是 token bucket 大小，不等于 virsh domiftune 的 burst（突发时长）
-// 这里用 rate=ceil 做硬限制，突发行为由 TC 自己控制
-func applyTCDownloadLimit(vnetIF string, avgKBps, peakKBps, burstKB int) {
+// 这里用 rate=ceil 做硬限制（只取 average），突发行为由 TC 自己控制，故 peak/burst 参数不参与
+func applyTCDownloadLimit(vnetIF string, avgKBps int) {
 	if vnetIF == "" {
 		return
 	}
@@ -236,8 +236,8 @@ func ApplyVMBandwidth(vmName string, downAvg, downPeak, downBurst, upAvg, upPeak
 					logger.App.Warn("实时应用速率限制失败", "vm", vmName, "order", iface.Order, "error", err)
 				}
 				if iface.Name != "" {
-					// 非 OVS 环境保留旧的下行 tc 兜底。
-					applyTCDownloadLimit(iface.Name, downAvg, downPeak, downBurst)
+					// 非 OVS 环境保留旧的下行 tc 兜底（tc 侧只按 average 硬限制）
+					applyTCDownloadLimit(iface.Name, downAvg)
 				}
 			}
 		}
