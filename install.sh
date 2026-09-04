@@ -119,6 +119,7 @@ RPM_PKG_MAP=(
     ["libvirt-clients"]="libvirt-client"
     ["openvswitch-switch"]="openvswitch"
     ["dnsmasq-base"]="dnsmasq"
+    ["dnsmasq-utils"]="dnsmasq-utils"
     ["virtinst"]="virt-install"
     ["libguestfs-tools"]="libguestfs-tools"
     ["ntfs-3g"]="ntfs-3g"
@@ -811,7 +812,8 @@ ensure_required_commands() {
     local soft_missing_cmds=()
     local cmd
     # RPM 系上来自软性包的命令（缺失时仅警告不报错）
-    local rpm_soft_cmds=("virt-customize" "guestfish" "virt-win-reg" "growpart" "virt-filesystems")
+    # dhcp_release 由 dnsmasq-utils 提供，部分 RPM 发行版无独立包；缺失时代码仅告警降级，不影响主流程
+    local rpm_soft_cmds=("virt-customize" "guestfish" "virt-win-reg" "growpart" "virt-filesystems" "dhcp_release")
     for cmd in "${COMMAND_CHECKS[@]}"; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             # genisoimage 可由 xorriso 或 mkisofs 替代

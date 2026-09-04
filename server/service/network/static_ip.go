@@ -862,6 +862,20 @@ func UnbindStaticIP(vmName string) error {
 
 		// 系统基础网络（VLAN0）的解绑也由 RemoveVPCStaticHost 内部路由到集中式旧版文件
 		boundIP, err := RemoveVPCStaticHost(sw.ID, vmName, mac)
+		// 无论静态绑定是否存在，都释放 dnsmasq 内存中的 DHCP 租约：
+		// 删除虚拟机后残留的租约（含动态获取的）会继续占用地址池，
+		// 导致后续绑定该 IP 的新虚拟机被 dnsmasq 拒绝并静默降级为动态分配
+		if sw.VLANID == 0 {
+			if HookCleanOVSDHCPLease != nil {
+				HookCleanOVSDHCPLease(mac, "")
+			}
+			// 兼容清理 per-VPC 租约文件中的历史残留
+			if HookCleanVPCDHCPLease != nil {
+				HookCleanVPCDHCPLease(sw.ID, mac, "")
+			}
+		} else if HookCleanVPCDHCPLease != nil {
+			HookCleanVPCDHCPLease(sw.ID, mac, "")
+		}
 		if err != nil {
 			return err
 		}
@@ -873,6 +887,10 @@ func UnbindStaticIP(vmName string) error {
 	}
 
 	boundIP, err := HookRemoveOVSStaticHost(vmName, mac)
+	// 释放集中式 OVS dnsmasq 的内存租约，防止删除虚拟机后幽灵租约占用地址池
+	if HookCleanOVSDHCPLease != nil {
+		HookCleanOVSDHCPLease(mac, "")
+	}
 	if err != nil {
 		return err
 	}

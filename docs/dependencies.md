@@ -9,6 +9,7 @@
 | python3-virt-firmware（可选） | `virt-fw-vars` | 在 UEFI 克隆的 NVRAM 中预置 shim 连续引导标记，避免首次登记发行版启动项时显示恢复倒计时并冷复位 | `server/service/vm_xml/boot_type.go`、`server/service/clone/` |
 | libvirt、QEMU、virtinst（既有依赖） | `virsh`、`qemu-system-*`/`qemu-kvm`、`qemu-img`、`virt-install` | 首次安装时通过正式创建链路定义并启动临时虚拟机，验证 KVM 与 libvirt 兼容性 | `scripts/check-system-compatibility.sh`、`server/service/compatibility/` |
 | Open vSwitch、dnsmasq、iproute2、iptables（既有依赖） | `ovs-vsctl`、`dnsmasq`、`ip`、`iptables`、`ip6tables` | 验证基础 OVS 网桥、DHCP、网关、NAT、转发规则和测试虚拟机运行端口；公网 IPv6 使用 `ip -6`、Proxy NDP 与精确转发规则 | `server/service/compatibility/`、`server/service/public_ip/` |
+| dnsmasq-utils | `dhcp_release` | 通知运行中的 dnsmasq 立即释放内存中的 DHCP 租约。dnsmasq 租约仅存于进程内存，SIGHUP 不重读租约文件、手改文件会被回写复活；删除虚拟机残留的幽灵租约会占用 IP，导致新虚拟机指定静态 IP 时被 dnsmasq 静默降级为动态分配。静态绑定写入/租约清理时调用，命令缺失时仅告警降级 | `server/service/ovs/dhcp.go`、`server/service/network/bridge/deps.go` |
 | Open vSwitch（既有依赖） | `ovs-ofctl`、`ovsdb-client` | 端口安全 OpenFlow 多表、packet meter、Interface packet policing、OVSDB 端口事件与兼容性探测 | `server/service/network/portsecurity/`、`server/service/compatibility/` |
 | iproute2、Open vSwitch、systemd（既有依赖） | `tc`、`ip`、`ovs-vsctl`、`ovs-ofctl`、`systemd-run` | 端口镜像的双向报文复制、veth 注入、OVS 转发和短时自动回滚看门狗 | `server/service/network/portmirror/` |
 | curl / wget（既有下载能力） | `curl`、`wget` | 首次安装当前目录缺少有效兼容性脚本时下载脚本；优先 curl，回退 wget | `install.sh` |
@@ -33,6 +34,7 @@ Windows 来宾使用系统自带 PowerShell 存储命令，无额外来宾软件
 ## 说明
 
 - `dmidecode` 已加入 `install.sh` 的 `APT_DEPS`（RPM 系映射同名包）。
+- `dnsmasq-utils` 已加入 `install.sh` 的 `APT_DEPS`（RPM 系映射同名包），提供 `dhcp_release` 命令用于释放 dnsmasq 内存租约；部分 RPM 系软件源缺少该包时仅警告不阻断安装，后端在命令缺失时降级为仅清理文件并记录告警。
 - OVF/OVA 功能复用安装脚本已有的 `qemu-utils` 与 Go 标准库归档能力，没有增加新的系统包。
 - `install.sh` 会按发行版尽力安装 `virt-fw-vars`；部分 RPM 系软件源缺少该工具时仅给出警告，不阻断安装和克隆。后端同样采用兼容降级，工具缺失或版本过旧时保留 shim 原有的一次性恢复流程。
 - 首次安装兼容性实机测试完全复用安装脚本已有的 libvirt、QEMU、virtinst、Open vSwitch、dnsmasq、iproute2、iptables 和下载工具，没有新增第三方依赖。

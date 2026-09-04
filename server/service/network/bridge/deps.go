@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 
 	"kvm_console/logger"
 	"kvm_console/model"
+	"kvm_console/utils"
 )
 
 var (
@@ -184,39 +186,41 @@ func UpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr string) error {
 
 	if model.DB == nil {
 		// 降级模式：直接操作文件
-		return upsertBridgeStaticHostInFile(bridgeName, vmName, mac, ipAddr)
-	}
-
-	// 查找现有记录（按 VMName 或 MAC）
-	var existing model.BridgeStaticHostDB
-	result := model.DB.Where("bridge_name = ? AND (vm_name = ? OR mac = ?)", bridgeName, vmName, mac).First(&existing)
-
-	if result.Error == nil {
-		// 更新现有记录
-		existing.IP = ipAddr
-		existing.MAC = mac
-		existing.VMName = vmName
-		if err := model.DB.Save(&existing).Error; err != nil {
-			return fmt.Errorf("更新 DHCP 静态绑定失败: %w", err)
+		if err := upsertBridgeStaticHostInFile(bridgeName, vmName, mac, ipAddr); err != nil {
+			return err
 		}
-		logger.App.Info("更新 DHCP 静态绑定", "bridge", bridgeName, "vm", vmName, "mac", mac, "ip", ipAddr)
 	} else {
-		// 新增记录
-		newHost := model.BridgeStaticHostDB{
-			BridgeName: bridgeName,
-			VMName:     vmName,
-			MAC:        mac,
-			IP:         ipAddr,
-		}
-		if err := model.DB.Create(&newHost).Error; err != nil {
-			return fmt.Errorf("新增 DHCP 静态绑定失败: %w", err)
-		}
-		logger.App.Info("新增 DHCP 静态绑定", "bridge", bridgeName, "vm", vmName, "mac", mac, "ip", ipAddr)
-	}
+		// 查找现有记录（按 VMName 或 MAC）
+		var existing model.BridgeStaticHostDB
+		result := model.DB.Where("bridge_name = ? AND (vm_name = ? OR mac = ?)", bridgeName, vmName, mac).First(&existing)
 
-	// 同步到文件
-	if err := syncBridgeStaticHostsToFile(bridgeName); err != nil {
-		logger.App.Warn("同步 DHCP 静态绑定到文件失败", "bridge", bridgeName, "error", err)
+		if result.Error == nil {
+			// 更新现有记录
+			existing.IP = ipAddr
+			existing.MAC = mac
+			existing.VMName = vmName
+			if err := model.DB.Save(&existing).Error; err != nil {
+				return fmt.Errorf("更新 DHCP 静态绑定失败: %w", err)
+			}
+			logger.App.Info("更新 DHCP 静态绑定", "bridge", bridgeName, "vm", vmName, "mac", mac, "ip", ipAddr)
+		} else {
+			// 新增记录
+			newHost := model.BridgeStaticHostDB{
+				BridgeName: bridgeName,
+				VMName:     vmName,
+				MAC:        mac,
+				IP:         ipAddr,
+			}
+			if err := model.DB.Create(&newHost).Error; err != nil {
+				return fmt.Errorf("新增 DHCP 静态绑定失败: %w", err)
+			}
+			logger.App.Info("新增 DHCP 静态绑定", "bridge", bridgeName, "vm", vmName, "mac", mac, "ip", ipAddr)
+		}
+
+		// 同步到文件
+		if err := syncBridgeStaticHostsToFile(bridgeName); err != nil {
+			logger.App.Warn("同步 DHCP 静态绑定到文件失败", "bridge", bridgeName, "error", err)
+		}
 	}
 
 	// Reload dnsmasq
@@ -225,6 +229,12 @@ func UpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr string) error {
 			logger.App.Warn("Reload dnsmasq 失败", "bridge", bridgeName, "error", err)
 		}
 	}
+
+	// 释放 dnsmasq 内存中仍占用该 IP 的活跃租约：已删除虚拟机残留的幽灵租约或其他
+	// 客户端动态抢到该 IP 的租约，会让 dnsmasq 拒绝下发静态地址（日志
+	// "not using configured address ... because it is leased to ..."），新虚拟机被
+	// 静默降级为动态分配。必须在静态绑定写入后通过 dhcp_release 通知 dnsmasq 遗忘这些租约。
+	releaseBridgeConflictingLeases(bridgeName, mac, ipAddr)
 
 	return nil
 }
@@ -539,6 +549,10 @@ func parseBridgeDHCPLeasesText(text string) []BridgeDHCPLease {
 		if len(fields) >= 4 && fields[3] != "*" {
 			lease.Hostname = fields[3]
 		}
+		// 第 5 字段为 client-id，dhcp_release 释放租约时需要原样带回
+		if len(fields) >= 5 && fields[4] != "*" {
+			lease.ClientID = fields[4]
+		}
 		leases = append(leases, lease)
 	}
 	return leases
@@ -573,6 +587,9 @@ func RemoveBridgeDHCPLease(bridgeName, vmName, mac string) (string, error) {
 		}
 		if lineMAC == mac || lineHostname == vmName {
 			removedIP = fields[2]
+			// 通知运行中的 dnsmasq 立即释放内存租约：仅删除文件条目的话，
+			// dnsmasq 回写租约文件时会将其复活，被删虚拟机的租约将继续占用 IP
+			releaseBridgeDHCPLease(bridgeName, fields[2], lineMAC, bridgeLeaseClientID(fields))
 			continue
 		}
 		remaining = append(remaining, line)
@@ -581,4 +598,80 @@ func RemoveBridgeDHCPLease(bridgeName, vmName, mac string) (string, error) {
 		return "", err
 	}
 	return removedIP, nil
+}
+
+// ── dhcp_release：通知运行中的桥接 dnsmasq 释放内存租约 ──
+// dnsmasq 的活跃租约保存在进程内存中，SIGHUP 重载只会重读 dhcp-hosts 而不会重读
+// 租约文件；仅手动删除 leases 文件条目，dnsmasq 回写文件时还会将其"复活"。
+// 必须使用 dnsmasq-utils 包提供的 dhcp_release 通知 dnsmasq 立即释放租约
+//（其内部以客户端身份发送 DHCPRELEASE 报文，dnsmasq 处理后会自行回写租约文件）。
+
+var (
+	bridgeDHCPReleaseBinPath string
+	bridgeDHCPReleaseChecked bool
+)
+
+// lookupBridgeDHCPRelease 查找 dhcp_release 可执行文件路径（仅检查一次，缺失时告警）
+func lookupBridgeDHCPRelease() string {
+	if !bridgeDHCPReleaseChecked {
+		bridgeDHCPReleaseChecked = true
+		if p, err := exec.LookPath("dhcp_release"); err == nil {
+			bridgeDHCPReleaseBinPath = p
+		} else {
+			logger.App.Warn("未找到 dhcp_release 命令，无法通知运行中的 dnsmasq 释放租约，请安装 dnsmasq-utils 包")
+		}
+	}
+	return bridgeDHCPReleaseBinPath
+}
+
+// releaseBridgeDHCPLease 通过 dhcp_release 通知监听在 bridgeName 上的 dnsmasq 释放指定租约。
+// 租约不存在或已过期时命令可能返回失败，仅记录日志不阻断主流程。
+// clientID 为租约文件第 5 字段，无值（"*"）时省略，避免与服务端记录不匹配导致释放失败。
+func releaseBridgeDHCPLease(bridgeName, ip, mac, clientID string) {
+	bin := lookupBridgeDHCPRelease()
+	if bin == "" || bridgeName == "" || ip == "" || mac == "" {
+		return
+	}
+	args := []string{bridgeName, ip, mac}
+	if clientID != "" {
+		args = append(args, clientID)
+	}
+	// 使用 Quiet 变体：租约已过期/已释放时非零退出属预期情况，仅 DEBUG 记录
+	result := utils.ExecCommandQuiet(bin, args...)
+	if result.Error != nil {
+		logger.App.Warn("dhcp_release 释放桥接租约失败（租约可能已过期或不存在）",
+			"bridge", bridgeName, "ip", ip, "mac", mac, "stderr", result.Stderr)
+		return
+	}
+	logger.App.Info("已通知 dnsmasq 释放桥接 DHCP 租约", "bridge", bridgeName, "ip", ip, "mac", mac)
+}
+
+// releaseBridgeConflictingLeases 释放 dnsmasq 内存中占用指定静态 IP 的活跃租约。
+// 当被删除虚拟机的幽灵租约或其他客户端的动态租约仍占用目标 IP 时，dnsmasq 会拒绝
+// 下发静态地址（日志 "not using configured address ... because it is leased to ..."），
+// 新虚拟机被静默降级为动态分配，因此静态绑定写入并 reload 后必须强制释放这些冲突租约。
+func releaseBridgeConflictingLeases(bridgeName, ownerMAC, ipAddr string) {
+	leases, err := ListBridgeDHCPLeases(bridgeName)
+	if err != nil {
+		logger.App.Warn("读取桥接 DHCP 租约失败，跳过冲突租约释放", "bridge", bridgeName, "error", err)
+		return
+	}
+	for _, lease := range leases {
+		if lease.IP != ipAddr {
+			continue
+		}
+		if !strings.EqualFold(lease.MAC, ownerMAC) {
+			logger.App.Warn("目标静态 IP 被其他客户端的活跃租约占用，通知 dnsmasq 释放",
+				"bridge", bridgeName, "ip", ipAddr, "lease_mac", lease.MAC, "binding_mac", ownerMAC)
+		}
+		releaseBridgeDHCPLease(bridgeName, lease.IP, lease.MAC, lease.ClientID)
+	}
+}
+
+// bridgeLeaseClientID 从 dnsmasq leases 行字段中提取 client-id（第 5 字段），"*" 表示无
+func bridgeLeaseClientID(fields []string) string {
+	if len(fields) >= 5 && fields[4] != "*" {
+		return fields[4]
+	}
+	return ""
 }

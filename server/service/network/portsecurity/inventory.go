@@ -74,7 +74,7 @@ func collectPolicyPorts() ([]policyPort, []Issue, error) {
 
 	staticByMAC, leaseByMAC := collectKnownIPv4ByMAC()
 	publicIPv4ByVM, publicIPv6ByVM := collectPublicAddressesByVM()
-	vmNames, err := listActiveVMNames()
+	vmNames, pausedVMs, err := listActiveVMs()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -86,6 +86,11 @@ func collectPolicyPorts() ([]policyPort, []Issue, error) {
 		vmUUID := strings.TrimSpace(utils.ExecCommandQuiet("virsh", "domuuid", vmName).Stdout)
 		bindingByMAC := collectVMBindingsByMAC(vmName, bindingsByVM[vmName])
 		usedBindingOrders := make(map[int]bool)
+		// 处于暂停状态的虚拟机通常是"启动保护流程"中的新虚拟机（start --paused 后
+		// 等待端口安全策略安装再恢复运行）：此时 Guest 尚未执行，必然没有 DHCP 租约。
+		// 并发克隆/创建多台 NAT 虚拟机时，若把其他暂停虚拟机的缺失租约算作阻断项，
+		// 会互相阻塞对方的启动预检（豁免机制只豁免发起协调的虚拟机自己）。
+		vmPaused := pausedVMs[vmName]
 		for runtimeOrder, iface := range interfaces {
 			if iface.Port == "" || iface.Port == "-" || iface.Source == "" {
 				continue
@@ -175,7 +180,10 @@ func collectPolicyPorts() ([]policyPort, []Issue, error) {
 			if !hasSwitch {
 				issues = append(issues, Issue{Code: "missing_switch", Message: "运行态网卡未匹配到逻辑交换机", Bridge: port.Bridge, Port: port.Port, VMName: vmName, InterfaceOrder: interfaceOrder, Blocking: true})
 			}
-			if !port.DirectBridge && len(port.AllowedIPv4Addresses) == 0 {
+			// 系统/NAT 网卡需要静态绑定或有效 DHCP 租约才能启用精确 IPv4 白名单；
+			// 暂停中的虚拟机（启动保护流程内）必然还没有租约，不视为阻断项，
+			// 待其恢复运行获取租约后由后台协调补齐精确策略。
+			if !port.DirectBridge && len(port.AllowedIPv4Addresses) == 0 && !vmPaused {
 				issues = append(issues, Issue{Code: "missing_ipv4_address", Message: "系统/NAT 网卡缺少静态绑定或有效 DHCP 租约", Bridge: port.Bridge, Port: port.Port, VMName: vmName, InterfaceOrder: interfaceOrder, Blocking: true})
 			}
 			if port.IPv6Enabled {
@@ -223,19 +231,37 @@ func collectPolicyPorts() ([]policyPort, []Issue, error) {
 	return ports, issues, nil
 }
 
-func listActiveVMNames() ([]string, error) {
-	result := utils.ExecCommand("virsh", "list", "--name")
+// listActiveVMs 返回活跃虚拟机名单及其暂停状态集合。
+// 一次 virsh list 同时拿到名字与状态，避免逐台 domstate 的额外开销；
+// paused 集合用于豁免"启动保护流程中"虚拟机缺失 DHCP 租约的阻断判定。
+func listActiveVMs() ([]string, map[string]bool, error) {
+	result := utils.ExecCommand("virsh", "list")
 	if result.Error != nil {
-		return nil, fmt.Errorf("读取运行中虚拟机清单失败: %s", firstNonEmpty(result.Stderr, result.Error.Error()))
+		return nil, nil, fmt.Errorf("读取运行中虚拟机清单失败: %s", firstNonEmpty(result.Stderr, result.Error.Error()))
 	}
 	var names []string
-	for _, name := range strings.Split(result.Stdout, "\n") {
-		if name = strings.TrimSpace(name); name != "" {
-			names = append(names, name)
+	paused := make(map[string]bool)
+	for _, line := range strings.Split(result.Stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "Id") || strings.HasPrefix(line, "---") {
+			continue
+		}
+		fields := strings.Fields(line)
+		// virsh list 每行格式：Id Name State（State 可能含空格，取首字段判断即可）
+		if len(fields) < 3 {
+			continue
+		}
+		name := strings.TrimSpace(fields[1])
+		if name == "" {
+			continue
+		}
+		names = append(names, name)
+		if strings.EqualFold(fields[2], "paused") {
+			paused[name] = true
 		}
 	}
 	sort.Strings(names)
-	return names, nil
+	return names, paused, nil
 }
 
 func collectRuntimeInterfaces(vmName string) []runtimeInterface {

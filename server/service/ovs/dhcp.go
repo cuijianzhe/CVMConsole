@@ -3,15 +3,18 @@ package ovs
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"kvm_console/logger"
 	"kvm_console/model"
 	"kvm_console/service/ip_resolver"
 	netpkg "kvm_console/service/network"
 	vpcpkg "kvm_console/service/network/vpc"
+	"kvm_console/utils"
 )
 
 // ListOVSDHCPLeases reads and parses the OVS DHCP leases file.
@@ -125,7 +128,64 @@ func NewerOVSDHCPLease(current, candidate OVSDHCPLease) OVSDHCPLease {
 	return current
 }
 
+// ── dhcp_release：通知运行中的 dnsmasq 释放内存租约 ──
+// dnsmasq 的活跃租约保存在进程内存中，SIGHUP 重载只会重读 dhcp-hosts 而不会重读
+// 租约文件；仅手动删除 leases 文件中的条目，dnsmasq 回写文件时还会将其"复活"。
+// 必须使用 dnsmasq-utils 包提供的 dhcp_release 通知 dnsmasq 立即释放租约
+//（其内部以客户端身份发送 DHCPRELEASE 报文，dnsmasq 处理后会自行回写租约文件）。
+
+var (
+	dhcpReleaseBinPath string
+	dhcpReleaseChecked bool
+)
+
+// lookupDHCPRelease 查找 dhcp_release 可执行文件路径（仅检查一次，缺失时告警）
+func lookupDHCPRelease() string {
+	if !dhcpReleaseChecked {
+		dhcpReleaseChecked = true
+		if p, err := exec.LookPath("dhcp_release"); err == nil {
+			dhcpReleaseBinPath = p
+		} else {
+			logger.App.Warn("未找到 dhcp_release 命令，无法通知运行中的 dnsmasq 释放租约，请安装 dnsmasq-utils 包")
+		}
+	}
+	return dhcpReleaseBinPath
+}
+
+// releaseRunningDHCPLease 通过 dhcp_release 通知监听在 iface 上的 dnsmasq 释放指定租约。
+// 租约不存在或已过期时命令可能返回失败，仅记录日志不阻断主流程。
+// clientID 为租约文件第 5 字段，无值（"*"）时省略，避免与服务端记录不匹配导致释放失败。
+func releaseRunningDHCPLease(iface, ip, mac, clientID string) {
+	bin := lookupDHCPRelease()
+	if bin == "" || iface == "" || ip == "" || mac == "" {
+		return
+	}
+	args := []string{iface, ip, mac}
+	if clientID != "" {
+		args = append(args, clientID)
+	}
+	// 使用 Quiet 变体：租约已过期/已释放时非零退出属预期情况，仅 DEBUG 记录
+	result := utils.ExecCommandQuiet(bin, args...)
+	if result.Error != nil {
+		logger.App.Warn("dhcp_release 释放租约失败（租约可能已过期或不存在）",
+			"iface", iface, "ip", ip, "mac", mac, "stderr", result.Stderr)
+		return
+	}
+	logger.App.Info("已通知 dnsmasq 释放 DHCP 租约", "iface", iface, "ip", ip, "mac", mac)
+}
+
+// leaseClientID 从 dnsmasq leases 行字段中提取 client-id（第 5 字段），"*" 表示无
+func leaseClientID(fields []string) string {
+	if len(fields) >= 5 && fields[4] != "*" {
+		return fields[4]
+	}
+	return ""
+}
+
 // CleanOVSDHCPLease removes DHCP lease entries matching the given MAC or IP.
+// 集中式 OVS dnsmasq（系统基础网络 VLAN0）监听在 br-ovs 上，删除文件条目前
+// 先通过 dhcp_release 通知进程释放内存租约，避免被删除虚拟机的幽灵租约继续占用 IP、
+// 导致 dnsmasq 拒绝下发静态地址（"not using configured address ... because it is leased to ..."）。
 func CleanOVSDHCPLease(mac, ipAddr string) {
 	data, err := os.ReadFile(OVSLeasesFile)
 	if err != nil {
@@ -137,6 +197,8 @@ func CleanOVSDHCPLease(mac, ipAddr string) {
 		fields := strings.Fields(line)
 		if len(fields) >= 3 {
 			if (mac != "" && strings.EqualFold(fields[1], mac)) || (ipAddr != "" && fields[2] == ipAddr) {
+				// 先通知运行中的 dnsmasq 释放内存租约，再从文件剔除
+				releaseRunningDHCPLease(OvsBridgeName(), fields[2], fields[1], leaseClientID(fields))
 				continue
 			}
 		}
@@ -150,7 +212,8 @@ func CleanOVSDHCPLease(mac, ipAddr string) {
 // CleanVPCDHCPLease removes DHCP lease entries from a specific VPC switch.
 func CleanVPCDHCPLease(switchID uint, mac, ipAddr string) {
 	path := filepath.Join(vpcpkg.VPCConfigDir, fmt.Sprintf("leases-%d", switchID))
-	cleanVPCDHCPLeaseFile(path, mac, ipAddr)
+	// VPC NAT 交换机（VLAN>0）的独立 dnsmasq 监听在网关端口 vpcsw<switchID> 上
+	cleanVPCDHCPLeaseFile(path, vpcpkg.VPCGatewayPortName(switchID), mac, ipAddr)
 }
 
 // CleanAllVPCDHCPLeases removes DHCP lease entries from all VPC switches matching the given MAC or IP.
@@ -163,11 +226,18 @@ func CleanAllVPCDHCPLeases(mac, ipAddr string) {
 		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "leases-") {
 			continue
 		}
-		cleanVPCDHCPLeaseFile(filepath.Join(vpcpkg.VPCConfigDir, entry.Name()), mac, ipAddr)
+		// 从文件名 leases-<switchID> 解析交换机 ID，推导 dnsmasq 监听接口 vpcsw<switchID>
+		iface := ""
+		if id, parseErr := strconv.ParseUint(strings.TrimPrefix(entry.Name(), "leases-"), 10, 64); parseErr == nil {
+			iface = vpcpkg.VPCGatewayPortName(uint(id))
+		}
+		cleanVPCDHCPLeaseFile(filepath.Join(vpcpkg.VPCConfigDir, entry.Name()), iface, mac, ipAddr)
 	}
 }
 
-func cleanVPCDHCPLeaseFile(path, mac, ipAddr string) {
+// cleanVPCDHCPLeaseFile 清理指定 VPC 租约文件中匹配 MAC 或 IP 的条目，
+// 并通过 dhcp_release 在 iface（vpcsw<switchID> 网关端口）上通知运行中的 dnsmasq 释放内存租约。
+func cleanVPCDHCPLeaseFile(path, iface, mac, ipAddr string) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return
@@ -178,6 +248,7 @@ func cleanVPCDHCPLeaseFile(path, mac, ipAddr string) {
 		fields := strings.Fields(line)
 		if len(fields) >= 3 {
 			if (mac != "" && strings.EqualFold(fields[1], mac)) || (ipAddr != "" && fields[2] == ipAddr) {
+				releaseRunningDHCPLease(iface, fields[2], fields[1], leaseClientID(fields))
 				continue
 			}
 		}

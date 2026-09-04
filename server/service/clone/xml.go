@@ -10,6 +10,8 @@ import (
 	"kvm_console/service/libvirt_rpc"
 	"kvm_console/service/vm_xml"
 	"kvm_console/utils"
+
+	"github.com/digitalocean/go-libvirt"
 )
 
 // InjectMemballoonConfig 向 virt-install --print-xml 生成的 XML 注入 memballoon 配置
@@ -249,6 +251,21 @@ func defineAndStartNonWindowsClone(params *CloneParams, cloneDisk string, ramMB 
 	if _, err := libvirt_rpc.DefineDomainXMLRPC(vmXML); err != nil {
 		return fmt.Errorf("定义虚拟机失败: %w", err)
 	}
+	// 定义成功后，若后续步骤（挂额外磁盘/端口安全绑定/指定 IP/启动）失败，
+	// 必须清理已定义的虚拟机域：磁盘会被上层删除，域残留会形成 paused/无磁盘的僵尸定义
+	startCompleted := false
+	defer func() {
+		if startCompleted {
+			return
+		}
+		// 启动完成前的失败：强制停止（可能处于启动保护暂停态）并取消定义
+		_ = libvirt_rpc.DestroyDomainRPC(params.Name)
+		if err := libvirt_rpc.UndefineDomainRPC(params.Name, libvirt.DomainUndefineNvram|libvirt.DomainUndefineSnapshotsMetadata); err != nil {
+			logger.Libvirt.Warn("清理克隆失败的虚拟机定义失败", "vm", params.Name, "error", err)
+		} else {
+			logger.App.Info("已清理克隆失败的虚拟机定义", "vm", params.Name)
+		}
+	}()
 	cloneMode := params.CloneMode
 	if cloneMode == "" {
 		cloneMode = "linked"
@@ -295,6 +312,8 @@ func defineAndStartNonWindowsClone(params *CloneParams, cloneDisk string, ramMB 
 	if err := D.StartVM(params.Name); err != nil {
 		return err
 	}
+	// 启动成功，取消失败清理
+	startCompleted = true
 	return nil
 }
 
