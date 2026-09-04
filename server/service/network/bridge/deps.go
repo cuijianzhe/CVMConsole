@@ -257,6 +257,36 @@ func upsertBridgeStaticHostInFile(bridgeName, vmName, mac, ipAddr string) error 
 	return writeBridgeStaticHostsFile(bridgeName, hosts)
 }
 
+// GetBridgeStaticHostByMAC 通过 MAC 地址查询已有的 DHCP 静态绑定 IP
+// 返回空字符串表示未找到已有绑定
+// 用于自动分配 IP 前检查该 MAC 是否已被用户指定了静态 IP，避免覆盖
+func GetBridgeStaticHostByMAC(bridgeName, mac string) (string, bool) {
+	bridgeName = strings.TrimSpace(bridgeName)
+	mac = strings.ToLower(strings.TrimSpace(mac))
+	if bridgeName == "" || mac == "" {
+		return "", false
+	}
+	if model.DB == nil {
+		// 降级模式：从文件读取
+		hosts, err := listBridgeStaticHostsFromFile(bridgeName)
+		if err != nil {
+			return "", false
+		}
+		for _, host := range hosts {
+			if strings.EqualFold(host.MAC, mac) {
+				return host.IP, true
+			}
+		}
+		return "", false
+	}
+	var host model.BridgeStaticHostDB
+	err := model.DB.Where("bridge_name = ? AND mac = ?", bridgeName, mac).First(&host).Error
+	if err != nil {
+		return "", false
+	}
+	return host.IP, true
+}
+
 // RemoveBridgeStaticHost 删除 DHCP 静态绑定
 // 流程：加锁 → 从数据库删除 → 同步文件 → reload dnsmasq
 func RemoveBridgeStaticHost(bridgeName, vmName, mac string) (string, error) {

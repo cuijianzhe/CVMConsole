@@ -2,9 +2,9 @@ package ip_resolver
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
+	"kvm_console/logger"
 	"kvm_console/service/libvirt_rpc"
 	"kvm_console/utils"
 )
@@ -18,12 +18,12 @@ func GetFirstVMMAC(vmName string) string {
 			ifaces := libvirt_rpc.ParseInterfacesFromDomainXML(xmlStr)
 			if len(ifaces) > 0 {
 				mac := strings.ToLower(ifaces[0].MAC)
-				log.Printf("[DEBUG-GetFirstVMMAC] RPC 命中 vm=%s mac=%s ifaceCount=%d xmlLen=%d", vmName, mac, len(ifaces), len(xmlStr))
+				logger.App.Debug("GetFirstVMMAC RPC 命中", "vm", vmName, "mac", mac, "ifaceCount", len(ifaces), "xmlLen", len(xmlStr))
 				return mac
 			}
-			log.Printf("[DEBUG-GetFirstVMMAC] RPC 成功但未解析到网卡 vm=%s xmlLen=%d xmlHead=%s", vmName, len(xmlStr), truncateForLog(xmlStr, 200))
+			logger.App.Debug("GetFirstVMMAC RPC 成功但未解析到网卡", "vm", vmName, "xmlLen", len(xmlStr), "xmlHead", truncateForLog(xmlStr, 200))
 		} else {
-			log.Printf("[DEBUG-GetFirstVMMAC] RPC 失败 vm=%s err=%v", vmName, err)
+			logger.App.Debug("GetFirstVMMAC RPC 失败", "vm", vmName, "error", err)
 		}
 	}
 	// 降级为 shell 命令
@@ -31,11 +31,11 @@ func GetFirstVMMAC(vmName string) string {
 		"virsh domiflist %s 2>/dev/null | grep -oP '([0-9a-f]{2}:){5}[0-9a-f]{2}' | head -1",
 		utils.ShellSingleQuote(vmName)))
 	if macResult.Error != nil {
-		log.Printf("[DEBUG-GetFirstVMMAC] shell 失败 vm=%s err=%v", vmName, macResult.Error)
+		logger.App.Debug("GetFirstVMMAC shell 失败", "vm", vmName, "error", macResult.Error)
 		return ""
 	}
 	mac := strings.TrimSpace(macResult.Stdout)
-	log.Printf("[DEBUG-GetFirstVMMAC] shell 命中 vm=%s mac=%s", vmName, mac)
+	logger.App.Debug("GetFirstVMMAC shell 命中", "vm", vmName, "mac", mac)
 	return mac
 }
 

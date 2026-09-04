@@ -221,6 +221,12 @@ func registerVMStaticHostForDirectBridge(vmName string, sw model.VPCSwitch) {
 	}
 	if mac := ip_resolver.GetFirstVMMAC(vmName); mac != "" {
 		bridgeName := HookBridgeNameForSwitch(sw)
+		// 已有静态绑定（用户指定 IP 或之前分配的 IP）则跳过自动分配，避免覆盖
+		if HookGetBridgeStaticHostByMAC != nil {
+			if existingIP, ok := HookGetBridgeStaticHostByMAC(bridgeName, mac); ok && existingIP != "" {
+				return
+			}
+		}
 		var ipAddr string
 		if HookFindBridgeFreeIP != nil {
 			var err error

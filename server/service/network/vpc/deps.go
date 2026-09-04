@@ -82,6 +82,9 @@ var (
 	HookRemoveBridgeDHCPLease  func(bridgeName, vmName, mac string) (string, error)
 	HookReloadBridgeDNSMasq    func(bridgeName string) error
 	HookFindBridgeFreeIP       func(sw model.VPCSwitch) (string, error)
+	// HookGetBridgeStaticHostByMAC 通过 MAC 查询网桥上已有的 DHCP 静态绑定 IP
+	// 用于自动分配 IP 前检查是否已有用户指定的静态绑定，避免覆盖
+	HookGetBridgeStaticHostByMAC func(bridgeName, mac string) (string, bool)
 
 	HookAddOVSBandwidthMeter     func(bridge string, meterID uint32, rateKbit int) error
 	HookGetOVSInterfaceOfPort    func(vnetIF string) string

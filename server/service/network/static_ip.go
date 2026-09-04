@@ -663,6 +663,8 @@ func BindVMInterfaceStaticIP(vmName string, interfaceOrder int, ipAddr string) e
 				logger.App.Warn("重载桥接 DHCP 服务失败", "bridge", sw.BridgeName, "error", err)
 			}
 		}
+		// 同步写入 vm_network_infos.IPAddress，使列表接口优先从数据库读到正确 IP
+		upsertVMNetworkInfoStaticIP(vmName, interfaceOrder, mac, ipAddr, sw)
 		return nil
 	}
 	// NAT/系统交换机：写入 dnsmasq 静态绑定（UpsertVPCStaticHost 内部按 VLAN 路由：
@@ -674,7 +676,58 @@ func BindVMInterfaceStaticIP(vmName string, interfaceOrder int, ipAddr string) e
 	if err := UpsertVPCStaticHost(sw, vmName, mac, normalized); err != nil {
 		return fmt.Errorf("绑定静态 IP 失败: %w", err)
 	}
+	// 同步写入 vm_network_infos.IPAddress，使列表接口优先从数据库读到正确 IP
+	upsertVMNetworkInfoStaticIP(vmName, interfaceOrder, mac, ipAddr, sw)
 	return nil
+}
+
+// upsertVMNetworkInfoStaticIP 将用户指定的静态 IP 同步写入 vm_network_infos 表
+// 通过 MAC 地址匹配已有记录并更新 IP，若不存在则创建新记录
+// 这样列表接口可以优先从数据库读到正确 IP，避免每次走实时查询受 ARP 影响
+func upsertVMNetworkInfoStaticIP(vmName string, interfaceOrder int, mac, ipAddr string, sw model.VPCSwitch) {
+	if model.DB == nil {
+		return
+	}
+	vmName = strings.TrimSpace(vmName)
+	mac = strings.ToLower(strings.TrimSpace(mac))
+	ipAddr = strings.TrimSpace(ipAddr)
+	if vmName == "" || mac == "" || ipAddr == "" {
+		return
+	}
+	var existing model.VMNetworkInfo
+	err := model.DB.Where("vm_name = ? AND interface_order = ? AND is_deleted = ?", vmName, interfaceOrder, false).
+		First(&existing).Error
+	if err == nil {
+		// 更新已有记录的 IP 地址
+		existing.IPAddress = ipAddr
+		existing.MacAddress = mac
+		if existing.SwitchName == "" {
+			existing.SwitchName = sw.Name
+		}
+		if existing.BridgeName == "" && HookSwitchUsesDirectBridge != nil && HookSwitchUsesDirectBridge(sw) {
+			existing.BridgeName = sw.BridgeName
+		}
+		if saveErr := model.DB.Save(&existing).Error; saveErr != nil {
+			logger.App.Warn("同步静态 IP 到 vm_network_infos 失败", "vm", vmName, "error", saveErr)
+		}
+		return
+	}
+	// 创建新记录
+	info := model.VMNetworkInfo{
+		VMName:         vmName,
+		InterfaceOrder: interfaceOrder,
+		IPAddress:      ipAddr,
+		MacAddress:     mac,
+		SwitchName:     sw.Name,
+		IsDeleted:      false,
+	}
+	if HookSwitchUsesDirectBridge != nil && HookSwitchUsesDirectBridge(sw) {
+		info.BridgeName = sw.BridgeName
+		info.NetworkType = "bridge"
+	}
+	if createErr := model.DB.Create(&info).Error; createErr != nil {
+		logger.App.Warn("创建 vm_network_infos 记录失败", "vm", vmName, "error", createErr)
+	}
 }
 
 // BindStaticIP 绑定静态 IP，ipAddr 为空时自动分配空闲 IP

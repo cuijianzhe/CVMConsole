@@ -830,6 +830,8 @@ func CheckHostMemory(requiredMB int) error {
 
 // saveVMNetworkInfoAfterCreate 在虚拟机创建完成后保存网络信息到数据库
 // 从 libvirt 获取虚拟机的 MAC 地址、网卡型号等信息，持久化到 vm_network_infos 表
+// 注意：若该 VM 已有 vm_network_infos 记录（由 BindVMInterfaceStaticIP 创建并写入了用户指定 IP），
+// 则仅更新 MAC/NicModel，不覆盖 IPAddress，避免清除用户指定的静态 IP
 func saveVMNetworkInfoAfterCreate(vmName string) error {
 	if model.DB == nil {
 		return nil
@@ -845,8 +847,22 @@ func saveVMNetworkInfoAfterCreate(vmName string) error {
 		return nil
 	}
 
-	// 创建或更新网络信息记录（主网口，interface_order = 0）
-	// 网络类型、交换机名称等信息会在后续 IP 获取时更新
+	// 查找已有记录：如果记录已存在（由 BindVMInterfaceStaticIP 创建），只更新 MAC/NicModel，保留 IP
+	var existing model.VMNetworkInfo
+	err := model.DB.Where("vm_name = ? AND interface_order = ? AND is_deleted = ?", vmName, 0, false).
+		First(&existing).Error
+	if err == nil {
+		// 记录已存在：仅更新 MAC 和 NicModel，不覆盖 IPAddress
+		updates := map[string]interface{}{
+			"mac_address": netInfo.MAC,
+			"nic_model":   netInfo.NicModel,
+		}
+		return model.DB.Model(&model.VMNetworkInfo{}).
+			Where("vm_name = ? AND interface_order = ? AND is_deleted = ?", vmName, 0, false).
+			Updates(updates).Error
+	}
+
+	// 记录不存在：创建新记录（IP 为空，后续由 IP 获取逻辑填充）
 	return CreateOrUpdateVMNetworkInfo(vmName, 0, "", netInfo.MAC, netInfo.NicModel,
 		"", "", "")
 }

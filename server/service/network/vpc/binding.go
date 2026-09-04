@@ -140,22 +140,29 @@ func bindVMToVPCWithSecurityGroupOwner(username, vmName string, switchID, securi
 		if sw.BridgeIPMode == "preset" {
 			if mac := ip_resolver.GetFirstVMMAC(vmName); mac != "" {
 				bridgeName := HookBridgeNameForSwitch(sw)
-				var ipAddr string
-				if HookFindBridgeFreeIP != nil {
-					var err error
-					ipAddr, err = HookFindBridgeFreeIP(sw)
-					if err != nil {
-						logger.App.Warn("查找桥接模式可用 IP 失败", "vm", vmName, "error", err)
-					}
-				}
-				if HookUpsertBridgeStaticHost != nil {
-					if err := HookUpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr); err != nil {
-						logger.App.Warn("桥接模式注册 MAC 地址失败", "vm", vmName, "error", err)
-					}
-				}
-				if HookReloadBridgeDNSMasq != nil {
-					if err := HookReloadBridgeDNSMasq(bridgeName); err != nil {
-						logger.App.Warn("重新加载桥接模式 DHCP 服务失败", "bridge", bridgeName, "error", err)
+				// 已有静态绑定（用户指定 IP 或之前分配的 IP）则跳过自动分配，避免覆盖
+				if HookGetBridgeStaticHostByMAC != nil {
+					if existingIP, ok := HookGetBridgeStaticHostByMAC(bridgeName, mac); ok && existingIP != "" {
+						// 跳过自动分配，保留已有绑定
+					} else {
+						var ipAddr string
+						if HookFindBridgeFreeIP != nil {
+							var err error
+							ipAddr, err = HookFindBridgeFreeIP(sw)
+							if err != nil {
+								logger.App.Warn("查找桥接模式可用 IP 失败", "vm", vmName, "error", err)
+							}
+						}
+						if HookUpsertBridgeStaticHost != nil {
+							if err := HookUpsertBridgeStaticHost(bridgeName, vmName, mac, ipAddr); err != nil {
+								logger.App.Warn("桥接模式注册 MAC 地址失败", "vm", vmName, "error", err)
+							}
+						}
+						if HookReloadBridgeDNSMasq != nil {
+							if err := HookReloadBridgeDNSMasq(bridgeName); err != nil {
+								logger.App.Warn("重新加载桥接模式 DHCP 服务失败", "bridge", bridgeName, "error", err)
+							}
+						}
 					}
 				}
 			}

@@ -336,6 +336,7 @@ func init() {
 	vpcpkg.HookRemoveBridgeStaticHost = bridge.HookRemoveBridgeStaticHost
 	vpcpkg.HookReloadBridgeDNSMasq = bridge.HookReloadBridgeDNSMasq
 	vpcpkg.HookFindBridgeFreeIP = netpkg.FindBridgeFreeIP
+	vpcpkg.HookGetBridgeStaticHostByMAC = bridge.GetBridgeStaticHostByMAC
 	vpcpkg.HookAddOVSBandwidthMeter = addOVSBandwidthMeter
 	vpcpkg.HookGetOVSInterfaceOfPort = getOVSInterfaceOfPort
 	vpcpkg.HookApplyTCVPCSwitchDownlink = applyTCVPCSwitchDownlinkLimit
