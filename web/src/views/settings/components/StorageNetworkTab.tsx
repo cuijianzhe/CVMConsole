@@ -328,7 +328,21 @@ export default function StorageNetworkTab({ form, patch }: SettingsTabProps) {
               min={10}
               max={3600}
             />
+            <NumField
+              label="新建虚拟机宽限期"
+              suffix="秒"
+              value={form.port_security_new_vm_grace_period_seconds}
+              onChange={(v) => patch({ port_security_new_vm_grace_period_seconds: v })}
+              min={0}
+              max={3600}
+            />
           </div>
+          <Banner
+            type="info"
+            closeIcon={null}
+            className="stg-banner"
+            description="新建虚拟机宽限期：批量创建/克隆时，刚创建的虚拟机尚未获取 DHCP 租约属预期状态，宽限期内预检不将其判为阻断项，避免并发任务互相阻塞；0 表示关闭豁免。"
+          />
         </>
       )}
 

@@ -18,6 +18,7 @@
 | `KVM_PORT_SECURITY_BROADCAST_PPS` | `1000` | 其他广播/组播 packet meter 速率 |
 | `KVM_PORT_SECURITY_BROADCAST_BURST_PACKETS` | `2000` | 其他广播/组播突发报文数 |
 | `KVM_PORT_SECURITY_RECONCILE_INTERVAL_SECONDS` | `60` | 周期协调间隔；OVSDB 端口变化仍即时触发 |
+| `KVM_PORT_SECURITY_NEW_VM_GRACE_PERIOD_SECONDS` | `300` | 新建虚拟机宽限期（秒）；宽限期内新建虚拟机缺失 DHCP 租约不作为预检阻断项，0 表示关闭豁免 |
 
 速率参数位于“系统设置 → 存储与网络”。总开关位于“网络中心 → 网络概览”。总开关关闭时高级阈值和地址策略表单隐藏，保存设置也不提交这些字段。
 

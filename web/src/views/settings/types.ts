@@ -55,6 +55,7 @@ export interface SettingsForm {
   port_security_broadcast_pps: number
   port_security_broadcast_burst_packets: number
   port_security_reconcile_interval_seconds: number
+  port_security_new_vm_grace_period_seconds: number
   public_ipv6_sync_interval_seconds: number
   default_disk_iops_total: number
   default_disk_iops_read: number
@@ -148,6 +149,7 @@ export const DEFAULT_SETTINGS_FORM: SettingsForm = {
   port_security_broadcast_pps: 1000,
   port_security_broadcast_burst_packets: 2000,
   port_security_reconcile_interval_seconds: 60,
+  port_security_new_vm_grace_period_seconds: 300,
   public_ipv6_sync_interval_seconds: 60,
   default_disk_iops_total: 0,
   default_disk_iops_read: 0,
@@ -270,6 +272,8 @@ export function buildSettingsPayload(form: SettingsForm): Record<string, unknown
           port_security_broadcast_burst_packets: form.port_security_broadcast_burst_packets,
           port_security_reconcile_interval_seconds:
             form.port_security_reconcile_interval_seconds,
+          port_security_new_vm_grace_period_seconds:
+            form.port_security_new_vm_grace_period_seconds,
         }
       : {}),
     default_disk_iops_total: form.default_disk_iops_total,

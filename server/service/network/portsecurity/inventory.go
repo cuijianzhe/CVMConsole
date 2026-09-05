@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"kvm_console/config"
 	"kvm_console/model"
@@ -63,9 +64,15 @@ func collectPolicyPorts() ([]policyPort, []Issue, error) {
 	}
 	bindingByVMOrder := make(map[string]model.VPCVMBinding)
 	bindingsByVM := make(map[string][]model.VPCVMBinding)
+	// 记录每台虚拟机最早一条绑定的创建时间，用于"新建虚拟机宽限期"判定：
+	// 刚创建的虚拟机尚未通过 DHCP 获取租约属于预期状态，宽限期内不作为阻断项
+	earliestBindingByVM := make(map[string]time.Time)
 	for _, binding := range bindings {
 		bindingByVMOrder[vmOrderKey(binding.VMName, binding.InterfaceOrder)] = binding
 		bindingsByVM[strings.TrimSpace(binding.VMName)] = append(bindingsByVM[strings.TrimSpace(binding.VMName)], binding)
+		if earliest, ok := earliestBindingByVM[strings.TrimSpace(binding.VMName)]; !ok || binding.CreatedAt.Before(earliest) {
+			earliestBindingByVM[strings.TrimSpace(binding.VMName)] = binding.CreatedAt
+		}
 	}
 	switchByID := make(map[uint]model.VPCSwitch)
 	for _, sw := range switches {
@@ -91,6 +98,9 @@ func collectPolicyPorts() ([]policyPort, []Issue, error) {
 		// 并发克隆/创建多台 NAT 虚拟机时，若把其他暂停虚拟机的缺失租约算作阻断项，
 		// 会互相阻塞对方的启动预检（豁免机制只豁免发起协调的虚拟机自己）。
 		vmPaused := pausedVMs[vmName]
+		// 新建虚拟机宽限期：批量创建/克隆时，刚创建的其他虚拟机（含发起方自己）
+		// 可能尚未获取 DHCP 租约，宽限期内不把缺失租约判为阻断项，避免并发任务互相阻塞
+		vmInGrace := withinNewVMGracePeriod(earliestBindingByVM[vmName], time.Now())
 		for runtimeOrder, iface := range interfaces {
 			if iface.Port == "" || iface.Port == "-" || iface.Source == "" {
 				continue
@@ -183,7 +193,8 @@ func collectPolicyPorts() ([]policyPort, []Issue, error) {
 			// 系统/NAT 网卡需要静态绑定或有效 DHCP 租约才能启用精确 IPv4 白名单；
 			// 暂停中的虚拟机（启动保护流程内）必然还没有租约，不视为阻断项，
 			// 待其恢复运行获取租约后由后台协调补齐精确策略。
-			if !port.DirectBridge && len(port.AllowedIPv4Addresses) == 0 && !vmPaused {
+			// 新建虚拟机宽限期内同理：刚创建的虚拟机还没来得及获取租约，不判为阻断项。
+			if !port.DirectBridge && len(port.AllowedIPv4Addresses) == 0 && !vmPaused && !vmInGrace {
 				issues = append(issues, Issue{Code: "missing_ipv4_address", Message: "系统/NAT 网卡缺少静态绑定或有效 DHCP 租约", Bridge: port.Bridge, Port: port.Port, VMName: vmName, InterfaceOrder: interfaceOrder, Blocking: true})
 			}
 			if port.IPv6Enabled {
@@ -229,6 +240,21 @@ func collectPolicyPorts() ([]policyPort, []Issue, error) {
 		return ports[i].Bridge < ports[j].Bridge
 	})
 	return ports, issues, nil
+}
+
+// withinNewVMGracePeriod 判断虚拟机是否处于"新建宽限期"内。
+// 批量创建/克隆场景下，刚创建的虚拟机尚未通过 DHCP 获取租约属于预期状态，
+// 宽限期内其 missing_ipv4_address 不作为阻断项，避免并发任务的预检互相阻塞。
+// 宽限期配置 <= 0 表示关闭豁免；绑定缺失或创建时间为零时同样不豁免。
+func withinNewVMGracePeriod(earliestBinding time.Time, now time.Time) bool {
+	graceSeconds := 0
+	if config.GlobalConfig != nil {
+		graceSeconds = config.GlobalConfig.PortSecurityNewVMGracePeriodSeconds
+	}
+	if graceSeconds <= 0 || earliestBinding.IsZero() {
+		return false
+	}
+	return now.Sub(earliestBinding) < time.Duration(graceSeconds)*time.Second
 }
 
 // listActiveVMs 返回活跃虚拟机名单及其暂停状态集合。
