@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"kvm_console/middleware"
 	"kvm_console/model"
 	"kvm_console/service"
 	libvirt_rpc "kvm_console/service/libvirt_rpc"
@@ -113,6 +114,11 @@ func GetSelfVMsSSE(c *gin.Context) {
 		case <-clientGone:
 			return
 		case <-ticker.C:
+			if !middleware.StreamingSessionValid(c) {
+				c.SSEvent("session_expired", gin.H{"message": "登录会话因长时间未操作已失效，请重新登录"})
+				c.Writer.Flush()
+				return
+			}
 			vms, err := getUserVMs()
 			if err != nil {
 				if service.IsLibvirtUnavailableError(err) {
