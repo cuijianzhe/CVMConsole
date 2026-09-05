@@ -118,6 +118,8 @@ type Config struct {
 	FooterLink     string `json:"footer_link"`      // 页脚超链接（留空则纯文本展示）
 	// 开发环境模式，启用后绕过安全验证
 	DevelopmentMode bool `json:"development_mode"`
+	// 是否允许来自非局域网地址的请求，默认关闭
+	PublicAccessEnabled bool `json:"public_access_enabled"`
 	// systemd 中当前面板服务的 unit 名称
 	ServiceUnitName string `json:"service_unit_name"`
 	// 维护模式，启用后阻止 VM 启动类操作
@@ -127,15 +129,15 @@ type Config struct {
 	// 维护模式关闭 VM 时的优雅关机等待时间（秒）
 	MaintenanceVMShutdownTimeoutSeconds int `json:"maintenance_vm_shutdown_timeout_seconds"`
 	// SMTP 配置
-	SMTPHost           string `json:"smtp_host"`
-	SMTPPort           int    `json:"smtp_port"`
-	SMTPUsername       string `json:"smtp_username"`
-	SMTPPasswordEnc    string `json:"smtp_password_enc"`
-	SMTPFromName       string `json:"smtp_from_name"`
-	SMTPFromAddress    string `json:"smtp_from_address"`
-	SMTPSecurity       string `json:"smtp_security"`
-	SMTPTimeoutSeconds int    `json:"smtp_timeout_seconds"`
-	SchedulerEventRetentionHours int `json:"scheduler_event_retention_hours"`
+	SMTPHost                     string `json:"smtp_host"`
+	SMTPPort                     int    `json:"smtp_port"`
+	SMTPUsername                 string `json:"smtp_username"`
+	SMTPPasswordEnc              string `json:"smtp_password_enc"`
+	SMTPFromName                 string `json:"smtp_from_name"`
+	SMTPFromAddress              string `json:"smtp_from_address"`
+	SMTPSecurity                 string `json:"smtp_security"`
+	SMTPTimeoutSeconds           int    `json:"smtp_timeout_seconds"`
+	SchedulerEventRetentionHours int    `json:"scheduler_event_retention_hours"`
 	// VPC 逻辑交换机配置
 	VPCSubnetPrefix string `json:"vpc_subnet_prefix"`
 	VPCVLANStart    int    `json:"vpc_vlan_start"`
@@ -293,6 +295,7 @@ func Init() {
 		BrowserTitle:                          getEnv("KVM_BROWSER_TITLE", "CVMConsole"),
 		FooterText:                            getEnv("KVM_FOOTER_TEXT", ""),
 		DevelopmentMode:                       getEnvBool("KVM_DEVELOPMENT_MODE", false),
+		PublicAccessEnabled:                   getEnvBool("KVM_PUBLIC_ACCESS_ENABLED", false),
 		ServiceUnitName:                       getEnv("KVM_SERVICE_UNIT_NAME", "kvm-console.service"),
 		MaintenanceMode:                       getEnvBool("KVM_MAINTENANCE_MODE", false),
 		MaintenanceServiceUnits:               getEnv("KVM_MAINTENANCE_SERVICE_UNITS", defaultMaintenanceServiceUnits),
@@ -384,6 +387,13 @@ func Init() {
 
 // ValidateSecurity 启动后安全检查（需在数据库设置加载完成后调用）
 func ValidateSecurity() {
+	if GlobalConfig.PublicAccessEnabled && GlobalConfig.DevelopmentMode {
+		// 公网模式必须始终使用完整安全校验；即使历史环境变量同时开启开发模式，也按安全策略关闭开发模式。
+		fmt.Fprintln(os.Stderr, "[安全警告] 公网访问与开发模式不能同时启用，已自动关闭开发模式")
+		GlobalConfig.DevelopmentMode = false
+		os.Setenv("KVM_DEVELOPMENT_MODE", "false")
+		SyncEnvFile()
+	}
 	// 开发模式安全警告
 	if GlobalConfig.DevelopmentMode {
 		fmt.Fprintf(os.Stderr, "\n[安全警告] ================================================\n")
@@ -546,6 +556,7 @@ var PersistableKeys = []string{
 	"footer_text",
 	"footer_link",
 	"development_mode",
+	"public_access_enabled",
 	"maintenance_mode",
 	"maintenance_service_units",
 	"maintenance_vm_shutdown_timeout_seconds",
@@ -636,6 +647,7 @@ var keyToEnvVar = map[string]string{
 	"footer_text":               "KVM_FOOTER_TEXT",
 	"footer_link":               "KVM_FOOTER_LINK",
 	"development_mode":          "KVM_DEVELOPMENT_MODE",
+	"public_access_enabled":     "KVM_PUBLIC_ACCESS_ENABLED",
 	"maintenance_mode":          "KVM_MAINTENANCE_MODE",
 	"maintenance_service_units": "KVM_MAINTENANCE_SERVICE_UNITS",
 	"maintenance_vm_shutdown_timeout_seconds": "KVM_MAINTENANCE_VM_SHUTDOWN_TIMEOUT_SECONDS",
@@ -788,6 +800,10 @@ func (c *Config) LoadFromDB(settings map[string]string) {
 		case "development_mode":
 			if v, err := strconv.ParseBool(value); err == nil {
 				c.DevelopmentMode = v
+			}
+		case "public_access_enabled":
+			if v, err := strconv.ParseBool(value); err == nil {
+				c.PublicAccessEnabled = v
 			}
 		case "maintenance_mode":
 			if v, err := strconv.ParseBool(value); err == nil {
@@ -1000,6 +1016,7 @@ func (c *Config) ToSettingsMap() map[string]string {
 		"footer_text":               c.FooterText,
 		"footer_link":               c.FooterLink,
 		"development_mode":          strconv.FormatBool(c.DevelopmentMode),
+		"public_access_enabled":     strconv.FormatBool(c.PublicAccessEnabled),
 		"maintenance_mode":          strconv.FormatBool(c.MaintenanceMode),
 		"maintenance_service_units": c.MaintenanceServiceUnits,
 		"maintenance_vm_shutdown_timeout_seconds": strconv.Itoa(c.MaintenanceVMShutdownTimeoutSeconds),

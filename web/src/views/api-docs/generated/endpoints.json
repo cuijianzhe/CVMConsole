@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-04T08:12:57.282Z",
-  "count": 356,
+  "generated_at": "2026-09-05T01:19:53.807Z",
+  "count": 359,
   "endpoints": [
     {
       "method": "POST",
@@ -50,7 +50,7 @@
       "method": "DELETE",
       "path": "/auth/api-key",
       "handler": "RevokeAPIKey",
-      "auth": "jwt",
+      "auth": "jwt-only",
       "admin": false,
       "elasticOnly": false,
       "vmAccess": false,
@@ -72,11 +72,11 @@
       "method": "POST",
       "path": "/auth/api-key",
       "handler": "RotateAPIKey",
-      "auth": "jwt",
+      "auth": "jwt-only",
       "admin": false,
       "elasticOnly": false,
       "vmAccess": false,
-      "highRisk": "",
+      "highRisk": "rotate_api_key",
       "comment": ""
     },
     {
@@ -116,7 +116,7 @@
       "method": "POST",
       "path": "/auth/high-risk/verify",
       "handler": "VerifyHighRisk",
-      "auth": "jwt",
+      "auth": "jwt-only",
       "admin": false,
       "elasticOnly": false,
       "vmAccess": false,
@@ -149,7 +149,7 @@
       "method": "POST",
       "path": "/auth/login/email/send",
       "handler": "SendLoginEmailCode",
-      "auth": "jwt-only",
+      "auth": "login",
       "admin": false,
       "elasticOnly": false,
       "vmAccess": false,
@@ -160,7 +160,7 @@
       "method": "POST",
       "path": "/auth/login/verify",
       "handler": "VerifyLoginStage",
-      "auth": "jwt-only",
+      "auth": "login",
       "admin": false,
       "elasticOnly": false,
       "vmAccess": false,
@@ -168,15 +168,26 @@
       "comment": ""
     },
     {
-      "method": "PUT",
-      "path": "/auth/password",
-      "handler": "ChangePassword",
-      "auth": "jwt",
+      "method": "POST",
+      "path": "/auth/logout",
+      "handler": "Logout",
+      "auth": "jwt-only",
       "admin": false,
       "elasticOnly": false,
       "vmAccess": false,
       "highRisk": "",
-      "comment": ""
+      "comment": "撤销当前登录会话"
+    },
+    {
+      "method": "PUT",
+      "path": "/auth/password",
+      "handler": "ChangePassword",
+      "auth": "jwt-only",
+      "admin": false,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": "修改密码；公网首次登录可使用受限 bootstrap token"
     },
     {
       "method": "POST",
@@ -235,6 +246,17 @@
     },
     {
       "method": "POST",
+      "path": "/auth/session/activity",
+      "handler": "ReportSessionActivity",
+      "auth": "jwt-only",
+      "admin": false,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": "上报真实用户活动"
+    },
+    {
+      "method": "POST",
       "path": "/auth/skip-bootstrap",
       "handler": "SkipBootstrap",
       "auth": "jwt-only",
@@ -248,11 +270,11 @@
       "method": "PUT",
       "path": "/auth/username",
       "handler": "ChangeUsername",
-      "auth": "jwt",
+      "auth": "jwt-only",
       "admin": false,
       "elasticOnly": false,
       "vmAccess": false,
-      "highRisk": "",
+      "highRisk": "change_username",
       "comment": ""
     },
     {
@@ -967,7 +989,7 @@
       "admin": false,
       "elasticOnly": false,
       "vmAccess": false,
-      "highRisk": "",
+      "highRisk": "delete_port_forward",
       "comment": ""
     },
     {
@@ -2080,6 +2102,17 @@
       "vmAccess": false,
       "highRisk": "",
       "comment": ""
+    },
+    {
+      "method": "PUT",
+      "path": "/settings/public-access",
+      "handler": "UpdatePublicAccess",
+      "auth": "jwt-only",
+      "admin": true,
+      "elasticOnly": false,
+      "vmAccess": false,
+      "highRisk": "",
+      "comment": "开启或关闭公网访问"
     },
     {
       "method": "POST",

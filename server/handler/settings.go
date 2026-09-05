@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -67,6 +68,7 @@ type SettingsResponse struct {
 	FooterText                            string `json:"footer_text"`
 	FooterLink                            string `json:"footer_link"`
 	DevelopmentMode                       bool   `json:"development_mode"`
+	PublicAccessEnabled                   bool   `json:"public_access_enabled"` // 公网访问开关（非局域网请求放通总开关）
 	MaintenanceMode                       bool   `json:"maintenance_mode"`
 	MaintenanceServiceUnits               string `json:"maintenance_service_units"`
 	MaintenanceVMShutdownTimeoutSeconds   int    `json:"maintenance_vm_shutdown_timeout_seconds"`
@@ -309,6 +311,7 @@ func GetSettings(c *gin.Context) {
 			FooterText:                            cfg.FooterText,
 			FooterLink:                            cfg.FooterLink,
 			DevelopmentMode:                       cfg.DevelopmentMode,
+			PublicAccessEnabled:                   cfg.PublicAccessEnabled,
 			MaintenanceMode:                       cfg.MaintenanceMode,
 			MaintenanceServiceUnits:               maintenanceServiceUnits,
 			MaintenanceVMShutdownTimeoutSeconds:   cfg.MaintenanceVMShutdownTimeoutSeconds,
@@ -353,6 +356,12 @@ func UpdateSettings(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "参数错误"})
 		return
+	}
+	if config.GlobalConfig.PublicAccessEnabled {
+		if tokenType, _ := c.Get("token_type"); tokenType == service.TokenTypeBootstrap && !bootstrapSettingsOnlySMTP(req) {
+			c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "安全初始化期间仅允许修改 SMTP 设置"})
+			return
+		}
 	}
 	portSecuritySettingsChanged := req.PortSecurityTotalKpps != nil || req.PortSecurityTotalBurstKPackets != nil ||
 		req.PortSecurityNeighborPPS != nil || req.PortSecurityNeighborBurstPackets != nil ||
@@ -583,6 +592,10 @@ func UpdateSettings(c *gin.Context) {
 		cfg.FooterLink = strings.TrimSpace(*req.FooterLink)
 	}
 	if req.DevelopmentMode != nil {
+		if config.GlobalConfig.PublicAccessEnabled && *req.DevelopmentMode {
+			c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "公网访问开启期间不能启用开发模式"})
+			return
+		}
 		cfg.DevelopmentMode = *req.DevelopmentMode
 	}
 	if req.MaintenanceMode != nil {
@@ -794,6 +807,22 @@ func UpdateSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 200, "message": "设置已保存"})
 }
 
+func bootstrapSettingsOnlySMTP(req UpdateSettingsRequest) bool {
+	value := reflect.ValueOf(req)
+	typeInfo := value.Type()
+	for index := 0; index < value.NumField(); index++ {
+		field := value.Field(index)
+		if field.Kind() != reflect.Ptr || field.IsNil() {
+			continue
+		}
+		jsonName := strings.Split(typeInfo.Field(index).Tag.Get("json"), ",")[0]
+		if !strings.HasPrefix(jsonName, "smtp_") {
+			return false
+		}
+	}
+	return true
+}
+
 // TestSMTP 测试 SMTP 发信
 func TestSMTP(c *gin.Context) {
 	var req TestSMTPRequest
@@ -832,7 +861,7 @@ func TestSMTP(c *gin.Context) {
 
 // RotateJWTSecret 手动轮换 JWT 密钥
 func RotateJWTSecret(c *gin.Context) {
-	if !requireHighRiskVerification(c, "rotate_jwt_secret") {
+	if !requireStrictHighRiskVerification(c, "rotate_jwt_secret") {
 		return
 	}
 	if config.GlobalConfig.DevelopmentMode {
