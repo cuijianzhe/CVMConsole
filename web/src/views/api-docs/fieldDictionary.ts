@@ -4,7 +4,7 @@
  * 迁移自旧前端 api-docs（字段按字母排序，新增业务字段时在此补充）。
  */
 export const fieldDescriptions: Record<string, string> = {
-  action: '要执行的动作，例如开机、关机、重启、删除、启用或禁用。',
+  action: '要执行的动作，例如开机、关机、重启、删除、启用或禁用；安全组规则中为 allow（允许）或 deny（拒绝）。',
   address: '公网 IP 地址或资源地址。',
   address_family: '地址族，值为 ipv4 或 ipv6。',
   api_key: '仅在生成 API 凭证时返回一次的明文 API Key。',

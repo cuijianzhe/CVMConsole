@@ -575,7 +575,8 @@ func publicIPv6IngressRuleConfigured(vmName string) bool {
 		return false
 	}
 	var rules []model.VPCSecurityGroupRule
-	model.DB.Where("security_group_id = ? AND direction = ? AND target_type = ?", binding.SecurityGroupID, "ingress", "cidr").Find(&rules)
+	// 仅当存在「允许」动作的 IPv6 入站规则时才视为已放行；deny 规则不会让外部访问可达
+	model.DB.Where("security_group_id = ? AND direction = ? AND lower(action) = ? AND target_type = ?", binding.SecurityGroupID, "ingress", "allow", "cidr").Find(&rules)
 	for _, rule := range rules {
 		value := strings.TrimSpace(rule.TargetValue)
 		if prefix, err := netip.ParsePrefix(value); err == nil && prefix.Addr().Is6() {

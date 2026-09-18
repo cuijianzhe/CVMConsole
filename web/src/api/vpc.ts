@@ -132,6 +132,7 @@ export interface VpcSecurityGroupRule {
   id: number
   security_group_id: number
   direction: string // ingress / egress
+  action: string // allow / deny
   address_family: string // ipv4 / ipv6
   protocol: string // tcp / udp / icmp / icmpv6 / all
   port_start: number
@@ -294,6 +295,7 @@ export function addVPCSecurityGroupRule(
   id: number,
   data: {
     direction: string
+    action: string
     address_family: string
     protocol: string
     port_start: number
@@ -311,6 +313,7 @@ export function updateVPCSecurityGroupRule(
   id: number,
   data: {
     direction: string
+    action: string
     address_family: string
     protocol: string
     port_start: number

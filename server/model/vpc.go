@@ -72,11 +72,13 @@ func (VPCSecurityGroup) TableName() string {
 	return "vpc_security_groups"
 }
 
-// VPCSecurityGroupRule 安全组规则。入站规则表示接收，出站规则表示拒绝；未命中规则时默认拒绝入站、允许出站。
+// VPCSecurityGroupRule 安全组规则。动作 allow/deny 可分别与入站/出站方向自由组合；
+// 未命中规则时默认拒绝入站、允许出站；同方向拒绝规则优先于允许规则（黑名单可覆盖白名单）。
 type VPCSecurityGroupRule struct {
 	ID              uint      `json:"id" gorm:"primaryKey"`
 	SecurityGroupID uint      `json:"security_group_id" gorm:"index;not null"`
 	Direction       string    `json:"direction" gorm:"size:16;not null"`                  // ingress/egress
+	Action          string    `json:"action" gorm:"size:16;not null;default:''"`          // allow/deny；空值为历史数据，按方向兜底（入站 allow、出站 deny）
 	AddressFamily   string    `json:"address_family" gorm:"size:8;not null;default:ipv4"` // ipv4/ipv6
 	Protocol        string    `json:"protocol" gorm:"size:16;not null"`                   // tcp/udp/icmp/icmpv6/all
 	PortStart       int       `json:"port_start" gorm:"default:0"`

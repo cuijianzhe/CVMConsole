@@ -164,6 +164,7 @@ func InitDB() {
 	migrateVGPUProfilePCIDeviceColumn()
 	migrateVPCSwitchTopologyFields(hadVPCSwitchDHCPEnabledColumn)
 	migrateVPCSecurityGroupRuleAddressFamily()
+	migrateVPCSecurityGroupRuleAction()
 
 	// 兼容旧用户：补齐默认状态，确保升级后能继续登录
 	if err := DB.Model(&User{}).Where("status = '' OR status IS NULL").Updates(map[string]interface{}{
@@ -236,6 +237,26 @@ func migrateVPCSecurityGroupRuleAddressFamily() {
 		Where("lower(protocol) = ?", "icmpv6").
 		Update("address_family", "ipv6").Error; err != nil {
 		logger.App.Warn("修复 ICMPv6 安全组规则地址族失败", "error", err)
+	}
+}
+
+// migrateVPCSecurityGroupRuleAction 为历史安全组规则回填动作。
+// 旧版本动作由方向固定推导（入站 allow、出站 deny），动作字段放开后将其固化为显式值。
+func migrateVPCSecurityGroupRuleAction() {
+	if DB == nil {
+		return
+	}
+	empty := "(action = '' OR action IS NULL)"
+	if err := DB.Model(&VPCSecurityGroupRule{}).
+		Where(empty+" AND direction = ?", "ingress").
+		Update("action", "allow").Error; err != nil {
+		logger.App.Warn("迁移历史入站安全组规则动作失败", "error", err)
+		return
+	}
+	if err := DB.Model(&VPCSecurityGroupRule{}).
+		Where(empty+" AND direction = ?", "egress").
+		Update("action", "deny").Error; err != nil {
+		logger.App.Warn("迁移历史出站安全组规则动作失败", "error", err)
 	}
 }
 
@@ -694,5 +715,3 @@ func migrateSystemSettingsValueColumn() {
 		}
 	}
 }
-
-

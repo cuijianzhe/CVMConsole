@@ -64,9 +64,17 @@ export function directionText(direction?: string): string {
   return direction || '-'
 }
 
-/** 安全组规则动作由方向固定决定：入站接收，出站拒绝。 */
-export function securityGroupRuleActionText(direction?: string): string {
-  return direction === 'egress' ? '拒绝' : '接收'
+/** 安全组规则动作文案：allow=允许、deny=拒绝；动作缺省时按历史方向语义兜底（入站允许、出站拒绝）。 */
+export function securityGroupRuleActionText(action?: string, direction?: string): string {
+  if (action === 'allow') return '允许'
+  if (action === 'deny') return '拒绝'
+  return direction === 'egress' ? '拒绝' : '允许'
+}
+
+/** 判断规则动作是否为拒绝，兼容历史数据（未保存 action 时出站视为拒绝）。 */
+export function securityGroupRuleActionIsDeny(rule: { action?: string; direction?: string }): boolean {
+  if (rule.action === 'allow' || rule.action === 'deny') return rule.action === 'deny'
+  return rule.direction === 'egress'
 }
 
 /** 安全组规则地址族文案，兼容没有 address_family 的历史响应。 */
