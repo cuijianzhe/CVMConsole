@@ -189,6 +189,7 @@ func ensureSecurityGroupPortForwardRule(securityGroupID uint, protocol string, p
 	rule := model.VPCSecurityGroupRule{
 		SecurityGroupID: securityGroupID,
 		Direction:       "ingress",
+		Action:          "allow",
 		AddressFamily:   "ipv4",
 		Protocol:        protocol,
 		PortStart:       portStart,

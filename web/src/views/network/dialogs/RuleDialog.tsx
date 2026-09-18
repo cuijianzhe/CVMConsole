@@ -15,7 +15,6 @@ import {
   type VpcSwitch,
 } from '@/api/vpc'
 import { useMountModalLifecycle } from '@/hooks/useMountModalLifecycle'
-import { securityGroupRuleActionText } from '../utils'
 
 interface RuleDialogProps {
   group: VpcSecurityGroup
@@ -28,6 +27,7 @@ interface RuleDialogProps {
 
 interface RuleFormState {
   direction: string
+  action: string
   address_family: 'ipv4' | 'ipv6'
   protocol: string
   port_text: string
@@ -39,6 +39,7 @@ interface RuleFormState {
 
 const INITIAL_FORM: RuleFormState = {
   direction: 'ingress',
+  action: 'allow',
   address_family: 'ipv4',
   protocol: 'tcp',
   port_text: '',
@@ -60,6 +61,8 @@ function formFromRule(rule: VpcSecurityGroupRule): RuleFormState {
       : `${rule.port_start}-${rule.port_end}`
   return {
     direction: rule.direction || 'ingress',
+    // 历史规则没有 action 时按方向兜底（入站允许、出站拒绝）
+    action: rule.action || (rule.direction === 'egress' ? 'deny' : 'allow'),
     address_family: rule.address_family === 'ipv6' ? 'ipv6' : 'ipv4',
     protocol,
     port_text: portText,
@@ -187,6 +190,7 @@ export default function RuleDialog({
     try {
       const payload = {
         direction: form.direction,
+        action: form.action,
         address_family: form.address_family,
         protocol: form.protocol,
         port_start,
@@ -230,7 +234,11 @@ export default function RuleDialog({
           <Select
             style={{ width: '100%' }}
             value={form.direction}
-            onChange={(v) => patch({ direction: String(v) })}
+            onChange={(v) => {
+              const direction = String(v)
+              // 切换方向时恢复该方向的默认动作，保持与历史版本一致的初始体验
+              patch({ direction, action: direction === 'egress' ? 'deny' : 'allow' })
+            }}
             optionList={[
               { value: 'ingress', label: '入站' },
               { value: 'egress', label: '出站' },
@@ -239,8 +247,16 @@ export default function RuleDialog({
         </div>
         <div className="qvm-form-item">
           <div className="qvm-form-label">动作</div>
-          <Input value={securityGroupRuleActionText(form.direction)} disabled />
-          <div className="qvm-form-tip">动作由方向自动确定，仅供预览</div>
+          <Select
+            style={{ width: '100%' }}
+            value={form.action}
+            onChange={(v) => patch({ action: String(v) })}
+            optionList={[
+              { value: 'allow', label: '允许' },
+              { value: 'deny', label: '拒绝' },
+            ]}
+          />
+          <div className="qvm-form-tip">允许=放行匹配流量；拒绝=拦截匹配流量，拒绝规则优先于允许规则</div>
         </div>
       </div>
 
@@ -322,7 +338,7 @@ export default function RuleDialog({
           <Select
             style={{ width: '100%' }}
             filter
-            placeholder={form.direction === 'egress' ? '选择拒绝访问的目标交换机' : '选择允许访问的来源交换机'}
+            placeholder={`选择${form.action === 'deny' ? '拒绝' : '允许'}${form.direction === 'egress' ? '访问的目标' : '的来源'}交换机`}
             emptyContent="当前用户没有可选交换机"
             value={form.target_value}
             onChange={(v) => patch({ target_value: String(v || '') })}
@@ -333,7 +349,7 @@ export default function RuleDialog({
           <Select
             style={{ width: '100%' }}
             filter
-            placeholder={form.direction === 'egress' ? '选择拒绝访问的目标安全组' : '选择允许访问的来源安全组'}
+            placeholder={`选择${form.action === 'deny' ? '拒绝' : '允许'}${form.direction === 'egress' ? '访问的目标' : '的来源'}安全组`}
             emptyContent="当前用户没有可选安全组"
             value={form.target_value}
             onChange={(v) => patch({ target_value: String(v || '') })}

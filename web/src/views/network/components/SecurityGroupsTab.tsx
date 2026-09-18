@@ -14,6 +14,7 @@ import {
   directionText,
   portText,
   protocolText,
+  securityGroupRuleActionIsDeny,
   securityGroupRuleActionText,
   targetText,
 } from '../utils'
@@ -70,12 +71,12 @@ function RulePanel({
     {
       key: 'rule_action',
       title: '动作',
-      dataIndex: 'direction',
+      dataIndex: 'action',
       width: 80,
       align: 'center',
-      render: (text) => (
-        <Tag size="small" color="grey">
-          {securityGroupRuleActionText(text)}
+      render: (_text, rule) => (
+        <Tag size="small" color={securityGroupRuleActionIsDeny(rule) ? 'red' : 'green'}>
+          {securityGroupRuleActionText(rule.action, rule.direction)}
         </Tag>
       ),
     },

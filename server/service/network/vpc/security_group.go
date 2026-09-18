@@ -53,6 +53,7 @@ func normalizeSecurityGroupRulesForResponse(groups []model.VPCSecurityGroup) {
 	for groupIndex := range groups {
 		for ruleIndex := range groups[groupIndex].Rules {
 			rule := &groups[groupIndex].Rules[ruleIndex]
+			rule.Action = effectiveSecurityGroupRuleAction(*rule)
 			rule.AddressFamily = effectiveSecurityGroupRuleAddressFamily(*rule)
 			if rule.AddressFamily == "ipv6" && strings.EqualFold(rule.Protocol, "icmp") {
 				rule.Protocol = "icmpv6"
@@ -137,6 +138,7 @@ func appendDefaultAllowAllRules(groupID uint) error {
 			PortEnd:         0,
 			TargetType:      "cidr",
 			TargetValue:     "0.0.0.0/0",
+			Action:          "allow",
 			Remark:          "系统默认全放通规则（IPv4）",
 		},
 		{
@@ -148,6 +150,7 @@ func appendDefaultAllowAllRules(groupID uint) error {
 			PortEnd:         0,
 			TargetType:      "cidr",
 			TargetValue:     "::/0",
+			Action:          "allow",
 			Remark:          "系统默认全放通规则（IPv6）",
 		},
 	}
@@ -316,6 +319,18 @@ func normalizeSecurityGroupRule(groupID uint, req VPCSecurityGroupRuleRequest) (
 	if direction != "ingress" && direction != "egress" {
 		return nil, fmt.Errorf("方向只支持 ingress 或 egress")
 	}
+	// 动作 allow/deny 与方向可自由组合；未显式提交时沿用历史语义兜底（入站 allow、出站 deny）
+	action := strings.ToLower(strings.TrimSpace(req.Action))
+	if action == "" {
+		if direction == "egress" {
+			action = "deny"
+		} else {
+			action = "allow"
+		}
+	}
+	if action != "allow" && action != "deny" {
+		return nil, fmt.Errorf("动作只支持 allow 或 deny")
+	}
 	proto := strings.ToLower(strings.TrimSpace(req.Protocol))
 	if proto == "" {
 		proto = "tcp"
@@ -384,6 +399,7 @@ func normalizeSecurityGroupRule(groupID uint, req VPCSecurityGroupRuleRequest) (
 	return &model.VPCSecurityGroupRule{
 		SecurityGroupID: groupID,
 		Direction:       direction,
+		Action:          action,
 		AddressFamily:   addressFamily,
 		Protocol:        proto,
 		PortStart:       req.PortStart,
@@ -392,6 +408,19 @@ func normalizeSecurityGroupRule(groupID uint, req VPCSecurityGroupRuleRequest) (
 		TargetValue:     targetValue,
 		Remark:          strings.TrimSpace(req.Remark),
 	}, nil
+}
+
+// effectiveSecurityGroupRuleAction 为历史规则推导动作。
+// 动作字段放开前动作由方向固定（入站 allow、出站 deny），空值统一按此兜底。
+func effectiveSecurityGroupRuleAction(rule model.VPCSecurityGroupRule) string {
+	action := strings.ToLower(strings.TrimSpace(rule.Action))
+	if action == "allow" || action == "deny" {
+		return action
+	}
+	if rule.Direction == "egress" {
+		return "deny"
+	}
+	return "allow"
 }
 
 // effectiveSecurityGroupRuleAddressFamily 为历史规则推导地址族。

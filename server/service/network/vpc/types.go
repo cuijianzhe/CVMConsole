@@ -49,6 +49,7 @@ type VPCSecurityGroupRequest struct {
 
 type VPCSecurityGroupRuleRequest struct {
 	Direction     string `json:"direction"`
+	Action        string `json:"action"` // allow/deny；为空时按方向兜底（入站 allow、出站 deny）
 	AddressFamily string `json:"address_family"`
 	Protocol      string `json:"protocol"`
 	PortStart     int    `json:"port_start"`
