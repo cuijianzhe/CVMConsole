@@ -1414,10 +1414,12 @@ func initCloneDeps() {
 		ListAllVPCStaticHosts:         service.ListAllVPCStaticHostsForClone,
 		GetOVSLeaseIPByMAC:            service.GetOVSLeaseIPByMAC,
 		BindVMToVPCAsAdmin:            service.BindVMToVPCAsAdmin,
-		GetVPCSwitchForVM:             service.GetVPCSwitchForVM,
-		SwitchUsesDirectBridge:        service.SwitchUsesDirectBridge,
-		ListBridgeStaticHosts:         service.ListBridgeStaticHosts,
-		PrepareVMPortSecurityBinding:  service.PrepareVMPortSecurityBinding,
+		// 克隆创建时透传用户指定的静态 IPv4，避免桥接预设模式先自动分配再覆盖
+		BindVMToVPCAsAdminWithStaticIPv4: service.BindVMToVPCAsAdminWithStaticIPv4,
+		GetVPCSwitchForVM:                service.GetVPCSwitchForVM,
+		SwitchUsesDirectBridge:           service.SwitchUsesDirectBridge,
+		ListBridgeStaticHosts:            service.ListBridgeStaticHosts,
+		PrepareVMPortSecurityBinding:     service.PrepareVMPortSecurityBinding,
 		// 指定 IP：克隆虚拟机启动前为主网卡做 DHCP 静态绑定
 		BindVMInterfaceStaticIP: service.BindVMInterfaceStaticIP,
 

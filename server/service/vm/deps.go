@@ -67,9 +67,11 @@ type Deps struct {
 	SwitchUsesDirectBridge            func(sw model.VPCSwitch) bool
 	IsPortSecurityEnabled             func() bool
 	ReconcileVMPortSecurity           func(vmName string) error
-	PrepareVMPortSecurityBinding      func(owner, vmName string, switchID, securityGroupID uint, allowedIPv4, allowedIPv6 string) error
+	PrepareVMPortSecurityBinding      func(owner, vmName string, switchID, securityGroupID uint, allowedIPv4, allowedIPv6, staticIPv4 string) error
 	// BindVMInterfaceStaticIP 为虚拟机指定网口绑定 DHCP 静态 IP（创建启动前调用）
 	BindVMInterfaceStaticIP func(vmName string, interfaceOrder int, ipAddr string) error
+	// CleanupVMVPCBinding 创建失败回滚时清理 vpc_vm_bindings 绑定记录
+	CleanupVMVPCBinding func(vmName string)
 
 	// ---- Storage pool ----
 	GetAllISOs           func() ([]ISOFileInfo, error)

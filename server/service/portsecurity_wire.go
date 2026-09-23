@@ -105,7 +105,9 @@ func ExecutePortSecurityTask(ctx context.Context, params PortSecurityTaskParams,
 // 创建/导入流程在启动前还需要基于该记录执行 DHCP 静态绑定（指定 IP）、
 // 流量统计与安全组关联；绑定本身是幂等的（已存在则更新）。
 // 允许地址清单仅在端口安全开启时才写入。
-func PrepareVMPortSecurityBinding(owner, vmName string, switchID, securityGroupID uint, allowedIPv4, allowedIPv6 string) error {
+// staticIPv4 为创建流程中用户指定的主网卡静态 IPv4（可为空）：非空时桥接预设模式不自动分配随机地址，
+// 避免与随后 BindVMInterfaceStaticIP 注册的指定地址形成“双写”。
+func PrepareVMPortSecurityBinding(owner, vmName string, switchID, securityGroupID uint, allowedIPv4, allowedIPv6, staticIPv4 string) error {
 	if switchID == 0 {
 		return nil
 	}
@@ -122,9 +124,9 @@ func PrepareVMPortSecurityBinding(owner, vmName string, switchID, securityGroupI
 	}
 	var err error
 	if IsAdministratorAccount(owner) {
-		err = BindVMToVPCAsAdmin(vmName, switchID, securityGroupID)
+		err = BindVMToVPCAsAdminWithStaticIPv4(vmName, switchID, securityGroupID, staticIPv4)
 	} else {
-		err = BindVMToVPC(owner, vmName, switchID, securityGroupID)
+		err = BindVMToVPCWithStaticIPv4(owner, vmName, switchID, securityGroupID, staticIPv4)
 	}
 	if err != nil {
 		return err

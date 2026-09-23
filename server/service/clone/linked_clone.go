@@ -11,6 +11,7 @@ import (
 	"kvm_console/config"
 	"kvm_console/logger"
 	"kvm_console/service/libvirt_rpc"
+	netpkg "kvm_console/service/network"
 	"kvm_console/service/vm_xml"
 	"kvm_console/utils"
 
@@ -376,8 +377,8 @@ func LinkedCloneVM(ctx context.Context, params *LinkedCloneParams, progressFn fu
 		return nil, err
 	}
 
-	if params.SwitchID != 0 && D.BindVMToVPCAsAdmin != nil {
-		if err := D.BindVMToVPCAsAdmin(params.Name, params.SwitchID, params.SecurityGroupID); err != nil {
+	if params.SwitchID != 0 && D.BindVMToVPCAsAdminWithStaticIPv4 != nil {
+		if err := D.BindVMToVPCAsAdminWithStaticIPv4(params.Name, params.SwitchID, params.SecurityGroupID, params.StaticIPv4); err != nil {
 			logger.App.Warn("绑定虚拟机到 VPC 交换机失败", "vm", params.Name, "switch_id", params.SwitchID, "error", err)
 		}
 	}
@@ -393,7 +394,7 @@ func LinkedCloneVM(ctx context.Context, params *LinkedCloneParams, progressFn fu
 		}
 	}
 	if D.PrepareVMPortSecurityBinding != nil {
-		if err := D.PrepareVMPortSecurityBinding(params.Owner, params.Name, params.SwitchID, params.SecurityGroupID, params.AllowedIPv4Addresses, params.AllowedIPv6Addresses); err != nil {
+		if err := D.PrepareVMPortSecurityBinding(params.Owner, params.Name, params.SwitchID, params.SecurityGroupID, params.AllowedIPv4Addresses, params.AllowedIPv6Addresses, params.StaticIPv4); err != nil {
 			cleanupLinkedCloneArtifacts(params.Name, cloneDisk)
 			return nil, fmt.Errorf("启动前准备端口安全绑定失败: %w", err)
 		}
@@ -443,6 +444,8 @@ func LinkedCloneVM(ctx context.Context, params *LinkedCloneParams, progressFn fu
 func cleanupLinkedCloneArtifacts(vmName, diskPath string) {
 	// 如果提供了 VM 名称，尝试清理 libvirt 定义
 	if strings.TrimSpace(vmName) != "" {
+		// 必须在 undefine 之前解绑网络：解绑依赖从域 XML 读取 MAC，undefine 后将无法定位静态绑定
+		cleanupCloneNetworkBindings(vmName)
 		// 尝试销毁（如果 VM 正在运行）
 		if err := libvirt_rpc.DestroyDomainRPC(vmName); err != nil {
 			logger.Libvirt.Warn("销毁虚拟机失败", "vm", vmName, "error", err)
@@ -463,5 +466,24 @@ func cleanupLinkedCloneArtifacts(vmName, diskPath string) {
 		} else if err == nil {
 			logger.App.Info("已删除磁盘文件", "path", diskPath)
 		}
+	}
+}
+
+// cleanupCloneNetworkBindings 清理克隆/创建失败后残留的网络侧绑定：
+// 桥接/VPC 静态 DHCP 绑定（含 dnsmasq 租约、hosts 文件投影、端口转发）以及 vpc_vm_bindings 记录。
+// 若创建失败不清理，自动分配或指定的静态 IP 会沦为孤儿，持续占用地址池导致后续创建报“IP 已被占用”。
+// 注意：必须在虚拟机 undefine 之前调用（UnbindStaticIP 需要从域 XML 读取 MAC）。
+func cleanupCloneNetworkBindings(vmName string) {
+	vmName = strings.TrimSpace(vmName)
+	if vmName == "" {
+		return
+	}
+	// 解绑静态 IP（内部按 vpc_vm_bindings/运行态识别交换机，兼容直通桥接与 NAT/VPC）
+	if err := netpkg.UnbindStaticIP(vmName); err != nil {
+		logger.App.Warn("回滚静态 IP 绑定失败", "vm", vmName, "error", err)
+	}
+	// 清理 VPC 绑定记录
+	if D.CleanupVMVPCBinding != nil {
+		D.CleanupVMVPCBinding(vmName)
 	}
 }

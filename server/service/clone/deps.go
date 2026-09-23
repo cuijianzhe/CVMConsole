@@ -55,9 +55,11 @@ type Deps struct {
 	ListAllVPCStaticHosts         func() ([]OVSStaticHost, error)
 	GetOVSLeaseIPByMAC            func(mac string) string
 	BindVMToVPCAsAdmin            func(vmName string, switchID, securityGroupID uint) error
-	GetVPCSwitchForVM             func(vmName string) (*model.VPCSwitch, bool)
-	SwitchUsesDirectBridge        func(sw model.VPCSwitch) bool
-	ListBridgeStaticHosts         func(bridgeName string) ([]NetworkBridgeStaticHost, error)
+	// BindVMToVPCAsAdminWithStaticIPv4 管理员代绑定并透传创建流程指定的静态 IPv4（指定时桥接预设模式不自动分配）
+	BindVMToVPCAsAdminWithStaticIPv4 func(vmName string, switchID, securityGroupID uint, staticIPv4 string) error
+	GetVPCSwitchForVM                func(vmName string) (*model.VPCSwitch, bool)
+	SwitchUsesDirectBridge           func(sw model.VPCSwitch) bool
+	ListBridgeStaticHosts            func(bridgeName string) ([]NetworkBridgeStaticHost, error)
 
 	// ---- XML modification helpers ----
 	ApplyRTCConfigToDomainXML           func(xmlStr, offset, startDate, tplType string) (string, error)
@@ -116,7 +118,7 @@ type Deps struct {
 	HookEnsureVMNotMigrating func(vmName, action string) error
 
 	// ---- 端口安全 ----
-	PrepareVMPortSecurityBinding func(owner, vmName string, switchID, securityGroupID uint, allowedIPv4, allowedIPv6 string) error
+	PrepareVMPortSecurityBinding func(owner, vmName string, switchID, securityGroupID uint, allowedIPv4, allowedIPv6, staticIPv4 string) error
 	// BindVMInterfaceStaticIP 为虚拟机指定网口绑定 DHCP 静态 IP（克隆启动前调用）
 	BindVMInterfaceStaticIP func(vmName string, interfaceOrder int, ipAddr string) error
 

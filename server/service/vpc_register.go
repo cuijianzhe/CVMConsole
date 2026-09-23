@@ -117,8 +117,18 @@ func ApplyVPCACLRules() error {
 func BindVMToVPC(username, vmName string, switchID, securityGroupID uint) error {
 	return vpcpkg.BindVMToVPC(username, vmName, switchID, securityGroupID)
 }
+
+// BindVMToVPCWithStaticIPv4 透传创建流程指定的静态 IPv4（指定时桥接预设模式不自动分配）
+func BindVMToVPCWithStaticIPv4(username, vmName string, switchID, securityGroupID uint, staticIPv4 string) error {
+	return vpcpkg.BindVMToVPCWithStaticIPv4(username, vmName, switchID, securityGroupID, staticIPv4)
+}
 func BindVMToVPCAsAdmin(vmName string, switchID, securityGroupID uint) error {
 	return vpcpkg.BindVMToVPCAsAdmin(vmName, switchID, securityGroupID)
+}
+
+// BindVMToVPCAsAdminWithStaticIPv4 管理员代绑定并透传创建流程指定的静态 IPv4
+func BindVMToVPCAsAdminWithStaticIPv4(vmName string, switchID, securityGroupID uint, staticIPv4 string) error {
+	return vpcpkg.BindVMToVPCAsAdminWithStaticIPv4(vmName, switchID, securityGroupID, staticIPv4)
 }
 func GetVPCBindingInfo(operator, role, vmName string) (*VPCBindingInfo, error) {
 	return vpcpkg.GetVPCBindingInfo(operator, role, vmName)

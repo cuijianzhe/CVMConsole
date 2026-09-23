@@ -610,6 +610,16 @@ func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ra
 	if _, err := libvirt_rpc.DefineDomainXMLRPC(vmXML); err != nil {
 		return fmt.Errorf("定义虚拟机失败: %w", err)
 	}
+	// 定义成功后，若启动前任一步骤（绑定交换机/端口安全/指定 IP/启动）失败，
+	// 连同虚拟机域与网络静态绑定一并回滚，避免静态 IP 沦为孤儿占用地址池；磁盘由上层 core.go 删除。
+	// 虚拟机一旦成功启动即视为创建完成（冷重启编排失败也保留现场），不再回滚。
+	startCompleted := false
+	defer func() {
+		if startCompleted {
+			return
+		}
+		cleanupLinkedCloneArtifacts(params.Name, "")
+	}()
 	cloneMode := params.CloneMode
 	if cloneMode == "" {
 		cloneMode = "linked"
@@ -625,8 +635,8 @@ func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ra
 		logger.App.Warn("设置VM冻结配置失败", "error", err)
 	}
 
-	if params.SwitchID != 0 && D.BindVMToVPCAsAdmin != nil {
-		if err := D.BindVMToVPCAsAdmin(params.Name, params.SwitchID, params.SecurityGroupID); err != nil {
+	if params.SwitchID != 0 && D.BindVMToVPCAsAdminWithStaticIPv4 != nil {
+		if err := D.BindVMToVPCAsAdminWithStaticIPv4(params.Name, params.SwitchID, params.SecurityGroupID, params.StaticIPv4); err != nil {
 			logger.App.Warn("绑定虚拟机到 VPC 交换机失败", "vm", params.Name, "switch_id", params.SwitchID, "error", err)
 		}
 	}
@@ -638,7 +648,7 @@ func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ra
 		}
 	}
 	if D.PrepareVMPortSecurityBinding != nil {
-		if err := D.PrepareVMPortSecurityBinding(params.Owner, params.Name, params.SwitchID, params.SecurityGroupID, params.AllowedIPv4Addresses, params.AllowedIPv6Addresses); err != nil {
+		if err := D.PrepareVMPortSecurityBinding(params.Owner, params.Name, params.SwitchID, params.SecurityGroupID, params.AllowedIPv4Addresses, params.AllowedIPv6Addresses, params.StaticIPv4); err != nil {
 			return fmt.Errorf("启动前准备端口安全绑定失败: %w", err)
 		}
 	}
@@ -656,6 +666,8 @@ func cloneWindows(ctx context.Context, params *CloneParams, cloneDisk string, ra
 	if err := startFn(params.Name); err != nil {
 		return err
 	}
+	// 虚拟机已成功启动，后续失败不再回滚域与网络绑定
+	startCompleted = true
 	if firstBootColdReboot {
 		if err := D.CompleteWindowsFirstBootColdReboot(ctx, params.Name, progressFn); err != nil {
 			return err

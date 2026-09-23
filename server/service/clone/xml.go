@@ -258,7 +258,9 @@ func defineAndStartNonWindowsClone(params *CloneParams, cloneDisk string, ramMB 
 		if startCompleted {
 			return
 		}
-		// 启动完成前的失败：强制停止（可能处于启动保护暂停态）并取消定义
+		// 启动完成前的失败：先解绑网络（依赖域 XML 中的 MAC，必须在 undefine 之前）
+		cleanupCloneNetworkBindings(params.Name)
+		// 强制停止（可能处于启动保护暂停态）并取消定义
 		_ = libvirt_rpc.DestroyDomainRPC(params.Name)
 		if err := libvirt_rpc.UndefineDomainRPC(params.Name, libvirt.DomainUndefineNvram|libvirt.DomainUndefineSnapshotsMetadata); err != nil {
 			logger.Libvirt.Warn("清理克隆失败的虚拟机定义失败", "vm", params.Name, "error", err)
@@ -285,8 +287,8 @@ func defineAndStartNonWindowsClone(params *CloneParams, cloneDisk string, ramMB 
 		logger.App.Warn("设置VM冻结配置失败", "error", err)
 	}
 
-	if params.SwitchID != 0 && D.BindVMToVPCAsAdmin != nil {
-		if err := D.BindVMToVPCAsAdmin(params.Name, params.SwitchID, params.SecurityGroupID); err != nil {
+	if params.SwitchID != 0 && D.BindVMToVPCAsAdminWithStaticIPv4 != nil {
+		if err := D.BindVMToVPCAsAdminWithStaticIPv4(params.Name, params.SwitchID, params.SecurityGroupID, params.StaticIPv4); err != nil {
 			logger.App.Warn("绑定虚拟机到 VPC 交换机失败", "vm", params.Name, "switch_id", params.SwitchID, "error", err)
 		}
 	}
@@ -298,7 +300,7 @@ func defineAndStartNonWindowsClone(params *CloneParams, cloneDisk string, ramMB 
 		}
 	}
 	if D.PrepareVMPortSecurityBinding != nil {
-		if err := D.PrepareVMPortSecurityBinding(params.Owner, params.Name, params.SwitchID, params.SecurityGroupID, params.AllowedIPv4Addresses, params.AllowedIPv6Addresses); err != nil {
+		if err := D.PrepareVMPortSecurityBinding(params.Owner, params.Name, params.SwitchID, params.SecurityGroupID, params.AllowedIPv4Addresses, params.AllowedIPv6Addresses, params.StaticIPv4); err != nil {
 			return fmt.Errorf("启动前准备端口安全绑定失败: %w", err)
 		}
 	}

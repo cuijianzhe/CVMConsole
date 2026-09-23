@@ -11,11 +11,19 @@ import (
 )
 
 func BindVMToVPC(username, vmName string, switchID, securityGroupID uint) error {
-	return bindVMToVPCWithSecurityGroupOwner(username, vmName, switchID, securityGroupID, "")
+	return bindVMToVPCWithSecurityGroupOwner(username, vmName, switchID, securityGroupID, "", "")
+}
+
+// BindVMToVPCWithStaticIPv4 与 BindVMToVPC 相同，但额外透传用户在创建流程中指定的静态 IPv4。
+// staticIPv4 非空时，直通桥接（bridge+preset）不再自动分配随机地址，
+// 统一交由后续 BindVMInterfaceStaticIP 注册该指定地址，避免“先随机分配、后覆盖更新”产生多余或孤儿绑定。
+func BindVMToVPCWithStaticIPv4(username, vmName string, switchID, securityGroupID uint, staticIPv4 string) error {
+	return bindVMToVPCWithSecurityGroupOwner(username, vmName, switchID, securityGroupID, "", staticIPv4)
 }
 
 // bindVMToVPCWithSecurityGroupOwner 支持交换机与安全组由不同用户管理的轻量云专用 VPC。
-func bindVMToVPCWithSecurityGroupOwner(username, vmName string, switchID, securityGroupID uint, securityGroupOwner string) error {
+// staticIPv4 为创建流程中用户指定的主网卡静态 IPv4（为空表示沿用历史行为：桥接预设模式自动分配）。
+func bindVMToVPCWithSecurityGroupOwner(username, vmName string, switchID, securityGroupID uint, securityGroupOwner, staticIPv4 string) error {
 	if strings.TrimSpace(vmName) == "" {
 		return fmt.Errorf("虚拟机名称不能为空")
 	}
@@ -138,7 +146,11 @@ func bindVMToVPCWithSecurityGroupOwner(username, vmName string, switchID, securi
 	if HookSwitchUsesDirectBridge(sw) {
 		// 预设模式：从桥接网桥 DHCP 池分配 IP 并注册 dhcp-host
 		if sw.BridgeIPMode == "preset" {
-			if mac := ip_resolver.GetFirstVMMAC(vmName); mac != "" {
+			// 创建流程已明确指定静态 IPv4 时跳过自动分配：
+			// 指定地址将由随后的 BindVMInterfaceStaticIP 唯一注册，避免同一台 VM 被写入两个 IP
+			// （一个随机地址 + 一个指定地址），也避免指定地址冲突失败后随机地址沦为孤儿绑定。
+			specifiedIP := strings.TrimSpace(staticIPv4)
+			if mac := ip_resolver.GetFirstVMMAC(vmName); mac != "" && specifiedIP == "" {
 				bridgeName := HookBridgeNameForSwitch(sw)
 				// 已有静态绑定（用户指定 IP 或之前分配的 IP）则跳过自动分配，避免覆盖
 				if HookGetBridgeStaticHostByMAC != nil {
@@ -165,6 +177,8 @@ func bindVMToVPCWithSecurityGroupOwner(username, vmName string, switchID, securi
 						}
 					}
 				}
+			} else if specifiedIP != "" {
+				logger.App.Info("创建时已指定静态 IPv4，跳过桥接自动分配，等待主网卡静态绑定注册", "vm", vmName, "ip", specifiedIP)
 			}
 		}
 		if err := ApplyVPCSwitchRuntime(vmName, sw); err != nil {
@@ -229,6 +243,12 @@ func rollbackPrimaryVMInterface(vmName string, created bool) {
 }
 
 func BindVMToVPCAsAdmin(vmName string, switchID, securityGroupID uint) error {
+	return BindVMToVPCAsAdminWithStaticIPv4(vmName, switchID, securityGroupID, "")
+}
+
+// BindVMToVPCAsAdminWithStaticIPv4 为管理员代 VM 绑定 VPC 交换机，并透传创建流程中用户指定的静态 IPv4。
+// staticIPv4 非空时直通桥接预设模式不会自动分配随机地址，由后续 BindVMInterfaceStaticIP 注册指定地址。
+func BindVMToVPCAsAdminWithStaticIPv4(vmName string, switchID, securityGroupID uint, staticIPv4 string) error {
 	var sw model.VPCSwitch
 	if err := model.DB.First(&sw, switchID).Error; err != nil {
 		return fmt.Errorf("交换机不存在")
@@ -264,7 +284,7 @@ func BindVMToVPCAsAdmin(vmName string, switchID, securityGroupID uint) error {
 		return err
 	}
 	if HookSwitchUsesDirectBridge(sw) {
-		return BindVMToVPC(switchOwner, vmName, switchID, 0)
+		return BindVMToVPCWithStaticIPv4(switchOwner, vmName, switchID, 0, staticIPv4)
 	}
 	securityGroupOwner := switchOwner
 	if securityGroupID == 0 {
@@ -298,7 +318,7 @@ func BindVMToVPCAsAdmin(vmName string, switchID, securityGroupID uint) error {
 			securityGroupOwner = group.Username
 		}
 	}
-	return bindVMToVPCWithSecurityGroupOwner(switchOwner, vmName, switchID, securityGroupID, securityGroupOwner)
+	return bindVMToVPCWithSecurityGroupOwner(switchOwner, vmName, switchID, securityGroupID, securityGroupOwner, staticIPv4)
 }
 
 // isLightweightDedicatedVPCSecurityGroup 判断安全组是否为当前轻量云 VM 的专属安全组。

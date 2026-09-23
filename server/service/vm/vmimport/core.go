@@ -253,7 +253,8 @@ func importVMPostDefine(vmName, srcDiskPath, destDiskPath string, copyDisk bool,
 		_ = os.Remove(destDiskPath)
 		return err
 	}
-	if err := service.PrepareVMPortSecurityBinding(owner, vmName, switchID, securityGroupID, allowedIPv4, allowedIPv6); err != nil {
+	// 导入流程不透传指定 IP，桥接预设模式沿用自动分配历史行为
+	if err := service.PrepareVMPortSecurityBinding(owner, vmName, switchID, securityGroupID, allowedIPv4, allowedIPv6, ""); err != nil {
 		return fmt.Errorf("启动前准备端口安全绑定失败: %w", err)
 	}
 
